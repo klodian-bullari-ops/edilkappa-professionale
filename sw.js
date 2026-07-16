@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "edilkappa-professionale-v9-login-overlay-fix";
+const CACHE = "edilkappa-professionale-v10-unified-suite";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,7 +8,10 @@ const APP_SHELL = [
   "./manifest.json",
   "./professional-extensions.js",
   "./business-suite.js",
+  "./smart-operations.js",
   "./firebase-cloud.js",
+  "./richiesta.html",
+  "./public-request.js",
   "./assets/icona-edilkappa.svg",
   "./assets/logo-edilkappa.svg",
   "./icons/icon-192.png",

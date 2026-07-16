@@ -57,11 +57,16 @@ const mappings = [
   ['teams', 'teams'],
   ['deadlines', 'deadlines'],
   ['payments', 'payments'],
-  ['documents', 'documents']
+  ['documents', 'documents'],
+  ['leads', 'leads'],
+  ['priceList', 'priceList'],
+  ['certificates', 'certificates'],
+  ['inventory', 'inventory'],
+  ['equipment', 'equipment']
 ];
 
 const mappingByRemote = new Map(mappings.map(([localName, remoteName]) => [remoteName, localName]));
-const clientCollections = new Set(['clients', 'inspections', 'sites', 'quotes', 'reports', 'drone', 'lifelines', 'roofs', 'drains', 'deadlines', 'payments', 'documents']);
+const clientCollections = new Set(['clients', 'inspections', 'sites', 'quotes', 'reports', 'drone', 'lifelines', 'roofs', 'drains', 'deadlines', 'payments', 'documents', 'certificates']);
 const workerCollections = new Set(['sites', 'reports', 'timesheets', 'roofs', 'drains', 'teams']);
 const remoteMaps = new Map();
 const remoteIds = new Map();
@@ -500,9 +505,16 @@ async function syncNow() {
 
 async function importInitialDataIfNeeded() {
   const existing = await getDocs(query(collection(firestore, 'clients'), where('orgId', '==', ORG_ID)));
-  if (!existing.empty) return;
-  setSyncState('Primo caricamento…', '#d69b18');
-  for (const [localName, remoteName] of mappings) {
+  const collectionsToImport = existing.empty
+    ? mappings
+    : mappings.filter(([, remoteName]) => ['leads', 'priceList', 'certificates', 'inventory', 'equipment'].includes(remoteName));
+  if (!collectionsToImport.length) return;
+  setSyncState(existing.empty ? 'Primo caricamento…' : 'Aggiornamento archivi…', '#d69b18');
+  for (const [localName, remoteName] of collectionsToImport) {
+    if (!existing.empty) {
+      const remote = await getDocs(query(collection(firestore, remoteName), where('orgId', '==', ORG_ID)));
+      if (!remote.empty) continue;
+    }
     const items = (local.getDB()[localName] || []).filter((item) => item?.id);
     await Promise.all(items.map((item) => setDoc(doc(firestore, remoteName, String(item.id)), envelope(item, remoteName, true))));
   }
@@ -593,20 +605,20 @@ function updateAdministratorPortal() {
 }
 
 function roleOptions(selected, canAssignOwner) {
-  const values = [['pending', 'In attesa'], ['office', 'Ufficio'], ['worker', 'Operaio'], ['administrator', 'Amministratore']];
+  const values = [['pending', 'In attesa'], ['office', 'Ufficio'], ['worker', 'Operaio'], ['administrator', 'Cliente / amministratore']];
   if (canAssignOwner || selected === 'owner') values.unshift(['owner', 'Titolare']);
   return values.map(([value, label]) => `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('');
 }
 
 function cloudUsersPanel() {
   if (profile?.role !== 'owner') {
-    return `<div class="headline"><div><h2>Portale amministratori</h2><p>La gestione degli accessi è riservata al titolare.</p></div></div><div class="notice">Accedi con l’account titolare per invitare utenti, assegnare squadre e autorizzare i condomìni visibili.</div>`;
+    return `<div class="headline"><div><h2>Portale clienti e amministratori</h2><p>La gestione degli accessi è riservata al titolare.</p></div></div><div class="notice">Accedi con l’account titolare per invitare utenti, assegnare squadre e autorizzare i clienti o condomìni visibili.</div>`;
   }
   const database = local.getDB();
   const teams = database.teams || [];
   const clients = database.condomini || [];
   const canAssignOwner = profile?.role === 'owner';
-  return `<div class="headline"><div><h2>Portale e accessi</h2><p>Assegna a ogni persona soltanto il ruolo e i condomìni necessari.</p></div><button class="btn lime" onclick="cloudCopyAccessLink()">Copia link di accesso</button></div>
+  return `<div class="headline"><div><h2>Portale clienti e accessi</h2><p>Assegna a ogni persona soltanto il ruolo e i clienti o condomìni necessari.</p></div><button class="btn lime" onclick="cloudCopyAccessLink()">Copia link di accesso</button></div>
     <div class="notice"><b>Come invitare:</b> copia il link, invialo alla persona e chiedile di creare l’accesso. Comparirà qui “In attesa”; poi assegna il ruolo.</div><div style="height:14px"></div>
     <div class="grid stats"><div class="stat"><div class="statTop"><span>Utenti</span></div><strong>${cloudUsers.length}</strong></div><div class="stat"><div class="statTop"><span>Attivi</span></div><strong>${cloudUsers.filter((item) => item.active).length}</strong></div><div class="stat"><div class="statTop"><span>In attesa</span></div><strong>${cloudUsers.filter((item) => item.role === 'pending').length}</strong></div><div class="stat"><div class="statTop"><span>Condomìni</span></div><strong>${clients.length}</strong></div></div>
     <div class="cloudUserGrid">${cloudUsers.map((item) => {
@@ -629,7 +641,7 @@ window.cloudSaveUser = async function (uid) {
   const clientIds = Array.from(document.querySelectorAll(`[data-cloud-client="${CSS.escape(uid)}"]:checked`)).map((input) => input.value);
   if (clientIds.length > 10) return alert('Puoi assegnare al massimo 10 condomìni per account.');
   if (selectedRole === 'worker' && !teamId) return alert('Seleziona una squadra per l’operaio.');
-  if (selectedRole === 'administrator' && !clientIds.length) return alert('Seleziona almeno un condominio per l’amministratore.');
+  if (selectedRole === 'administrator' && !clientIds.length) return alert('Seleziona almeno un cliente o condominio per questo accesso.');
   try {
     await setDoc(doc(firestore, 'users', uid), { role: selectedRole, active, teamId: selectedRole === 'worker' ? teamId : '', clientIds: selectedRole === 'administrator' ? clientIds : [], updatedAt: serverTimestamp() }, { merge: true });
     alert('Accesso aggiornato.');

@@ -150,7 +150,7 @@ function teamAssignments(id){return db.sites.filter(x=>x.worker===id).length+(db
 function openTeam(id){const item=WORKERS.find(x=>x.id===id)||{name:'',member1:'',member2:'',phone:'',reminderTime:'18:00'};modal(id?'Modifica squadra':'Nuova squadra',`<div class="formGrid">${field('Nome squadra','name','text',item.name)}${field('Telefono squadra','phone','tel',item.phone||'')}${field('Componente 1','member1','text',item.member1||'')}${field('Componente 2','member2','text',item.member2||'')}${field('Promemoria comunicazione ore','reminderTime','time',item.reminderTime||'18:00')}</div>`,f=>{const data=Object.fromEntries(f);if(id)Object.assign(item,data);else WORKERS.push({id:uid('sq'),...data})})}
 function deleteTeam(id){const item=WORKERS.find(x=>x.id===id);if(!item)return;const assigned=teamAssignments(id);if(!confirm(`Eliminare ${item.name}?${assigned?' I '+assigned+' incarichi collegati diventeranno non assegnati.':''}`))return;[...(db.sites||[]),...(db.roofs||[]),...(db.drains||[])].forEach(x=>{if(x.worker===id)x.worker=''});const i=WORKERS.findIndex(x=>x.id===id);WORKERS.splice(i,1);save();initRoles();render()}
 function deleteItem(collection,id,label){if(!confirm(`Eliminare definitivamente ${label}?`))return;db[collection]=db[collection].filter(x=>x.id!==id);save();render()}
-function renameClient(oldName,newName){if(oldName===newName)return;['inspections','sites','quotes','drone','lifelines','roofs','drains'].forEach(k=>(db[k]||[]).forEach(x=>{if(x.client===oldName)x.client=newName}))}
+function renameClient(oldName,newName){if(oldName===newName)return;['inspections','sites','quotes','drone','lifelines','roofs','drains','certificates'].forEach(k=>(db[k]||[]).forEach(x=>{if(x.client===oldName)x.client=newName}))}
 function openCondo(id){const item=db.condomini.find(x=>x.id===id)||{name:'',address:'',manager:'',phone:'',notes:''},oldName=item.name;modal(id?'Modifica cliente':'Nuovo condominio',`<div class="formGrid">${field('Condominio / cliente','name','text',item.name)}${field('Indirizzo','address','text',item.address)}${field('Amministratore','manager','text',item.manager)}${field('Telefono','phone','tel',item.phone)}${field('Note accesso','notes','text',item.notes,true)}</div>`,f=>{const data=Object.fromEntries(f);if(id){renameClient(oldName,data.name);Object.assign(item,data)}else db.condomini.push({id:uid('c'),...data})})}
 function clientOptions(selected=''){return db.condomini.map(c=>`<option ${c.name===selected?'selected':''}>${esc(c.name)}</option>`).join('')}
 function teamOptions(selected=''){return '<option value="">Non assegnata</option>'+WORKERS.map(w=>`<option value="${w.id}" ${w.id===selected?'selected':''}>${esc(w.name)} · ${staffForTeam(w.id).length} operai</option>`).join('')}
@@ -176,7 +176,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const 
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){location.href='tel:+393490977711'}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=9').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=10').catch(()=>{});
 </script>
 <script src="./professional-extensions.js"></script>
 <script src="./business-suite.js"></script>
@@ -201,12 +201,15 @@ window.EdilKappaLocal={
     STAFF=db.staff;role=personId;localStorage.setItem('ek_role',role);initRoles();
   },
   clearRestrictedData:()=>{
-    ['condomini','inspections','sites','quotes','reports','timesheets','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers'].forEach((key)=>{db[key]=[]});
+    ['condomini','inspections','sites','quotes','reports','timesheets','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers','leads','priceList','certificates','inventory','equipment'].forEach((key)=>{db[key]=[]});
     db.staffInitialized=true;WORKERS=db.teams;STAFF=db.staff;localStorage.setItem(KEY,JSON.stringify(db));
   },
   clearDeviceData:()=>localStorage.removeItem(KEY)
 };
 </script>
-<script type="module" src="./firebase-cloud.js?v=9"></script>
+<script src="./linea-vita/vendor/jspdf.umd.min.js"></script>
+<script src="./linea-vita/vendor/jspdf.plugin.autotable.min.js"></script>
+<script src="./smart-operations.js?v=10"></script>
+<script type="module" src="./firebase-cloud.js?v=10"></script>
 </body>
 </html>

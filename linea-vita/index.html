@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <meta name="description" content="App operativa EdilKappa per ispezioni e manutenzione linea vita.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="EdilKappa LV">
+    <title>EdilKappa Linea Vita</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <button class="brand-button" data-nav="home" aria-label="Vai alla pagina iniziale">
+        <img src="assets/02_logo_orizzontale_petto_nero.svg" alt="EdilKappa">
+        <span>LINEA VITA</span>
+      </button>
+      <div class="header-actions">
+        <a class="header-install back-to-suite" href="../">← Gestionale</a>
+        <span id="online-badge" class="connection-badge">Online</span>
+        <button id="install-header-button" class="header-install" hidden>Installa</button>
+      </div>
+    </header>
+
+    <main id="app" class="app-main" aria-live="polite">
+      <div class="loading-screen">
+        <img src="assets/03_icona_edilkappa_nera.svg" alt="">
+        <p>Caricamento archivio…</p>
+      </div>
+    </main>
+
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Navigazione principale">
+      <button data-nav="home" class="active"><span class="nav-symbol">⌂</span><span>Home</span></button>
+      <button data-nav="new"><span class="nav-symbol nav-plus">＋</span><span>Nuova</span></button>
+      <button data-nav="archive"><span class="nav-symbol">▤</span><span>Archivio</span></button>
+      <button data-nav="settings"><span class="nav-symbol">⚙</span><span>Impostazioni</span></button>
+    </nav>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <div id="signature-modal" class="modal-backdrop" hidden>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="signature-title">
+        <div class="modal-heading">
+          <div><p class="eyebrow">Firma sullo schermo</p><h2 id="signature-title">Firma</h2></div>
+          <button id="signature-cancel" class="modal-close" aria-label="Chiudi">×</button>
+        </div>
+        <p class="signature-help">Firma con il dito all'interno del riquadro bianco.</p>
+        <canvas id="signature-canvas" class="signature-canvas"></canvas>
+        <div class="modal-actions">
+          <button id="signature-clear" class="button button-secondary">Pulisci</button>
+          <button id="signature-save" class="button button-primary">Salva firma</button>
+        </div>
+      </section>
+    </div>
+
+    <noscript>Per utilizzare EdilKappa Linea Vita devi abilitare JavaScript nel browser.</noscript>
+
+    <script defer src="vendor/jspdf.umd.min.js"></script>
+    <script defer src="vendor/jspdf.plugin.autotable.min.js"></script>
+    <script defer src="js/data.js"></script>
+    <script defer src="js/db.js"></script>
+    <script defer src="js/pdf.js"></script>
+    <script defer src="js/views.js"></script>
+    <script defer src="js/app.js"></script>
+  </body>
+</html>

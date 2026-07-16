@@ -7,7 +7,8 @@ rules_version = '2';
 //   clientIds (massimo 10 ID stringa), createdAt, updatedAt.
 // Business collections: clients, sites, reports, quotes, deadlines,
 //   payments, documents, teams, timesheets, inspections, lifelines,
-//   roofs, drains, drone, expenses. Ogni documento usa un envelope chiuso:
+//   roofs, drains, drone, expenses, leads, priceList, certificates,
+//   inventory, equipment. Ogni documento usa un envelope chiuso:
 //   id, orgId, clientId, assignedTeamId, workerUid, ownerUid, status,
 //   workHours, materialAmount, progress, contractValue, recordedCost,
 //   payload (JSON con limite),
@@ -101,7 +102,11 @@ service cloud.firestore {
       return value in ['', 'Pianificato', 'In corso', 'In attesa', 'Completato',
         'Da preventivare', 'Bozza', 'Inviato', 'Accettato', 'Rifiutato',
         'Da relazionare', 'Relazione pronta', 'Da incassare', 'Parziale',
-        'Pagato', 'Scaduto', 'Attivo', 'Sospeso', 'Registrato'];
+        'Pagato', 'Scaduto', 'Attivo', 'Sospeso', 'Registrato', 'Nuova',
+        'Contattato', 'Sopralluogo fissato', 'Archiviata', 'Disponibile',
+        'Assegnato', 'In manutenzione', 'Da sostituire', 'Da riordinare',
+        'In scadenza', 'Scaduta', 'Positivo', 'Con prescrizioni', 'Negativo',
+        'Da completare', 'Da programmare', 'Disattivo'];
     }
 
     function uidUnchanged() {
@@ -170,6 +175,24 @@ service cloud.firestore {
 
     function workerLimitedUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'workHours', 'materialAmount', 'progress', 'payload', 'updatedAt']);
+    }
+
+    function validPublicLeadCreate(docId) {
+      return !signedIn()
+        && validCreateEnvelope(docId)
+        && docId.matches('^lead-[a-z0-9-]{10,100}$')
+        && request.resource.data.ownerUid == 'public'
+        && request.resource.data.clientId == ''
+        && request.resource.data.assignedTeamId == ''
+        && request.resource.data.workerUid == ''
+        && request.resource.data.status == 'Nuova'
+        && request.resource.data.workHours == 0
+        && request.resource.data.materialAmount == 0
+        && request.resource.data.progress == 0
+        && request.resource.data.contractValue == 0
+        && request.resource.data.recordedCost == 0
+        && nonEmptyText(request.resource.data.payload, 400000)
+        && request.resource.data.payload.matches('^\\{.*"status":"Nuova".*\\}$');
     }
 
     match /users/{userId} {
@@ -260,6 +283,29 @@ service cloud.firestore {
       allow create: if isStaff() && validCreateEnvelope(docId);
       allow update: if isStaff() && validUpdateEnvelope(docId);
       allow delete: if isStaff();
+    }
+
+    match /leads/{docId} {
+      allow read: if isStaff();
+      allow create: if validPublicLeadCreate(docId) || (isStaff() && validCreateEnvelope(docId));
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isStaff();
+    }
+
+    match /certificates/{docId} {
+      allow read: if isStaff() || clientAllowed(resource.data.clientId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isStaff();
+    }
+
+    match /{collection}/{docId} {
+      allow read: if collection in ['priceList', 'inventory', 'equipment'] && isStaff();
+      allow create: if collection in ['priceList', 'inventory', 'equipment']
+        && isStaff() && validCreateEnvelope(docId);
+      allow update: if collection in ['priceList', 'inventory', 'equipment']
+        && isStaff() && validUpdateEnvelope(docId);
+      allow delete: if collection in ['priceList', 'inventory', 'equipment'] && isStaff();
     }
 
     match /{collection}/{docId} {
