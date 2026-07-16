@@ -1,0 +1,348 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed data model
+// ===============================================================
+// users/{uid}: orgId, displayName, email, role, active, teamId,
+//   clientIds (massimo 10 ID stringa), createdAt, updatedAt.
+// Business collections: clients, sites, reports, quotes, deadlines,
+//   payments, documents, teams, timesheets, inspections, lifelines,
+//   roofs, drains, drone, expenses. Ogni documento usa un envelope chiuso:
+//   id, orgId, clientId, assignedTeamId, workerUid, ownerUid, status,
+//   workHours, materialAmount, progress, contractValue, recordedCost,
+//   payload (JSON con limite),
+//   createdAt, updatedAt.
+// attachments/{id}: immagine compressa e metadati del rapportino.
+// quoteAcceptances/{quoteId_uid}: firma separata, immutabile.
+// audit/{id}: evento amministrativo immutabile.
+// I campi di autorità sono sempre esterni al payload JSON.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function signedIn() {
+      return isAuthenticated();
+    }
+
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    function bootstrapOwner() {
+      return verified() && request.auth.token.email == 'info@edilkappa.com';
+    }
+
+    function profileExists() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function active() {
+      return verified() && profileExists() && me().orgId == 'edilkappa' && me().active == true;
+    }
+
+    function isOwner() {
+      return bootstrapOwner() || (active() && me().role == 'owner');
+    }
+
+    function isStaff() {
+      return bootstrapOwner() || (active() && me().role in ['owner', 'office']);
+    }
+
+    function isWorker() {
+      return active() && me().role == 'worker';
+    }
+
+    function isAdministrator() {
+      return active() && me().role == 'administrator';
+    }
+
+    function clientAllowed(clientId) {
+      return isAdministrator() && clientId is string && clientId in me().clientIds;
+    }
+
+    function shortText(value, maxSize) {
+      return value is string && value.size() <= maxSize;
+    }
+
+    function nonEmptyText(value, maxSize) {
+      return value is string && value.size() > 0 && value.size() <= maxSize;
+    }
+
+    function validEmail(value) {
+      return value is string && value.size() <= 254
+        && value.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function validClientIds(value) {
+      return value is list
+        && value.size() <= 10
+        && value.toSet().size() == value.size()
+        && (value.size() < 1 || nonEmptyText(value[0], 128))
+        && (value.size() < 2 || nonEmptyText(value[1], 128))
+        && (value.size() < 3 || nonEmptyText(value[2], 128))
+        && (value.size() < 4 || nonEmptyText(value[3], 128))
+        && (value.size() < 5 || nonEmptyText(value[4], 128))
+        && (value.size() < 6 || nonEmptyText(value[5], 128))
+        && (value.size() < 7 || nonEmptyText(value[6], 128))
+        && (value.size() < 8 || nonEmptyText(value[7], 128))
+        && (value.size() < 9 || nonEmptyText(value[8], 128))
+        && (value.size() < 10 || nonEmptyText(value[9], 128));
+    }
+
+    function validStatus(value) {
+      return value in ['', 'Pianificato', 'In corso', 'In attesa', 'Completato',
+        'Da preventivare', 'Bozza', 'Inviato', 'Accettato', 'Rifiutato',
+        'Da relazionare', 'Relazione pronta', 'Da incassare', 'Parziale',
+        'Pagato', 'Scaduto', 'Attivo', 'Sospeso', 'Registrato'];
+    }
+
+    function uidUnchanged() {
+      return request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return request.resource.data.ownerUid == resource.data.ownerUid;
+    }
+
+    function validUser(d) {
+      return d.keys().hasAll(['orgId', 'displayName', 'email', 'role', 'active', 'teamId', 'clientIds', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['orgId', 'displayName', 'email', 'role', 'active', 'teamId', 'clientIds', 'createdAt', 'updatedAt'])
+        && d.orgId == 'edilkappa'
+        && nonEmptyText(d.displayName, 120)
+        && validEmail(d.email)
+        && d.role in ['owner', 'office', 'worker', 'administrator', 'pending']
+        && d.active is bool
+        && shortText(d.teamId, 128)
+        && validClientIds(d.clientIds)
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp;
+    }
+
+    function validEnvelope(d, docId) {
+      return d.keys().hasAll(['id', 'orgId', 'clientId', 'assignedTeamId', 'workerUid', 'ownerUid', 'status', 'workHours', 'materialAmount', 'progress', 'contractValue', 'recordedCost', 'payload', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['id', 'orgId', 'clientId', 'assignedTeamId', 'workerUid', 'ownerUid', 'status', 'workHours', 'materialAmount', 'progress', 'contractValue', 'recordedCost', 'payload', 'createdAt', 'updatedAt'])
+        && d.id == docId
+        && d.orgId == 'edilkappa'
+        && shortText(d.id, 128)
+        && shortText(d.clientId, 128)
+        && shortText(d.assignedTeamId, 128)
+        && shortText(d.workerUid, 128)
+        && shortText(d.ownerUid, 128)
+        && validStatus(d.status)
+        && d.workHours is number && d.workHours >= 0 && d.workHours <= 24
+        && d.materialAmount is number && d.materialAmount >= 0 && d.materialAmount <= 100000
+        && d.progress is number && d.progress >= 0 && d.progress <= 100
+        && d.contractValue is number && d.contractValue >= 0 && d.contractValue <= 100000000
+        && d.recordedCost is number && d.recordedCost >= 0 && d.recordedCost <= 100000000
+        && shortText(d.payload, 700000)
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp;
+    }
+
+    function validCreateEnvelope(docId) {
+      return validEnvelope(request.resource.data, docId)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function validUpdateEnvelope(docId) {
+      return validEnvelope(request.resource.data, docId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && uidNotModified()
+        && request.resource.data.updatedAt == request.time;
+    }
+
+    function workerAssigned(d) {
+      return isWorker() && d.assignedTeamId == me().teamId && me().teamId.size() > 0;
+    }
+
+    function workerOwns(d) {
+      return isWorker() && d.workerUid == request.auth.uid && d.ownerUid == request.auth.uid;
+    }
+
+    function workerLimitedUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'workHours', 'materialAmount', 'progress', 'payload', 'updatedAt']);
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (userId == request.auth.uid || isOwner());
+
+      allow create: if signedIn()
+        && userId == request.auth.uid
+        && validUser(request.resource.data)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && (
+          (bootstrapOwner() && request.resource.data.role == 'owner' && request.resource.data.active == true)
+          || (request.resource.data.role == 'pending' && request.resource.data.active == false
+            && request.resource.data.teamId == '' && request.resource.data.clientIds.size() == 0)
+        );
+
+      allow update: if validUser(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time
+        && (
+          (userId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']))
+          || isOwner()
+        );
+
+      allow delete: if isOwner() && userId != request.auth.uid;
+    }
+
+    match /clients/{docId} {
+      allow read: if isStaff() || clientAllowed(resource.data.clientId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isStaff();
+    }
+
+    match /sites/{docId} {
+      allow read: if isStaff() || workerAssigned(resource.data) || clientAllowed(resource.data.clientId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if validUpdateEnvelope(docId)
+        && (isStaff() || (workerAssigned(resource.data) && workerLimitedUpdate()));
+      allow delete: if isStaff();
+    }
+
+    match /roofs/{docId} {
+      allow read: if isStaff() || workerAssigned(resource.data) || clientAllowed(resource.data.clientId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if validUpdateEnvelope(docId)
+        && (isStaff() || (workerAssigned(resource.data) && workerLimitedUpdate()));
+      allow delete: if isStaff();
+    }
+
+    match /drains/{docId} {
+      allow read: if isStaff() || workerAssigned(resource.data) || clientAllowed(resource.data.clientId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if validUpdateEnvelope(docId)
+        && (isStaff() || (workerAssigned(resource.data) && workerLimitedUpdate()));
+      allow delete: if isStaff();
+    }
+
+    match /reports/{docId} {
+      allow read: if isStaff() || workerOwns(resource.data) || clientAllowed(resource.data.clientId);
+      allow create: if validCreateEnvelope(docId)
+        && (isStaff() || (uidUnchanged() && workerOwns(request.resource.data) && workerAssigned(request.resource.data)));
+      allow update: if validUpdateEnvelope(docId)
+        && (isStaff() || (workerOwns(resource.data) && workerLimitedUpdate()));
+      allow delete: if isStaff();
+    }
+
+    match /timesheets/{docId} {
+      allow read: if isStaff() || workerOwns(resource.data);
+      allow create: if validCreateEnvelope(docId)
+        && (isStaff() || (uidUnchanged() && workerOwns(request.resource.data)));
+      allow update: if validUpdateEnvelope(docId)
+        && (isStaff() || (workerOwns(resource.data) && workerLimitedUpdate()));
+      allow delete: if isStaff();
+    }
+
+    match /teams/{docId} {
+      allow read: if isStaff() || (isWorker() && docId == me().teamId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isStaff();
+    }
+
+    match /quotes/{docId} {
+      allow read: if isStaff() || clientAllowed(resource.data.clientId);
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isStaff();
+    }
+
+    match /{collection}/{docId} {
+      allow read: if collection in ['deadlines', 'payments', 'documents', 'inspections', 'lifelines', 'drone']
+        && (isStaff() || clientAllowed(resource.data.clientId));
+      allow create: if collection in ['deadlines', 'payments', 'documents', 'inspections', 'lifelines', 'drone']
+        && isStaff() && validCreateEnvelope(docId);
+      allow update: if collection in ['deadlines', 'payments', 'documents', 'inspections', 'lifelines', 'drone']
+        && isStaff() && validUpdateEnvelope(docId);
+      allow delete: if collection in ['deadlines', 'payments', 'documents', 'inspections', 'lifelines', 'drone']
+        && isStaff();
+    }
+
+    match /expenses/{docId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isStaff();
+    }
+
+    match /attachments/{docId} {
+      function validAttachment(d) {
+        return d.keys().hasAll(['id', 'orgId', 'clientId', 'reportId', 'assignedTeamId', 'workerUid', 'ownerUid', 'name', 'phase', 'mimeType', 'data', 'size', 'createdAt'])
+          && d.keys().hasOnly(['id', 'orgId', 'clientId', 'reportId', 'assignedTeamId', 'workerUid', 'ownerUid', 'name', 'phase', 'mimeType', 'data', 'size', 'createdAt'])
+          && d.id == docId && d.orgId == 'edilkappa'
+          && nonEmptyText(d.clientId, 128) && nonEmptyText(d.reportId, 128)
+          && shortText(d.assignedTeamId, 128) && shortText(d.workerUid, 128)
+          && shortText(d.ownerUid, 128) && shortText(d.name, 180)
+          && d.phase in ['Prima', 'Dopo', 'Documento']
+          && d.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+          && nonEmptyText(d.data, 720000)
+          && d.data.matches('^data:image/(jpeg|png|webp);base64,.*')
+          && d.size is int && d.size >= 0 && d.size <= 540000
+          && d.createdAt is timestamp;
+      }
+
+      allow read: if isStaff() || workerOwns(resource.data) || clientAllowed(resource.data.clientId);
+      allow create: if validAttachment(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && (isStaff() || (workerOwns(request.resource.data) && workerAssigned(request.resource.data)));
+      allow update: if false;
+      allow delete: if isStaff() || workerOwns(resource.data);
+    }
+
+    match /quoteAcceptances/{docId} {
+      function validAcceptance(d) {
+        return d.keys().hasAll(['id', 'orgId', 'quoteId', 'clientId', 'signedByUid', 'signedByName', 'signature', 'acceptedAt'])
+          && d.keys().hasOnly(['id', 'orgId', 'quoteId', 'clientId', 'signedByUid', 'signedByName', 'signature', 'acceptedAt'])
+          && d.id == docId && d.orgId == 'edilkappa'
+          && docId == d.quoteId + '_' + request.auth.uid
+          && shortText(d.quoteId, 128) && shortText(d.clientId, 128)
+          && d.signedByUid == request.auth.uid
+          && shortText(d.signedByName, 120)
+          && nonEmptyText(d.signature, 250000)
+          && d.signature.matches('^data:image/png;base64,.*')
+          && d.acceptedAt is timestamp;
+      }
+
+      allow read: if isStaff() || (isAdministrator() && resource.data.signedByUid == request.auth.uid);
+      allow create: if isAdministrator()
+        && clientAllowed(request.resource.data.clientId)
+        && validAcceptance(request.resource.data)
+        && exists(/databases/$(database)/documents/quotes/$(request.resource.data.quoteId))
+        && get(/databases/$(database)/documents/quotes/$(request.resource.data.quoteId)).data.clientId == request.resource.data.clientId
+        && request.resource.data.acceptedAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /audit/{docId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && request.resource.data.keys().hasAll(['orgId', 'actorUid', 'action', 'targetId', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['orgId', 'actorUid', 'action', 'targetId', 'createdAt'])
+        && request.resource.data.orgId == 'edilkappa'
+        && request.resource.data.actorUid == request.auth.uid
+        && shortText(request.resource.data.action, 120)
+        && shortText(request.resource.data.targetId, 128)
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

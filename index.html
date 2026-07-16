@@ -53,7 +53,7 @@ let db=load(),role=localStorage.getItem('ek_role')||'owner',view='dashboard',sea
 const ownerNav=[['dashboard','⌂','Panoramica'],['agenda','◷','Agenda'],['condomini','▦','Condomìni'],['inspections','⌖','Sopralluoghi'],['quotes','€','Preventivi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa lavori'],['hours','◷','Ore operai'],['teamsView','♟','Squadre'],['drone','◉','Drone'],['lifeline','⚓','Linea vita'],['roofs','⌂','Tetti e gronde'],['drains','▦','Pozzetti e tombini'],['finance','↗','Costi e margini']];
 const workerNav=[['worker','⌂','I miei lavori'],['hours','◷','Comunica ore'],['report','＋','Nuovo rapportino']];
 function load(){try{return Object.assign(structuredClone(seed),JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){return structuredClone(seed)}}
-function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+function save(){localStorage.setItem(KEY,JSON.stringify(db));window.EdilKappaCloud?.scheduleSync?.()}
 function pdfDatabase(){return new Promise((resolve,reject)=>{const req=indexedDB.open(PDF_DB,1);req.onupgradeneeded=()=>req.result.createObjectStore('pdf');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(new Error('Archivio documenti non disponibile'))})}
 async function storePdf(id,file){const d=await pdfDatabase();return new Promise((resolve,reject)=>{const tx=d.transaction('pdf','readwrite');tx.objectStore('pdf').put(file,id);tx.oncomplete=()=>{d.close();resolve()};tx.onerror=()=>{d.close();reject(new Error('Non è stato possibile salvare il PDF'))}})}
 async function readPdf(id){const d=await pdfDatabase();return new Promise((resolve,reject)=>{const req=d.transaction('pdf').objectStore('pdf').get(id);req.onsuccess=()=>{d.close();resolve(req.result)};req.onerror=()=>{d.close();reject(new Error('Documento non trovato'))}})}
@@ -77,7 +77,7 @@ function roleName(){return role==='owner'?'Titolare':role==='secretary'?'Ufficio
 function nav(){return isOffice()?ownerNav:workerNav}
 function initRoles(){const s=document.getElementById('roleSelect');if(!isOffice()&&!STAFF.some(w=>w.id===role)){role='owner';localStorage.setItem('ek_role',role)}s.innerHTML='<option value="owner">Titolare</option><option value="secretary">Ufficio</option>'+STAFF.map(w=>{const team=WORKERS.find(t=>t.id===w.team);return`<option value="${w.id}">${esc(w.name)} · ${esc(team?.name||'Senza squadra')}</option>`}).join('');s.value=role;s.onchange=()=>{role=s.value;searchQuery='';document.getElementById('globalSearch').value='';localStorage.setItem('ek_role',role);view=isOffice()?'dashboard':'worker';render();checkHourReminders()}}
 function renderNav(){const html=nav().map(n=>`<button class="${view===n[0]?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');document.getElementById('desktopNav').innerHTML=html;const mobile=isOffice()?[['dashboard','⌂','Home'],['inspections','⌖','Sopralluoghi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa'],['more','•••','Altro']]:workerNav;const moreViews=['agenda','condomini','quotes','hours','teamsView','drone','lifeline','roofs','drains','finance'];document.getElementById('mobileNav').innerHTML=mobile.map(n=>`<button class="${view===n[0]||(n[0]==='more'&&moreViews.includes(view))?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</button>`).join('')}
-function go(v){view=v;render()}
+function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;render()}
 function runSearch(value){searchQuery=String(value||'').trim();view=searchQuery?'search':(isOffice()?'dashboard':'worker');render()}
 function render(){if(!isOffice()&&!['worker','hours','report','search'].includes(view))view='worker';renderNav();document.getElementById('avatar').textContent=roleName().charAt(0);const labels=Object.fromEntries(nav().map(x=>[x[0],x[2]]));labels.more='Altro';labels.search='Ricerca';document.getElementById('pageTitle').textContent=labels[view]||'EDILKAPPA';const fn={dashboard,agenda,condomini,inspections,quotes,sites,workMap,hours:hoursView,teamsView,drone,lifeline,roofs,drains,finance,more,worker,report,search:searchResults}[view]||dashboard;document.getElementById('app').innerHTML=fn()}
 function stat(label,value,icon,sub=''){return `<div class="stat"><div class="statTop"><span>${label}</span><span class="statIcon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
@@ -179,5 +179,34 @@ initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
 </script>
 <script src="./professional-extensions.js"></script>
+<script src="./business-suite.js"></script>
+<script>
+window.EdilKappaLocal={
+  getDB:()=>db,
+  getRole:()=>role,
+  getView:()=>view,
+  persist:()=>localStorage.setItem(KEY,JSON.stringify(db)),
+  render:()=>render(),
+  go:(next)=>{view=next;render()},
+  readFile:(key)=>readPdf(key),
+  setRole:(next)=>{role=next;localStorage.setItem('ek_role',role);initRoles()},
+  setWorkerRole:(profile,uid)=>{
+    const teamId=profile.teamId||'cloud-team';
+    if(!db.teams.some((team)=>team.id===teamId))db.teams.push({id:teamId,name:'Squadra assegnata',member1:profile.displayName,member2:'',phone:'',reminderTime:'18:00'});
+    WORKERS=db.teams;
+    const personId='cloud-'+uid;
+    let person=db.staff.find((item)=>item.id===personId);
+    if(!person){person={id:personId,name:profile.displayName||profile.email,phone:'',team:teamId,reminderTime:'18:00'};db.staff.push(person)}
+    else{person.name=profile.displayName||profile.email;person.team=teamId}
+    STAFF=db.staff;role=personId;localStorage.setItem('ek_role',role);initRoles();
+  },
+  clearRestrictedData:()=>{
+    ['condomini','inspections','sites','quotes','reports','timesheets','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers'].forEach((key)=>{db[key]=[]});
+    db.staffInitialized=true;WORKERS=db.teams;STAFF=db.staff;localStorage.setItem(KEY,JSON.stringify(db));
+  },
+  clearDeviceData:()=>localStorage.removeItem(KEY)
+};
+</script>
+<script type="module" src="./firebase-cloud.js"></script>
 </body>
 </html>

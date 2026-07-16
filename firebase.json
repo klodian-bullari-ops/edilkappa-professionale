@@ -1,0 +1,18 @@
+{
+  "firestore": {
+    "database": "edilkappa",
+    "location": "europe-west8",
+    "edition": "enterprise",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "EDILKAPPA Professionale",
+        "supportEmail": "info@edilkappa.com"
+      }
+    }
+  }
+}

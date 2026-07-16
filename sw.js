@@ -1,12 +1,14 @@
 "use strict";
 
-const CACHE = "edilkappa-professionale-v4-store";
+const CACHE = "edilkappa-professionale-v6-firebase-sync";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./privacy.html",
   "./manifest.json",
   "./professional-extensions.js",
+  "./business-suite.js",
+  "./firebase-cloud.js",
   "./assets/icona-edilkappa.svg",
   "./assets/logo-edilkappa.svg",
   "./icons/icon-192.png",
