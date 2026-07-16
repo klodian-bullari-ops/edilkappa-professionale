@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "edilkappa-professionale-v6-firebase-sync";
+const CACHE = "edilkappa-professionale-v7-access-management";
 const APP_SHELL = [
   "./",
   "./index.html",
