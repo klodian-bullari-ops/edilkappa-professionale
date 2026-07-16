@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "edilkappa-professionale-v8-login-overlay-fix";
+const CACHE = "edilkappa-professionale-v9-login-overlay-fix";
 const APP_SHELL = [
   "./",
   "./index.html",
