@@ -120,6 +120,7 @@ function installCloudStyles() {
   const style = document.createElement('style');
   style.textContent = `
     .cloudGate{position:fixed;inset:0;z-index:1000;background:linear-gradient(145deg,#101213,#25292d);display:grid;place-items:center;padding:18px;overflow:auto}
+    .cloudGate[hidden]{display:none!important}
     .cloudGateCard{width:min(490px,100%);background:#fff;border-radius:24px;padding:26px;box-shadow:0 28px 80px rgba(0,0,0,.38);border-top:7px solid var(--lime)}
     .cloudGateBrand{display:flex;align-items:center;gap:13px;margin-bottom:20px}.cloudGateBrand img{width:55px;height:55px;background:var(--lime);border-radius:15px;padding:8px}.cloudGateBrand h2{margin:0}.cloudGateBrand small{color:var(--muted)}
     .cloudGateForm{display:grid;gap:11px}.cloudGateForm input{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px}.cloudGateButtons{display:grid;grid-template-columns:1fr 1fr;gap:9px}.cloudGateMessage{min-height:20px;color:var(--red);font-size:13px}.cloudDivider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:4px 0}.cloudDivider:before,.cloudDivider:after{content:'';height:1px;background:var(--line);flex:1}

@@ -176,7 +176,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const 
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){location.href='tel:+393490977711'}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=7').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=8').catch(()=>{});
 </script>
 <script src="./professional-extensions.js"></script>
 <script src="./business-suite.js"></script>
