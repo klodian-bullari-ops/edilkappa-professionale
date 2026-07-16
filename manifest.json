@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "EDILKAPPA SAS Gestionale",
+  "short_name": "EDILKAPPA",
+  "description": "Gestionale operativo per sopralluoghi, condomìni, cantieri e operai EDILKAPPA SAS",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f3ed",
+  "theme_color": "#172419",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

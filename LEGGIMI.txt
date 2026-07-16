@@ -1,0 +1,112 @@
+EDILKAPPA SAS — PRIMA VERSIONE PROFESSIONALE
+
+Per provarla su Windows, fai doppio clic su AVVIA_APP.bat.
+
+INSTALLAZIONE SU IPHONE
+Pubblica l'intera cartella su un indirizzo HTTPS, quindi apri il link con Safari.
+Tocca Condividi e scegli "Aggiungi alla schermata Home". L'app verrà avviata
+come applicazione autonoma con il logo EdilKappa. Dopo il primo caricamento,
+le funzioni principali restano disponibili anche senza connessione; la mappa e
+la ricerca delle coordinate richiedono Internet.
+
+ACCESSI DIMOSTRATIVI
+Dal menu in alto puoi passare da Titolare a Squadra 1, 2 o 3.
+Ogni squadra è composta da due persone e vede esclusivamente i propri cantieri.
+Prezzi, preventivi, costi e margini sono visibili soltanto al titolare.
+
+CARICAMENTO PREVENTIVI PDF
+Apri Preventivi e premi "Carica PDF". Seleziona il documento, associa cliente,
+oggetto, importo e stato, quindi premi Salva. Il pulsante "Apri PDF" permette
+di consultare nuovamente il file sullo stesso dispositivo.
+
+LINEA VITA
+Il modulo "Linea vita" permette di registrare l'impianto di ogni condominio,
+installatore, data di installazione, prossima verifica e note tecniche. Nella
+stessa scheda puoi caricare certificazioni e verbali PDF, manuali e fotografie.
+Puoi aggiungere altri documenti anche in seguito con "+ Documenti/foto".
+
+TETTI E GRONDE
+Il modulo "Tetti e gronde" permette di programmare pulizia gronde, pulizia tetti,
+controllo coperture, spurgo pluviali e rimozione detriti. Ogni intervento può
+essere assegnato a una squadra, ripetuto periodicamente e corredato di foto
+prima/dopo e documenti. La squadra lo vede nella propria area e può aggiornarlo.
+
+GRIGLIE, POZZETTI E TOMBINI
+Il modulo permette di censire e programmare pulizia di griglie, pozzetti,
+tombini e caditoie, disostruzione e videoispezione degli scarichi. Registra zona,
+numero di punti, periodicità e squadra assegnata, con documenti e foto prima/dopo.
+La squadra vede e aggiorna esclusivamente gli interventi assegnati a lei.
+
+PROMEMORIA SOPRALLUOGHI
+Quando programmi un sopralluogo scegli il preavviso desiderato. Nell'Agenda premi
+"Calendario iPhone" e apri il file generato per aggiungere l'appuntamento al
+calendario: l'iPhone mostrerà l'avviso anche quando l'app EDILKAPPA è chiusa.
+Il pulsante "Attiva notifiche" abilita anche gli avvisi dell'app quando supportati.
+
+MODIFICA, ELIMINA E SQUADRE
+Le principali schede dell'app dispongono ora dei comandi "Modifica" ed "Elimina".
+L'eliminazione richiede sempre una conferma. Nel modulo "Squadre" puoi creare,
+modificare o eliminare gruppi, indicando nome, telefono e i due componenti.
+Se elimini una squadra, i suoi incarichi restano salvati ma diventano non assegnati.
+
+UFFICIO
+Il profilo "Ufficio" ha gli stessi permessi del titolare: può consultare e
+gestire clienti, agenda, sopralluoghi, preventivi, cantieri, squadre, documenti,
+costi e margini, incluse le funzioni di modifica ed eliminazione.
+
+ORE OPERAI
+Ogni singolo operaio dispone del proprio profilo e usa "Comunica ore" dal suo
+telefono per registrare esclusivamente le proprie ore, indicando data, lavoro e
+note. Titolare e Ufficio dispongono della sezione separata "Ore operai", con
+totale mensile individuale, squadra, giorni registrati e dettaglio giornaliero.
+Il registro può essere stampato o salvato in PDF. L'orario del promemoria si
+configura nella scheda personale dell'operaio.
+La notifica dell'app funziona quando supportata; il pulsante "Promemoria
+giornaliero" aggiunge al calendario del telefono un avviso che funziona anche
+quando l'app è chiusa.
+
+GESTIONE OPERAI NELLE SQUADRE
+Nel modulo "Squadre" puoi aggiungere un singolo operaio, modificarne nome,
+telefono, squadra e orario del promemoria, oppure rimuoverlo. Le ore già
+registrate restano nello storico anche dopo la rimozione dell'operaio.
+
+RICERCA GENERALE
+La barra in alto cerca contemporaneamente clienti, indirizzi, sopralluoghi,
+preventivi, cantieri, squadre, drone, linea vita, tetti, gronde e pozzetti.
+Titolare e segretaria vedono tutti i risultati; ogni squadra trova soltanto
+gli incarichi assegnati al proprio profilo.
+
+MAPPA LAVORI
+Il modulo "Mappa lavori" mostra cantieri, pulizie programmate di tetti/gronde,
+pozzetti e tombini, oltre a tutti i sopralluoghi. Arancione indica un intervento
+in corso, verde un lavoro completato, blu un lavoro programmato e viola un
+sopralluogo. Le attività dello stesso condominio vengono raggruppate in un punto.
+Inserisci sempre via, numero civico e città completi.
+Cartografia e ricerca delle coordinate richiedono una connessione internet.
+Le linee vita sono indicate in rosso. I cinque interruttori sopra la mappa
+permettono di accendere o spegnere ciascun colore e tipo di attività.
+
+MODULI PROFESSIONALI AGGIUNTI
+- Firma e accettazione dei preventivi con data e firmatario
+- Pagamenti, acconti, saldi, residui e scadenze
+- Archivio documenti per cantieri, sicurezza, personale, mezzi e fornitori
+- Registro delle creazioni, modifiche ed eliminazioni
+- Pannello "Cosa devo fare oggi" con attività e urgenze
+
+VERSIONE ONLINE
+La cartella separata EdilKappa_Cloud contiene database, accessi personali,
+regole di sicurezza, archivio cloud, notifiche push e funzioni automatiche.
+
+Questa consegna è una versione locale per definire e provare il flusso operativo.
+I dati restano nel browser del dispositivo. Per sincronizzare iPhone diversi sono
+necessari pubblicazione online, database protetto e autenticazione reale.
+
+DATI AZIENDALI INSERITI
+EDILKAPPA SAS
+Via Sant’Ambrogio 38, 20055 Vimodrone (MI)
+P.IVA 14041000960
+Tel. 349 097 7711
+info@edilkappa.com
+
+Questa versione utilizza il logo e le icone ufficiali EdilKappa già adottati
+nell'app EdilKappa Linea Vita.
