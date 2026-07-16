@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "edilkappa-professionale-v2";
+const CACHE = "edilkappa-professionale-v3-palette";
 const APP_SHELL = [
   "./",
   "./index.html",
