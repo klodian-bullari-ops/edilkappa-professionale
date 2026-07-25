@@ -1,4 +1,4 @@
-EDILKAPPA SAS — PRIMA VERSIONE PROFESSIONALE
+EDILKAPPA — VERSIONE PROFESSIONALE
 
 Per provarla su Windows, fai doppio clic su AVVIA_APP.bat.
 
@@ -101,12 +101,10 @@ Questa consegna è una versione locale per definire e provare il flusso operativ
 I dati restano nel browser del dispositivo. Per sincronizzare iPhone diversi sono
 necessari pubblicazione online, database protetto e autenticazione reale.
 
-DATI AZIENDALI INSERITI
-EDILKAPPA SAS
-Via Sant’Ambrogio 38, 20055 Vimodrone (MI)
-P.IVA 14041000960
-Tel. 349 097 7711
-info@edilkappa.com
+DATI AZIENDALI
+Per evitare di pubblicare recapiti e dati fiscali nel codice sorgente, i dati
+aziendali si configurano dopo l'accesso nella sezione "Dati aziendali". Vengono
+salvati nel database privato e usati automaticamente nei documenti generati.
 
 Questa versione utilizza il logo e le icone ufficiali EdilKappa già adottati
 nell'app EdilKappa Linea Vita.

@@ -8,7 +8,7 @@ rules_version = '2';
 // Business collections: clients, sites, reports, quotes, deadlines,
 //   payments, documents, teams, timesheets, inspections, lifelines,
 //   roofs, drains, drone, expenses, leads, priceList, certificates,
-//   inventory, equipment. Ogni documento usa un envelope chiuso:
+//   inventory, equipment, settings. Ogni documento usa un envelope chiuso:
 //   id, orgId, clientId, assignedTeamId, workerUid, ownerUid, status,
 //   workHours, materialAmount, progress, contractValue, recordedCost,
 //   payload (JSON con limite),
@@ -306,6 +306,13 @@ service cloud.firestore {
       allow update: if collection in ['priceList', 'inventory', 'equipment']
         && isStaff() && validUpdateEnvelope(docId);
       allow delete: if collection in ['priceList', 'inventory', 'equipment'] && isStaff();
+    }
+
+    match /settings/{docId} {
+      allow read: if active();
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
+      allow delete: if isOwner();
     }
 
     match /{collection}/{docId} {
