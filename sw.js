@@ -1,6 +1,7 @@
 "use strict";
 
-const CACHE = "edilkappa-professionale-v10-unified-suite";
+const CACHE_PREFIX = "edilkappa-professionale-";
+const CACHE = `${CACHE_PREFIX}v12-private-settings`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -28,7 +29,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });

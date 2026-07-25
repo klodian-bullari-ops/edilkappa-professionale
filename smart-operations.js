@@ -7,15 +7,6 @@
   db.inventory = db.inventory || [];
   db.equipment = db.equipment || [];
 
-  if (!db.priceList.length) {
-    db.priceList.push(
-      { id: uid('lst'), code: 'MAN-01', category: 'Manodopera', description: 'Operaio specializzato', unit: 'ora', cost: 28, salePrice: 42, status: 'Attivo' },
-      { id: uid('lst'), code: 'MAN-02', category: 'Manodopera', description: 'Squadra di due operatori', unit: 'ora', cost: 56, salePrice: 84, status: 'Attivo' },
-      { id: uid('lst'), code: 'MAT-01', category: 'Materiali', description: 'Materiale edile di consumo', unit: 'a corpo', cost: 100, salePrice: 130, status: 'Attivo' },
-      { id: uid('lst'), code: 'SIC-01', category: 'Sicurezza', description: 'Allestimento e messa in sicurezza', unit: 'giorno', cost: 180, salePrice: 250, status: 'Attivo' }
-    );
-  }
-
   const style = document.createElement('style');
   style.textContent = `
     .smartBanner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border-radius:18px;background:linear-gradient(135deg,#111,#292d30);color:#fff;border-bottom:5px solid var(--lime);margin-bottom:18px}.smartBanner h3{margin:0 0 5px;color:var(--lime)}.smartBanner p{margin:0;color:#e2e5e7}.smartBanner .btn{flex:none}

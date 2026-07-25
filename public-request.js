@@ -91,7 +91,7 @@ form.addEventListener('submit', async (event) => {
     button.textContent = 'Richiesta inviata ✓';
   } catch (error) {
     console.error(error);
-    setMessage(error?.code === 'permission-denied' ? 'Il servizio richieste è in aggiornamento. Contattaci al 349 097 7711.' : (error.message || 'Invio non riuscito. Controlla la connessione e riprova.'), 'error');
+    setMessage(error?.code === 'permission-denied' ? 'Il servizio richieste è temporaneamente in aggiornamento. Riprova più tardi.' : (error.message || 'Invio non riuscito. Controlla la connessione e riprova.'), 'error');
     button.disabled = false; button.textContent = 'Invia richiesta a EDILKAPPA';
   }
 });

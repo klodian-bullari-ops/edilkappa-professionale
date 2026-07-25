@@ -23,8 +23,13 @@
     });
   };
 
-  deleteItem = function (collectionName, id, label) {
+  deleteItem = async function (collectionName, id, label) {
     if (!confirm(`Eliminare definitivamente ${label}?`)) return;
+    const item = (db[collectionName] || []).find((entry) => entry.id === id);
+    if (item?.storagePath && window.EdilKappaCloud?.deleteDocument) {
+      try { await window.EdilKappaCloud.deleteDocument(item.storagePath); }
+      catch (error) { alert(error.message || 'Il file cloud non è stato eliminato. Riprova.'); return; }
+    }
     db[collectionName] = (db[collectionName] || []).filter((x) => x.id !== id);
     logAudit('Eliminazione', collectionName, label);
     save(); render();
@@ -76,28 +81,45 @@
   }
 
   window.openCompanyDocument = function (id) {
-    const item = db.documents.find((x) => x.id === id) || { client: '', category: 'Cantiere', title: '', expiry: '', notes: '', fileName: '' };
+    const item = db.documents.find((x) => x.id === id) || { id: uid('documento'), client: '', category: 'Relazione tecnica', title: '', expiry: '', notes: '', fileName: '' };
     modal(id ? 'Modifica documento' : 'Nuovo documento', `<div class="formGrid">
       <div class="field"><label>Cliente / condominio</label><select name="client">${clientOptions(item.client)}</select></div>
-      <div class="field"><label>Categoria</label><select name="category">${selectOptions(['Cantiere', 'Sicurezza', 'Personale', 'Mezzi', 'Fornitore', 'Amministrativo'], item.category)}</select></div>
+      <div class="field"><label>Categoria</label><select name="category">${selectOptions(['Preventivo', 'Relazione tecnica', 'Cantiere', 'Sicurezza', 'Personale', 'Mezzi', 'Fornitore', 'Amministrativo'], item.category)}</select></div>
       ${field('Titolo documento', 'title', 'text', item.title, true)}
       <div class="field"><label>Scadenza facoltativa</label><input name="expiry" type="date" value="${esc(item.expiry || '')}"></div>
-      <div class="field full"><label>File PDF o immagine</label><input name="file" type="file" accept="application/pdf,.pdf,image/*" ${id ? '' : 'required'}></div>
+      <div class="field full"><label>File PDF, Word o immagine</label><input name="file" type="file" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,image/jpeg,image/png,image/webp,image/heic,image/heif" ${id ? '' : 'required'}><small>Il file viene conservato nell’archivio cloud protetto.</small></div>
       <div class="field full"><label>Note</label><textarea name="notes">${esc(item.notes || '')}</textarea></div>
     </div>`, async (form) => {
       const file = form.get('file');
       const data = { client: form.get('client'), category: form.get('category'), title: form.get('title'), expiry: form.get('expiry'), notes: form.get('notes') };
+      let cloudUploaded = false;
       if (file && file.size) {
-        if (window.EdilKappaCloud?.ready && window.EdilKappaCloud.uploadDocument) data.url = await window.EdilKappaCloud.uploadDocument(file);
-        else { data.fileKey = uid('doc') + '-' + Math.random().toString(36).slice(2, 7); await storePdf(data.fileKey, file); }
-        data.fileName = file.name; data.fileType = file.type;
+        if (window.EdilKappaCloud?.ready && window.EdilKappaCloud.uploadDocument) {
+          const uploaded = await window.EdilKappaCloud.uploadDocument(file, { documentId: item.id, category: data.category, client: data.client });
+          if (item.storagePath && item.storagePath !== uploaded.storagePath) await window.EdilKappaCloud.deleteDocument(item.storagePath).catch(() => {});
+          Object.assign(data, uploaded);
+          cloudUploaded = true;
+        } else {
+          data.fileKey = uid('doc') + '-' + Math.random().toString(36).slice(2, 7);
+          await storePdf(data.fileKey, file);
+          data.fileName = file.name;
+          data.fileType = file.type;
+          data.fileSize = file.size;
+        }
       }
-      if (id) Object.assign(item, data); else db.documents.push({ id: uid('documento'), ...data });
+      if (id) {
+        Object.assign(item, data);
+        if (cloudUploaded) { delete item.fileKey; delete item.url; }
+      } else db.documents.push({ ...item, ...data });
     });
   };
 
   window.openBusinessDocument = async function (id) {
     const item = db.documents.find((x) => x.id === id); if (!item) return;
+    if (item.storagePath && window.EdilKappaCloud?.openDocument) {
+      try { return await window.EdilKappaCloud.openDocument(item.storagePath); }
+      catch (error) { return alert(error.message || 'Impossibile aprire il documento.'); }
+    }
     if (item.url) return window.open(item.url, '_blank');
     if (item.fileKey) return openStoredFile(item.fileKey);
     alert('File non ancora disponibile.');
@@ -105,8 +127,8 @@
 
   window.documentsView = function () {
     const expiring = db.documents.filter((x) => ['Scaduto', 'In scadenza'].includes(documentStatus(x)));
-    return pageHead('Documenti', 'Archivio di cantiere, sicurezza, personale, mezzi e fornitori', '<button class="btn lime" onclick="openCompanyDocument()">＋ Carica documento</button>') +
-      `<div class="grid stats">${stat('Documenti', db.documents.length, '▣')}${stat('In scadenza', expiring.length, '!')}${stat('Categorie', new Set(db.documents.map((x) => x.category)).size, '▦')}${stat('Archivio', 'Cloud', '☁')}</div>
+    return pageHead('Documenti', 'Preventivi, relazioni tecniche e documenti aziendali nel cloud', '<button class="btn lime" onclick="openCompanyDocument()">＋ Carica documento</button>') +
+      `<div class="grid stats">${stat('Documenti', db.documents.length, '▣')}${stat('In scadenza', expiring.length, '!')}${stat('Categorie', new Set(db.documents.map((x) => x.category)).size, '▦')}${stat('Archivio', 'Cloud protetto', '☁')}</div>
       <div class="list">${db.documents.map((x) => `<section class="card"><div class="row" style="border:0;padding:0"><div class="rowIcon">📄</div><div class="rowBody"><b>${esc(x.title)}</b><small>${esc(x.client)} · ${esc(x.category)} · ${esc(x.fileName || 'Nessun file')}<br>${x.expiry ? 'Scadenza ' + esc(x.expiry) : 'Nessuna scadenza'}</small></div>${badge(documentStatus(x))}</div><div class="actions" style="margin-top:12px"><button class="btn sm green" onclick="openBusinessDocument('${x.id}')">Apri</button><button class="btn sm light" onclick="openCompanyDocument('${x.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('documents','${x.id}','questo documento')">Elimina</button></div></section>`).join('') || '<div class="empty">Nessun documento archiviato.</div>'}</div>`;
   };
 
@@ -147,7 +169,7 @@
 
   quotes = function () {
     return pageHead('Preventivi', 'Offerte, revisioni, firme e accettazioni', '<button class="btn light" onclick="openPdfUpload()">↑ Carica PDF</button><button class="btn lime" onclick="openQuote()">＋ Nuovo preventivo</button>') +
-      `<div class="card"><div class="tableWrap"><table class="table"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Netto</th><th>Stato</th><th>Firma</th><th></th></tr></thead><tbody>${db.quotes.map((q) => `<tr><td><b>${esc(q.code)}</b></td><td>${esc(q.date)}</td><td>${esc(q.client)}</td><td>${esc(q.subject)}</td><td class="money">${q.net ? euro(q.net) : '—'}</td><td>${badge(q.status)}</td><td>${q.acceptedAt ? `Firmato da <b>${esc(q.signedBy)}</b><br><small>${esc(q.acceptedAt.slice(0, 10))}</small>` : 'Non firmato'}</td><td><div class="actions">${q.pdfKey ? `<button class="btn sm green" onclick="openQuotePdf('${q.id}')">Apri PDF</button>` : `<button class="btn sm light" onclick="printQuote('${q.id}')">Genera PDF</button>`}${!q.acceptedAt ? `<button class="btn sm green" onclick="openQuoteSignature('${q.id}')">Firma</button>` : ''}<button class="btn sm light" onclick="openQuote('${q.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('quotes','${q.id}','questo preventivo')">Elimina</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
+      `<div class="card"><div class="tableWrap"><table class="table"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Netto</th><th>Stato</th><th>Firma</th><th></th></tr></thead><tbody>${db.quotes.map((q) => `<tr><td><b>${esc(q.code)}</b></td><td>${esc(q.date)}</td><td>${esc(q.client)}</td><td>${esc(q.subject)}</td><td class="money">${q.net ? euro(q.net) : '—'}</td><td>${badge(q.status)}</td><td>${q.acceptedAt ? `Firmato da <b>${esc(q.signedBy)}</b><br><small>${esc(q.acceptedAt.slice(0, 10))}</small>` : 'Non firmato'}</td><td><div class="actions">${q.pdfKey || q.storagePath ? `<button class="btn sm green" onclick="openQuotePdf('${q.id}')">Apri PDF</button>` : `<button class="btn sm light" onclick="printQuote('${q.id}')">Genera PDF</button>`}${!q.acceptedAt ? `<button class="btn sm green" onclick="openQuoteSignature('${q.id}')">Firma</button>` : ''}<button class="btn sm light" onclick="openQuote('${q.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('quotes','${q.id}','questo preventivo')">Elimina</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
   };
 
   const basePrintQuote = printQuote;

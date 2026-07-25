@@ -23,6 +23,13 @@ import {
   setDoc,
   where
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import {
+  deleteObject,
+  getDownloadURL,
+  getStorage,
+  ref as storageRef,
+  uploadBytes
+} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
   projectId: 'edilkappa-professionale',
@@ -39,8 +46,21 @@ const local = window.EdilKappaLocal;
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const firestore = getFirestore(app, 'edilkappa');
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
+const DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif'
+]);
 
 const mappings = [
   ['condomini', 'clients'],
@@ -62,7 +82,8 @@ const mappings = [
   ['priceList', 'priceList'],
   ['certificates', 'certificates'],
   ['inventory', 'inventory'],
-  ['equipment', 'equipment']
+  ['equipment', 'equipment'],
+  ['companySettings', 'settings']
 ];
 
 const mappingByRemote = new Map(mappings.map(([localName, remoteName]) => [remoteName, localName]));
@@ -90,6 +111,10 @@ const api = {
   },
   uploadAttachment,
   openAttachment,
+  uploadDocument,
+  openDocument,
+  deleteDocument,
+  get ready() { return ready; },
   get currentUid() { return user?.uid || ''; },
   get currentProfile() { return profile; }
 };
@@ -108,7 +133,94 @@ function errorText(error) {
   if (code.includes('unauthorized-domain')) return 'Questo indirizzo deve essere autorizzato in Firebase Authentication.';
   if (code.includes('network-request-failed')) return 'Connessione assente. I dati locali restano sul dispositivo.';
   if (code.includes('permission-denied')) return 'Operazione non autorizzata per questo account.';
+  if (code.includes('storage/unauthorized')) return 'Non hai il permesso di accedere a questo documento.';
+  if (code.includes('storage/object-not-found')) return 'Il documento non è più presente nell’archivio cloud.';
   return error?.message || 'Operazione non riuscita.';
+}
+
+function safeFileName(value) {
+  const cleaned = String(value || 'documento')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '')
+    .slice(0, 140);
+  return cleaned || 'documento';
+}
+
+function inferredMimeType(file) {
+  const explicitType = String(file?.type || '').toLowerCase();
+  if (explicitType && explicitType !== 'application/octet-stream') return explicitType;
+  const extension = String(file?.name || '').split('.').pop()?.toLowerCase();
+  return ({
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    heic: 'image/heic',
+    heif: 'image/heif'
+  })[extension] || '';
+}
+
+function uploadIdentifier(value) {
+  const normalized = String(value || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 96);
+  if (normalized) return normalized;
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `documento-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function uploadDocument(file, options = {}) {
+  if (!ready || !user || !profile?.active) throw new Error('Accedi al gestionale prima di caricare il documento.');
+  if (!navigator.onLine) throw new Error('Serve una connessione internet per archiviare il documento nel cloud.');
+  if (!file?.size) throw new Error('Il file selezionato è vuoto.');
+  if (file.size > DOCUMENT_MAX_BYTES) throw new Error('Il file supera il limite di 25 MB.');
+  const contentType = inferredMimeType(file);
+  if (!DOCUMENT_MIME_TYPES.has(contentType)) throw new Error('Sono ammessi PDF, Word e immagini JPG, PNG, WEBP o HEIC.');
+
+  const documentId = uploadIdentifier(options.documentId);
+  const path = `organisations/${ORG_ID}/documents/${user.uid}/${documentId}/${safeFileName(file.name)}`;
+  const reference = storageRef(storage, path);
+  await uploadBytes(reference, file, {
+    contentType,
+    customMetadata: {
+      orgId: ORG_ID,
+      ownerUid: user.uid,
+      category: String(options.category || 'Documento').slice(0, 80),
+      client: String(options.client || '').slice(0, 160)
+    }
+  });
+  return {
+    storagePath: path,
+    fileName: String(file.name || 'documento').slice(0, 180),
+    fileType: contentType,
+    fileSize: file.size,
+    uploadedAt: new Date().toISOString()
+  };
+}
+
+async function openDocument(path) {
+  if (!path) throw new Error('Percorso del documento mancante.');
+  const popup = window.open('', '_blank');
+  try {
+    const url = await getDownloadURL(storageRef(storage, path));
+    if (popup) popup.location.replace(url);
+    else window.open(url, '_blank', 'noopener');
+  } catch (error) {
+    popup?.close();
+    throw new Error(errorText(error));
+  }
+}
+
+async function deleteDocument(path) {
+  if (!path) return;
+  try {
+    await deleteObject(storageRef(storage, path));
+  } catch (error) {
+    if (!String(error?.code || '').includes('storage/object-not-found')) throw error;
+  }
 }
 
 function setSyncState(label, color = '#d69b18', title = '') {
@@ -422,6 +534,7 @@ function startDataListeners() {
     mappings.forEach(([, remoteName]) => listenTo(remoteName, [where('orgId', '==', ORG_ID)]));
     return;
   }
+  listenTo('settings', [where('orgId', '==', ORG_ID)]);
   if (profile.role === 'worker') {
     ['sites', 'roofs', 'drains'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)]));
     ['reports', 'timesheets'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('workerUid', '==', user.uid), where('ownerUid', '==', user.uid)]));
@@ -507,7 +620,7 @@ async function importInitialDataIfNeeded() {
   const existing = await getDocs(query(collection(firestore, 'clients'), where('orgId', '==', ORG_ID)));
   const collectionsToImport = existing.empty
     ? mappings
-    : mappings.filter(([, remoteName]) => ['leads', 'priceList', 'certificates', 'inventory', 'equipment'].includes(remoteName));
+    : mappings.filter(([, remoteName]) => ['leads', 'priceList', 'certificates', 'inventory', 'equipment', 'settings'].includes(remoteName));
   if (!collectionsToImport.length) return;
   setSyncState(existing.empty ? 'Primo caricamento…' : 'Aggiornamento archivi…', '#d69b18');
   for (const [localName, remoteName] of collectionsToImport) {
@@ -629,7 +742,7 @@ function cloudUsersPanel() {
 }
 
 window.cloudCopyAccessLink = async function () {
-  const link = 'https://klodian-bullari-ops.github.io/edilkappa-professionale/';
+  const link = new URL('./', window.location.href).href;
   try { await navigator.clipboard.writeText(link); alert('Link di accesso copiato.'); }
   catch (_) { prompt('Copia questo link:', link); }
 };

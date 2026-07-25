@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "EDILKAPPA SAS Gestionale",
+  "name": "EDILKAPPA Gestionale",
   "short_name": "EDILKAPPA",
-  "description": "Gestionale operativo per sopralluoghi, condomìni, cantieri e operai EDILKAPPA SAS",
+  "description": "Gestionale operativo per sopralluoghi, condomìni, cantieri e operai EDILKAPPA",
   "lang": "it",
   "start_url": "./",
   "scope": "./",
