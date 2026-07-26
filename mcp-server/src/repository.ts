@@ -52,6 +52,43 @@ export type ReportInput = {
   authSubject: string;
 };
 
+export type DaneaStatus = 'Nuovo' | 'Preso in carico' | 'In corso' | 'Posticipato' | 'Completato' | 'Inoltrato' | 'Rifiutato';
+
+export type DaneaRequestInput = {
+  sourceMessageId?: string;
+  interventionId?: string;
+  studio: string;
+  title: string;
+  clientName: string;
+  clientId?: string;
+  address?: string;
+  description: string;
+  priority: 'Normale' | 'Urgente' | 'Emergenza';
+  daneaStatus: DaneaStatus;
+  receivedAt: string;
+  scheduledDate?: string;
+  reference?: string;
+  phone?: string;
+  notes?: string;
+  sourceUrl?: string;
+  authSubject: string;
+};
+
+export type DaneaRequestRecord = {
+  id: string;
+  interventionId: string;
+  studio: string;
+  title: string;
+  client: string;
+  address: string;
+  daneaStatus: DaneaStatus;
+  status: string;
+  receivedAt: string;
+  scheduledDate: string;
+  alreadyExisted: boolean;
+  warning?: string;
+};
+
 export function stableRecordId(prefix: string, values: string[]): string {
   const digest = createHash('sha256').update(values.join('\u001f')).digest('hex').slice(0, 24);
   return `${prefix}-${digest}`;
@@ -59,6 +96,65 @@ export function stableRecordId(prefix: string, values: string[]): string {
 
 function normalizeText(value: string): string {
   return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('it');
+}
+
+function identityText(value: string): string {
+  return normalizeText(value).replace(/[^a-z0-9]+/g, '');
+}
+
+export function mapDaneaStatus(status: DaneaStatus): string {
+  if (status === 'Preso in carico') return 'In attesa';
+  if (status === 'In corso') return 'In corso';
+  if (status === 'Posticipato') return 'Sospeso';
+  if (status === 'Completato') return 'Completato';
+  if (status === 'Inoltrato') return 'Assegnato';
+  if (status === 'Rifiutato') return 'Rifiutato';
+  return 'Nuova';
+}
+
+export function normalizeDaneaLink(value?: string): string {
+  const raw = value?.trim() || '';
+  if (!raw) return '';
+  let parsed: URL;
+  try { parsed = new URL(raw); }
+  catch { throw new Error('Il collegamento Danea non è valido.'); }
+  const host = parsed.hostname.toLocaleLowerCase('it');
+  const allowed = parsed.protocol === 'https:' && (
+    host === 'miocondominio.eu'
+    || host.endsWith('.miocondominio.eu')
+    || host === 'danea.it'
+    || host.endsWith('.danea.it')
+  );
+  if (!allowed) throw new Error('Il collegamento deve appartenere a Danea o MioCondominio.');
+  return parsed.href;
+}
+
+export function sameDaneaRequest(
+  payload: Record<string, unknown>,
+  input: Pick<DaneaRequestInput, 'sourceMessageId' | 'interventionId' | 'studio' | 'title' | 'receivedAt'>,
+  clientName: string
+): boolean {
+  if (payload.source !== 'Danea Interventi' && payload.source !== 'Danea') return false;
+
+  const incomingMessageId = normalizeText(input.sourceMessageId || '');
+  const storedMessageId = normalizeText(String(payload.sourceMessageId || ''));
+  if (incomingMessageId && storedMessageId && incomingMessageId === storedMessageId) return true;
+
+  const incomingInterventionId = normalizeText(input.interventionId || '');
+  const storedInterventionId = normalizeText(String(payload.daneaId || payload.interventionId || ''));
+  if (incomingInterventionId || storedInterventionId) {
+    return Boolean(
+      incomingInterventionId
+      && storedInterventionId
+      && incomingInterventionId === storedInterventionId
+      && identityText(input.studio) === identityText(String(payload.studio || ''))
+    );
+  }
+
+  return identityText(input.studio) === identityText(String(payload.studio || ''))
+    && normalizeText(input.title) === normalizeText(String(payload.title || ''))
+    && normalizeText(clientName) === normalizeText(String(payload.client || payload.name || ''))
+    && input.receivedAt.slice(0, 10) === String(payload.receivedAt || '').slice(0, 10);
 }
 
 function parseClient(snapshot: QueryDocumentSnapshot): ClientRecord | null {
@@ -73,6 +169,29 @@ function parseClient(snapshot: QueryDocumentSnapshot): ClientRecord | null {
     id: snapshot.id,
     name,
     address: typeof payload.address === 'string' ? payload.address : ''
+  };
+}
+
+function parseDaneaRequest(snapshot: QueryDocumentSnapshot): DaneaRequestRecord | null {
+  const data = snapshot.data();
+  if (data.orgId !== ORG_ID) return null;
+  let payload: Record<string, unknown> = {};
+  try { payload = JSON.parse(typeof data.payload === 'string' ? data.payload : '{}') as Record<string, unknown>; }
+  catch { return null; }
+  if (payload.source !== 'Danea Interventi' && payload.source !== 'Danea') return null;
+  const daneaStatus = String(payload.daneaStatus || 'Nuovo') as DaneaStatus;
+  return {
+    id: snapshot.id,
+    interventionId: String(payload.daneaId || ''),
+    studio: String(payload.studio || ''),
+    title: String(payload.title || 'Richiesta di intervento'),
+    client: String(payload.client || payload.name || ''),
+    address: String(payload.address || ''),
+    daneaStatus,
+    status: String(payload.status || data.status || mapDaneaStatus(daneaStatus)),
+    receivedAt: String(payload.receivedAt || ''),
+    scheduledDate: String(payload.scheduledDate || ''),
+    alreadyExisted: true
   };
 }
 
@@ -105,6 +224,25 @@ export class EdilKappaRepository {
       .filter((client) => !query || normalizeText(`${client.name} ${client.address}`).includes(query))
       .sort((left, right) => left.name.localeCompare(right.name, 'it'))
       .slice(0, 20);
+  }
+
+  async searchDaneaRequests(search: string): Promise<DaneaRequestRecord[]> {
+    const snapshot = await this.db.collection('leads').where('orgId', '==', ORG_ID).limit(500).get();
+    const query = normalizeText(search);
+    return snapshot.docs
+      .map(parseDaneaRequest)
+      .filter((item): item is DaneaRequestRecord => Boolean(item))
+      .filter((item) => !query || normalizeText([
+        item.interventionId,
+        item.studio,
+        item.title,
+        item.client,
+        item.address,
+        item.daneaStatus,
+        item.status
+      ].join(' ')).includes(query))
+      .sort((left, right) => right.receivedAt.localeCompare(left.receivedAt))
+      .slice(0, 50);
   }
 
   private async resolveClient(clientName: string, clientId?: string): Promise<ClientResolution> {
@@ -253,5 +391,98 @@ export class EdilKappaRepository {
       throw error;
     }
     return fallback;
+  }
+
+  async saveDaneaRequest(input: DaneaRequestInput): Promise<DaneaRequestRecord> {
+    const client = await this.resolveClient(input.clientName, input.clientId);
+    const identity = input.sourceMessageId?.trim()
+      ? ['email', input.sourceMessageId.trim()]
+      : input.interventionId?.trim()
+        ? ['intervento', identityText(input.studio), identityText(input.interventionId)]
+        : ['fallback', identityText(input.studio), normalizeText(input.title), normalizeText(client.id || client.name), input.receivedAt.slice(0, 10)];
+    const generatedId = stableRecordId('danea', identity);
+    const generatedRef = this.db.collection('leads').doc(generatedId);
+    let existing = await generatedRef.get();
+    let documentRef = generatedRef;
+
+    if (!existing.exists) {
+      const daneaSnapshot = await this.db.collection('leads').where('orgId', '==', ORG_ID).limit(500).get();
+      const matchingDocument = daneaSnapshot.docs.find((snapshot) => {
+        let payload: Record<string, unknown> = {};
+        try { payload = JSON.parse(String(snapshot.data().payload || '{}')) as Record<string, unknown>; }
+        catch { return false; }
+        return sameDaneaRequest(payload, input, client.name || input.clientName);
+      });
+      if (matchingDocument) {
+        existing = matchingDocument;
+        documentRef = matchingDocument.ref;
+      }
+    }
+
+    const id = documentRef.id;
+    const existingData = existing.data() || {};
+    let existingPayload: Record<string, unknown> = {};
+    try { existingPayload = JSON.parse(String(existingData.payload || '{}')) as Record<string, unknown>; }
+    catch { existingPayload = {}; }
+
+    const incomingStatus = mapDaneaStatus(input.daneaStatus);
+    const currentStatus = String(existingPayload.status || existingData.status || '');
+    const status = input.daneaStatus === 'Nuovo' && currentStatus && currentStatus !== 'Nuova'
+      ? currentStatus
+      : incomingStatus;
+    const sourceUrl = normalizeDaneaLink(input.sourceUrl) || String(existingPayload.sourceUrl || '');
+    const resolvedClientName = client.name || String(existingPayload.client || existingPayload.name || input.clientName);
+    const resolvedClientId = client.id || String(existingData.clientId || existingPayload.clientId || '');
+    const now = new Date().toISOString();
+    const item = compact({
+      ...existingPayload,
+      id,
+      source: 'Danea Interventi',
+      daneaKey: id,
+      sourceMessageId: input.sourceMessageId?.trim() || String(existingPayload.sourceMessageId || ''),
+      daneaId: input.interventionId?.trim() || String(existingPayload.daneaId || ''),
+      studio: input.studio,
+      title: input.title,
+      name: resolvedClientName,
+      client: resolvedClientName,
+      clientId: resolvedClientId,
+      address: input.address || String(existingPayload.address || client.address || ''),
+      request: input.description,
+      priority: input.priority,
+      daneaStatus: input.daneaStatus,
+      status,
+      receivedAt: input.receivedAt,
+      scheduledDate: input.scheduledDate || String(existingPayload.scheduledDate || ''),
+      reference: input.reference || String(existingPayload.reference || ''),
+      phone: input.phone || String(existingPayload.phone || ''),
+      notes: input.notes || String(existingPayload.notes || ''),
+      sourceUrl,
+      createdAt: String(existingPayload.createdAt || now),
+      updatedAt: now
+    });
+    const ownerUid = String(existingData.ownerUid || stableRecordId('chatgpt', [input.authSubject]).slice(0, 128));
+    const envelope = this.envelope(id, resolvedClientId, ownerUid, status, item) as Record<string, unknown>;
+    if (existing.exists) {
+      delete envelope.createdAt;
+      envelope.assignedTeamId = String(existingData.assignedTeamId || '');
+      envelope.workerUid = String(existingData.workerUid || '');
+      envelope.ownerUid = ownerUid;
+    }
+    await documentRef.set(envelope, { merge: true });
+
+    return {
+      id,
+      interventionId: String(item.daneaId || ''),
+      studio: String(item.studio || ''),
+      title: String(item.title || 'Richiesta di intervento'),
+      client: resolvedClientName,
+      address: String(item.address || ''),
+      daneaStatus: input.daneaStatus,
+      status,
+      receivedAt: input.receivedAt,
+      scheduledDate: String(item.scheduledDate || ''),
+      alreadyExisted: existing.exists,
+      warning: client.warning
+    };
   }
 }

@@ -7,7 +7,7 @@ import { z } from 'zod/v4';
 import { authSubject, hasScope, oauthToolError, OidcTokenVerifier } from './auth.js';
 import { readConfig, type AppConfig } from './config.js';
 import { downloadTemporaryFile } from './files.js';
-import { EdilKappaRepository, type StoredRecord } from './repository.js';
+import { EdilKappaRepository, type DaneaRequestRecord, type StoredRecord } from './repository.js';
 
 const READ_SCOPE = 'edilkappa:read';
 const WRITE_SCOPE = 'edilkappa:write';
@@ -22,6 +22,8 @@ const openAIFileSchema = z.object({
 }).strict();
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usa una data nel formato AAAA-MM-GG.');
+const isoDateTime = z.string().datetime({ offset: true });
+const daneaStatus = z.enum(['Nuovo', 'Preso in carico', 'In corso', 'Posticipato', 'Completato', 'Inoltrato', 'Rifiutato']);
 
 const storedOutputSchema = {
   id: z.string(),
@@ -55,6 +57,40 @@ function savedResult(record: StoredRecord, config: AppConfig) {
   };
 }
 
+const daneaOutputSchema = {
+  id: z.string(),
+  intervento_id: z.string(),
+  studio: z.string(),
+  titolo: z.string(),
+  cliente: z.string(),
+  indirizzo: z.string(),
+  stato_danea: daneaStatus,
+  stato_edilkappa: z.string(),
+  ricevuta_il: z.string(),
+  data_prevista: z.string(),
+  gestionale_url: z.string(),
+  duplicato: z.boolean(),
+  avviso: z.string()
+};
+
+function daneaOutput(record: DaneaRequestRecord, config: AppConfig) {
+  return {
+    id: record.id,
+    intervento_id: record.interventionId,
+    studio: record.studio,
+    titolo: record.title,
+    cliente: record.client,
+    indirizzo: record.address,
+    stato_danea: record.daneaStatus,
+    stato_edilkappa: record.status,
+    ricevuta_il: record.receivedAt,
+    data_prevista: record.scheduledDate,
+    gestionale_url: config.siteUrl,
+    duplicato: record.alreadyExisted,
+    avviso: record.warning || ''
+  };
+}
+
 function toolError(error: unknown) {
   const message = error instanceof Error ? error.message : 'Operazione non riuscita.';
   console.error('Errore comando EdilKappa:', message);
@@ -75,7 +111,7 @@ function toolMeta(schemes: readonly { type: 'oauth2'; scopes: readonly string[] 
 }
 
 function createServer(repository: EdilKappaRepository, config: AppConfig): McpServer {
-  const server = new McpServer({ name: 'edilkappa-gestionale', version: '1.0.0' });
+  const server = new McpServer({ name: 'edilkappa-gestionale', version: '1.1.0' });
 
   registerAppTool(server, 'cerca_clienti', {
     title: 'Cerca clienti EdilKappa',
@@ -95,6 +131,89 @@ function createServer(repository: EdilKappaRepository, config: AppConfig): McpSe
       const output = { clienti: clients.map((client) => ({ id: client.id, nome: client.name, indirizzo: client.address })) };
       return {
         content: [{ type: 'text', text: clients.length ? `Trovati ${clients.length} clienti nel gestionale.` : 'Nessun cliente corrispondente trovato.' }],
+        structuredContent: output
+      };
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  registerAppTool(server, 'cerca_richieste_danea', {
+    title: 'Cerca richieste Danea',
+    description: 'Usa questo comando quando l’utente vuole trovare o controllare richieste Danea già importate in EdilKappa, anche prima di salvarne o aggiornarne una.',
+    inputSchema: {
+      query: z.string().max(200).default('').describe('Codice intervento, studio, condominio, indirizzo, titolo o stato.')
+    },
+    outputSchema: {
+      richieste: z.array(z.object(daneaOutputSchema))
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true },
+    _meta: toolMeta(READ_SCHEME, 'Ricerca richieste Danea…', 'Richieste Danea trovate')
+  }, async ({ query }, extra) => {
+    if (!hasScope(extra.authInfo, READ_SCOPE)) return oauthToolError(config, READ_SCOPE);
+    try {
+      const records = await repository.searchDaneaRequests(query);
+      const output = { richieste: records.map((record) => daneaOutput(record, config)) };
+      return {
+        content: [{ type: 'text', text: records.length ? `Trovate ${records.length} richieste Danea nel gestionale.` : 'Nessuna richiesta Danea corrispondente trovata.' }],
+        structuredContent: output
+      };
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  registerAppTool(server, 'salva_richiesta_danea', {
+    title: 'Importa richiesta Danea in EdilKappa',
+    description: 'Usa questo comando quando l’utente chiede di importare o aggiornare nel gestionale una richiesta ricevuta da Danea Interventi. Il salvataggio è idempotente per ID e-mail oppure per studio più codice intervento e richiede conferma prima della scrittura.',
+    inputSchema: {
+      source_message_id: z.string().max(512).optional().describe('ID stabile del messaggio e-mail, quando disponibile.'),
+      intervento_id: z.string().max(80).optional().describe('Codice della richiesta o dell’intervento Danea.'),
+      studio: z.string().min(1).max(160).describe('Studio o amministratore che ha inviato l’incarico.'),
+      titolo: z.string().min(1).max(200),
+      cliente: z.string().min(1).max(160).describe('Condominio o cliente associato.'),
+      cliente_id: z.string().max(128).optional().describe('ID restituito da cerca_clienti, quando disponibile.'),
+      indirizzo: z.string().max(240).optional(),
+      descrizione: z.string().min(1).max(8_000),
+      priorita: z.enum(['Normale', 'Urgente', 'Emergenza']).default('Normale'),
+      stato_danea: daneaStatus.default('Nuovo'),
+      ricevuta_il: isoDateTime.default(() => new Date().toISOString()),
+      data_prevista: isoDate.optional(),
+      referente: z.string().max(160).optional(),
+      telefono: z.string().max(80).optional(),
+      note: z.string().max(2_000).optional(),
+      link_danea: z.string().url().max(2_048).optional().describe('Collegamento HTTPS ufficiale Danea o MioCondominio.')
+    },
+    outputSchema: daneaOutputSchema,
+    annotations: { readOnlyHint: false, openWorldHint: false, destructiveHint: false, idempotentHint: true },
+    _meta: toolMeta(WRITE_SCHEME, 'Importazione richiesta Danea…', 'Richiesta Danea archiviata')
+  }, async (input, extra) => {
+    if (!hasScope(extra.authInfo, WRITE_SCOPE)) return oauthToolError(config, WRITE_SCOPE);
+    try {
+      const record = await repository.saveDaneaRequest({
+        ...(input.source_message_id ? { sourceMessageId: input.source_message_id } : {}),
+        ...(input.intervento_id ? { interventionId: input.intervento_id } : {}),
+        studio: input.studio,
+        title: input.titolo,
+        clientName: input.cliente,
+        ...(input.cliente_id ? { clientId: input.cliente_id } : {}),
+        ...(input.indirizzo ? { address: input.indirizzo } : {}),
+        description: input.descrizione,
+        priority: input.priorita,
+        daneaStatus: input.stato_danea,
+        receivedAt: input.ricevuta_il,
+        ...(input.data_prevista ? { scheduledDate: input.data_prevista } : {}),
+        ...(input.referente ? { reference: input.referente } : {}),
+        ...(input.telefono ? { phone: input.telefono } : {}),
+        ...(input.note ? { notes: input.note } : {}),
+        ...(input.link_danea ? { sourceUrl: input.link_danea } : {}),
+        authSubject: authSubject(extra.authInfo)
+      });
+      const output = daneaOutput(record, config);
+      const action = record.alreadyExisted ? 'è stata aggiornata senza creare doppioni' : 'è stata importata';
+      const warning = record.warning ? ` ${record.warning}` : '';
+      return {
+        content: [{ type: 'text', text: `La richiesta Danea “${record.title}” ${action} in EdilKappa.${warning}` }],
         structuredContent: output
       };
     } catch (error) {

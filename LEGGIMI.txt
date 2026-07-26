@@ -76,6 +76,15 @@ preventivi, cantieri, squadre, drone, linea vita, tetti, gronde e pozzetti.
 Titolare e segretaria vedono tutti i risultati; ogni squadra trova soltanto
 gli incarichi assegnati al proprio profilo.
 
+RICHIESTE DANEA
+Titolare e Ufficio dispongono della sezione separata "Richieste Danea".
+Puoi inserire una richiesta manualmente oppure incollare il testo ricevuto
+via e-mail: il gestionale riconosce codice intervento, condominio, studio,
+data e stato. Le importazioni ripetute aggiornano la scheda esistente senza
+creare doppioni. Da ogni richiesta puoi creare il cliente e il sopralluogo
+collegato. I collegamenti esterni sono accettati soltanto se HTTPS e
+appartengono ai domini ufficiali Danea o MioCondominio.
+
 MAPPA LAVORI
 Il modulo "Mappa lavori" mostra cantieri, pulizie programmate di tetti/gronde,
 pozzetti e tombini, oltre a tutti i sopralluoghi. Arancione indica un intervento

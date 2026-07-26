@@ -79,7 +79,7 @@ function currentTeamId(){return currentStaff()?.team||''}
 function roleName(){return role==='owner'?'Titolare':role==='secretary'?'Ufficio':currentStaff()?.name||'Operaio'}
 function nav(){return isOffice()?ownerNav:workerNav}
 function initRoles(){const s=document.getElementById('roleSelect');if(!isOffice()&&!STAFF.some(w=>w.id===role)){role='owner';localStorage.setItem('ek_role',role)}s.innerHTML='<option value="owner">Titolare</option><option value="secretary">Ufficio</option>'+STAFF.map(w=>{const team=WORKERS.find(t=>t.id===w.team);return`<option value="${w.id}">${esc(w.name)} · ${esc(team?.name||'Senza squadra')}</option>`}).join('');s.value=role;s.onchange=()=>{role=s.value;searchQuery='';document.getElementById('globalSearch').value='';localStorage.setItem('ek_role',role);view=isOffice()?'dashboard':'worker';render();checkHourReminders()}}
-function renderNav(){const html=nav().map(n=>`<button class="${view===n[0]?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');document.getElementById('desktopNav').innerHTML=html;const mobile=isOffice()?[['dashboard','⌂','Home'],['inspections','⌖','Sopralluoghi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa'],['more','•••','Altro']]:workerNav;const moreViews=['agenda','condomini','quotes','hours','teamsView','portalView','drone','lifeline','roofs','drains','companySettingsView','finance'];document.getElementById('mobileNav').innerHTML=mobile.map(n=>`<button class="${view===n[0]||(n[0]==='more'&&moreViews.includes(view))?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</button>`).join('')}
+function renderNav(){const html=nav().map(n=>`<button class="${view===n[0]?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');document.getElementById('desktopNav').innerHTML=html;const mobile=isOffice()?[['dashboard','⌂','Home'],['inspections','⌖','Sopralluoghi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa'],['more','•••','Altro']]:workerNav;const moreViews=['agenda','condomini','quotes','hours','teamsView','portalView','daneaRequestsView','drone','lifeline','roofs','drains','companySettingsView','finance'];document.getElementById('mobileNav').innerHTML=mobile.map(n=>`<button class="${view===n[0]||(n[0]==='more'&&moreViews.includes(view))?'active':''}" onclick="go('${n[0]}')"><span>${n[1]}</span>${n[2]}</button>`).join('')}
 function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;render()}
 function runSearch(value){searchQuery=String(value||'').trim();view=searchQuery?'search':(isOffice()?'dashboard':'worker');render()}
 function render(){if(!isOffice()&&!['worker','hours','report','search'].includes(view))view='worker';applyCompanySettings();renderNav();document.getElementById('avatar').textContent=roleName().charAt(0);const labels=Object.fromEntries(nav().map(x=>[x[0],x[2]]));labels.more='Altro';labels.search='Ricerca';document.getElementById('pageTitle').textContent=labels[view]||'EDILKAPPA';const fn={dashboard,agenda,condomini,inspections,quotes,sites,workMap,hours:hoursView,teamsView,portalView:()=>window.portalView?.()||'<div class="empty">Caricamento accessi…</div>',drone,lifeline,roofs,drains,companySettingsView,finance,more,worker,report,search:searchResults}[view]||dashboard;document.getElementById('app').innerHTML=fn()}
@@ -181,7 +181,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const 
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=12').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=13').catch(()=>{});
 </script>
 <script src="./professional-extensions.js"></script>
 <script src="./business-suite.js"></script>
@@ -214,7 +214,8 @@ window.EdilKappaLocal={
 </script>
 <script src="./linea-vita/vendor/jspdf.umd.min.js"></script>
 <script src="./linea-vita/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="./smart-operations.js?v=12"></script>
-<script type="module" src="./firebase-cloud.js?v=12"></script>
+<script src="./smart-operations.js?v=13"></script>
+<script src="./danea-integration.js?v=13"></script>
+<script type="module" src="./firebase-cloud.js?v=13"></script>
 </body>
 </html>
