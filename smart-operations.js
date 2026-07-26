@@ -209,6 +209,8 @@
 
   printQuote = async function (id) {
     const item = db.quotes.find((entry) => entry.id === id); if (!item) return;
+    if (item.storagePath || item.pdfKey) return openQuotePdf(id);
+    if (!item.lines?.length && !Number(item.net || 0)) return alert('Questo preventivo non contiene ancora voci o importi. Apri Modifica e inserisci le lavorazioni prima di generare il PDF.');
     if (!window.jspdf?.jsPDF) return alert('Il generatore PDF non è disponibile. Ricarica la pagina e riprova.');
     const popup = window.open('', '_blank');
     const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit: 'mm', format: 'a4' });
