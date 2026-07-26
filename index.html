@@ -49,7 +49,7 @@ const COMPANY_DEFAULTS={name:'EDILKAPPA',address:'',vat:'',phone:'',email:''};
 const COMPANY={...COMPANY_DEFAULTS};
 let WORKERS=[];
 const KEY='edilkappa_professionale_v1',PDF_DB='edilkappa_documenti_v1';
-const seed={condomini:[],inspections:[],sites:[],quotes:[],reports:[],timesheets:[],drone:[],lifelines:[],roofs:[],drains:[],expenses:[],teams:[],staff:[],companySettings:[],staffInitialized:true};
+const seed={condomini:[],interventions:[],inspections:[],sites:[],quotes:[],reports:[],timesheets:[],drone:[],lifelines:[],roofs:[],drains:[],expenses:[],teams:[],staff:[],companySettings:[],staffInitialized:true};
 let db=load(),role=localStorage.getItem('ek_role')||'owner',view='dashboard',searchQuery='',mapFilters={active:true,complete:true,planned:true,visit:true,lifeline:true},timesheetMonth=new Date().toISOString().slice(0,7),timesheetTeam='';WORKERS=db.teams||(db.teams=[]);let STAFF=db.staff||(db.staff=[]);applyCompanySettings();if(!db.staffInitialized){WORKERS.forEach(t=>{STAFF.push({id:'pers-'+t.id+'-1',name:t.member1||'Componente 1',phone:'',team:t.id,reminderTime:'18:00'},{id:'pers-'+t.id+'-2',name:t.member2||'Componente 2',phone:'',team:t.id,reminderTime:'18:00'})});db.staffInitialized=true;save()}
 const ownerNav=[['dashboard','⌂','Panoramica'],['agenda','◷','Agenda'],['condomini','▦','Condomìni'],['inspections','⌖','Sopralluoghi'],['quotes','€','Preventivi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa lavori'],['hours','◷','Ore operai'],['teamsView','♟','Squadre'],['portalView','👥','Portale e accessi'],['drone','◉','Drone'],['lifeline','⚓','Linea vita'],['roofs','⌂','Tetti e gronde'],['drains','▦','Pozzetti e tombini'],['companySettingsView','⚙','Dati aziendali'],['finance','↗','Costi e margini']];
 const workerNav=[['worker','⌂','I miei lavori'],['hours','◷','Comunica ore'],['report','＋','Nuovo rapportino']];
@@ -181,10 +181,11 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const 
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=16').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=17').catch(()=>{});
 </script>
-<script src="./professional-extensions.js?v=16"></script>
-<script src="./business-suite.js?v=15"></script>
+<script src="./professional-extensions.js?v=17"></script>
+<script src="./business-suite.js?v=17"></script>
+<script src="./client-archive.js?v=17"></script>
 <script>
 window.EdilKappaLocal={
   getDB:()=>db,
@@ -206,7 +207,7 @@ window.EdilKappaLocal={
     STAFF=db.staff;role=personId;localStorage.setItem('ek_role',role);initRoles();
   },
   clearRestrictedData:()=>{
-    ['condomini','inspections','sites','quotes','reports','timesheets','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers','leads','priceList','certificates','inventory','equipment','companySettings'].forEach((key)=>{db[key]=[]});
+    ['condomini','interventions','inspections','sites','quotes','reports','timesheets','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers','leads','priceList','certificates','inventory','equipment','companySettings'].forEach((key)=>{db[key]=[]});
     db.staffInitialized=true;WORKERS=db.teams;STAFF=db.staff;localStorage.setItem(KEY,JSON.stringify(db));
   },
   clearDeviceData:()=>localStorage.removeItem(KEY)
@@ -215,7 +216,7 @@ window.EdilKappaLocal={
 <script src="./linea-vita/vendor/jspdf.umd.min.js"></script>
 <script src="./linea-vita/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="./smart-operations.js?v=15"></script>
-<script src="./danea-integration.js?v=15"></script>
-<script type="module" src="./firebase-cloud.js?v=15"></script>
+<script src="./danea-integration.js?v=17"></script>
+<script type="module" src="./firebase-cloud.js?v=17"></script>
 </body>
 </html>

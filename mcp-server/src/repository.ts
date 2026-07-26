@@ -22,9 +22,20 @@ export type StoredRecord = {
   archive: 'Preventivi' | 'Documenti';
   title: string;
   client: string;
+  interventionId: string;
+  intervention: string;
   storagePath: string;
   alreadyExisted: boolean;
   warning?: string;
+};
+
+export type InterventionRecord = {
+  id: string;
+  title: string;
+  client: string;
+  clientId: string;
+  date: string;
+  status: string;
 };
 
 export type QuoteInput = {
@@ -33,6 +44,8 @@ export type QuoteInput = {
   subject: string;
   clientName: string;
   clientId?: string;
+  interventionId?: string;
+  interventionTitle?: string;
   quoteNumber?: string;
   netAmount?: number;
   date: string;
@@ -46,6 +59,8 @@ export type ReportInput = {
   title: string;
   clientName: string;
   clientId?: string;
+  interventionId?: string;
+  interventionTitle?: string;
   documentDate: string;
   notes?: string;
   expiry?: string;
@@ -172,6 +187,25 @@ function parseClient(snapshot: QueryDocumentSnapshot): ClientRecord | null {
   };
 }
 
+function parseIntervention(snapshot: QueryDocumentSnapshot): InterventionRecord | null {
+  const data = snapshot.data();
+  if (data.orgId !== ORG_ID) return null;
+  let payload: Record<string, unknown> = {};
+  try { payload = JSON.parse(typeof data.payload === 'string' ? data.payload : '{}') as Record<string, unknown>; }
+  catch { return null; }
+  if (payload.recordType !== 'Intervention') return null;
+  const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+  if (!title) return null;
+  return {
+    id: snapshot.id,
+    title,
+    client: String(payload.client || ''),
+    clientId: String(data.clientId || payload.clientId || ''),
+    date: String(payload.date || ''),
+    status: String(payload.status || data.status || 'Pianificato')
+  };
+}
+
 function parseDaneaRequest(snapshot: QueryDocumentSnapshot): DaneaRequestRecord | null {
   const data = snapshot.data();
   if (data.orgId !== ORG_ID) return null;
@@ -224,6 +258,20 @@ export class EdilKappaRepository {
       .filter((client) => !query || normalizeText(`${client.name} ${client.address}`).includes(query))
       .sort((left, right) => left.name.localeCompare(right.name, 'it'))
       .slice(0, 20);
+  }
+
+  async searchInterventions(clientName: string, clientId: string | undefined, search: string): Promise<InterventionRecord[]> {
+    const client = await this.resolveClient(clientName, clientId);
+    if (!client.id) return [];
+    const snapshot = await this.db.collection('documents').where('orgId', '==', ORG_ID).limit(500).get();
+    const query = normalizeText(search);
+    return snapshot.docs
+      .map(parseIntervention)
+      .filter((item): item is InterventionRecord => Boolean(item))
+      .filter((item) => item.clientId === client.id)
+      .filter((item) => !query || normalizeText(`${item.title} ${item.status} ${item.date}`).includes(query))
+      .sort((left, right) => right.date.localeCompare(left.date))
+      .slice(0, 50);
   }
 
   async searchDaneaRequests(search: string): Promise<DaneaRequestRecord[]> {
@@ -285,6 +333,52 @@ export class EdilKappaRepository {
     });
   }
 
+  private async resolveIntervention(
+    client: ClientResolution,
+    requestedTitle: string,
+    interventionId: string | undefined,
+    authSubject: string
+  ): Promise<InterventionRecord> {
+    const title = requestedTitle.trim() || 'Intervento da definire';
+    if (!client.id) return { id: '', title, client: client.name, clientId: '', date: '', status: 'Pianificato' };
+
+    if (interventionId?.trim()) {
+      const snapshot = await this.db.collection('documents').doc(interventionId.trim()).get();
+      if (!snapshot.exists) throw new Error('L’intervento indicato non esiste più nel gestionale.');
+      const parsed = parseIntervention(snapshot as QueryDocumentSnapshot);
+      if (!parsed || parsed.clientId !== client.id) throw new Error('L’intervento indicato appartiene a un altro cliente.');
+      return parsed;
+    }
+
+    const snapshot = await this.db.collection('documents').where('orgId', '==', ORG_ID).limit(500).get();
+    const exact = snapshot.docs
+      .map(parseIntervention)
+      .filter((item): item is InterventionRecord => Boolean(item))
+      .find((item) => item.clientId === client.id && normalizeText(item.title) === normalizeText(title));
+    if (exact) return exact;
+
+    const id = stableRecordId('intervento', [client.id, normalizeText(title)]);
+    const date = new Date().toISOString().slice(0, 10);
+    const now = new Date().toISOString();
+    const item = {
+      id,
+      recordType: 'Intervention',
+      client: client.name,
+      clientId: client.id,
+      title,
+      category: 'Altro',
+      date,
+      status: 'Pianificato',
+      notes: 'Scheda creata automaticamente durante l’archiviazione da ChatGPT.',
+      source: 'ChatGPT',
+      createdAt: now,
+      updatedAt: now
+    };
+    const ownerUid = stableRecordId('chatgpt', [authSubject]).slice(0, 128);
+    await this.db.collection('documents').doc(id).set(this.envelope(id, client.id, ownerUid, 'Pianificato', item));
+    return { id, title, client: client.name, clientId: client.id, date, status: 'Pianificato' };
+  }
+
   private envelope(id: string, clientId: string, ownerUid: string, status: string, payload: Record<string, unknown>) {
     return {
       id,
@@ -312,6 +406,8 @@ export class EdilKappaRepository {
         ...fallback,
         title: String(payload.subject || payload.title || fallback.title),
         client: String(payload.client || fallback.client),
+        interventionId: String(payload.interventionId || fallback.interventionId),
+        intervention: String(payload.interventionTitle || fallback.intervention),
         storagePath: String(payload.storagePath || fallback.storagePath),
         alreadyExisted: true
       };
@@ -326,8 +422,16 @@ export class EdilKappaRepository {
     const documentRef = this.db.collection('quotes').doc(id);
     const existing = await documentRef.get();
     const storagePath = `organisations/${ORG_ID}/documents/chatgpt/${id}/${input.file.fileName}`;
-    const fallback: StoredRecord = { id, archive: 'Preventivi', title: input.subject, client: client.name, storagePath, alreadyExisted: false, warning: client.warning };
+    const fallback: StoredRecord = { id, archive: 'Preventivi', title: input.subject, client: client.name, interventionId: input.interventionId || '', intervention: input.interventionTitle || '', storagePath, alreadyExisted: false, warning: client.warning };
     if (existing.exists) return this.existingResult(existing.data() || {}, fallback);
+    const intervention = await this.resolveIntervention(
+      client,
+      input.interventionTitle || input.subject,
+      input.interventionId,
+      input.authSubject
+    );
+    fallback.interventionId = intervention.id;
+    fallback.intervention = intervention.title;
 
     const quoteNumber = input.quoteNumber?.trim() || `PREV-${input.date.slice(0, 4)}-${id.slice(-6).toUpperCase()}`;
     const item = compact({
@@ -335,6 +439,8 @@ export class EdilKappaRepository {
       code: quoteNumber,
       client: client.name,
       clientId: client.id,
+      interventionId: intervention.id,
+      interventionTitle: intervention.title,
       subject: input.subject,
       net: input.netAmount || 0,
       date: input.date,
@@ -363,13 +469,23 @@ export class EdilKappaRepository {
     const documentRef = this.db.collection('documents').doc(id);
     const existing = await documentRef.get();
     const storagePath = `organisations/${ORG_ID}/documents/chatgpt/${id}/${input.file.fileName}`;
-    const fallback: StoredRecord = { id, archive: 'Documenti', title: input.title, client: client.name, storagePath, alreadyExisted: false, warning: client.warning };
+    const fallback: StoredRecord = { id, archive: 'Documenti', title: input.title, client: client.name, interventionId: input.interventionId || '', intervention: input.interventionTitle || '', storagePath, alreadyExisted: false, warning: client.warning };
     if (existing.exists) return this.existingResult(existing.data() || {}, fallback);
+    const intervention = await this.resolveIntervention(
+      client,
+      input.interventionTitle || input.title,
+      input.interventionId,
+      input.authSubject
+    );
+    fallback.interventionId = intervention.id;
+    fallback.intervention = intervention.title;
 
     const item = compact({
       id,
       client: client.name,
       clientId: client.id,
+      interventionId: intervention.id,
+      interventionTitle: intervention.title,
       category: 'Relazione tecnica',
       title: input.title,
       documentDate: input.documentDate,

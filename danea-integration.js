@@ -329,9 +329,28 @@
       };
       db.condomini.push(client);
     }
+    db.interventions = db.interventions || [];
+    let intervention = db.interventions.find((entry) => entry.daneaRequestId === item.id);
+    if (!intervention) {
+      intervention = {
+        id: uid('int'),
+        daneaRequestId: item.id,
+        client: client.name,
+        clientId: client.id,
+        title: item.title || 'Richiesta di intervento Danea',
+        category: 'Sopralluogo',
+        date: item.receivedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+        status: item.status === 'Completato' ? 'Completato' : 'In attesa',
+        notes: item.request || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      db.interventions.push(intervention);
+    }
     db.inspections.push({
       id: uid('s'),
       daneaRequestId: item.id,
+      interventionId: intervention.id,
       date: item.scheduledDate || new Date().toISOString().slice(0, 10),
       time: '09:00',
       type: 'Richiesta Danea',
@@ -346,7 +365,7 @@
     item.updatedAt = new Date().toISOString();
     save();
     render();
-    alert('Cliente e sopralluogo collegati alla richiesta Danea.');
+    alert('Cliente, intervento e sopralluogo collegati alla richiesta Danea.');
   };
 
   window.daneaRequestsView = function () {

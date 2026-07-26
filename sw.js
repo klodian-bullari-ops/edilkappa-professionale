@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v16-documenti-multimediali`;
+const CACHE = `${CACHE_PREFIX}v17-schede-interventi`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -9,6 +9,7 @@ const APP_SHELL = [
   "./manifest.json",
   "./professional-extensions.js",
   "./business-suite.js",
+  "./client-archive.js",
   "./smart-operations.js",
   "./danea-integration.js",
   "./firebase-cloud.js",

@@ -7,7 +7,7 @@ import { z } from 'zod/v4';
 import { authSubject, hasScope, oauthToolError, OidcTokenVerifier } from './auth.js';
 import { readConfig, type AppConfig } from './config.js';
 import { downloadTemporaryFile } from './files.js';
-import { EdilKappaRepository, type DaneaRequestRecord, type StoredRecord } from './repository.js';
+import { EdilKappaRepository, type DaneaRequestRecord, type InterventionRecord, type StoredRecord } from './repository.js';
 
 const READ_SCOPE = 'edilkappa:read';
 const WRITE_SCOPE = 'edilkappa:write';
@@ -30,6 +30,8 @@ const storedOutputSchema = {
   archivio: z.enum(['Preventivi', 'Documenti']),
   titolo: z.string(),
   cliente: z.string(),
+  intervento_id: z.string(),
+  intervento: z.string(),
   gestionale_url: z.string(),
   duplicato: z.boolean(),
   avviso: z.string()
@@ -41,9 +43,31 @@ function storedOutput(record: StoredRecord, config: AppConfig) {
     archivio: record.archive,
     titolo: record.title,
     cliente: record.client,
+    intervento_id: record.interventionId,
+    intervento: record.intervention,
     gestionale_url: config.siteUrl,
     duplicato: record.alreadyExisted,
     avviso: record.warning || ''
+  };
+}
+
+const interventionOutputSchema = {
+  id: z.string(),
+  titolo: z.string(),
+  cliente: z.string(),
+  cliente_id: z.string(),
+  data: z.string(),
+  stato: z.string()
+};
+
+function interventionOutput(record: InterventionRecord) {
+  return {
+    id: record.id,
+    titolo: record.title,
+    cliente: record.client,
+    cliente_id: record.clientId,
+    data: record.date,
+    stato: record.status
   };
 }
 
@@ -52,7 +76,7 @@ function savedResult(record: StoredRecord, config: AppConfig) {
   const action = record.alreadyExisted ? 'era già presente' : 'è stato salvato';
   const warning = record.warning ? ` ${record.warning}` : '';
   return {
-    content: [{ type: 'text' as const, text: `“${record.title}” ${action} nell’archivio ${record.archive} di EdilKappa.${warning}` }],
+    content: [{ type: 'text' as const, text: `“${record.title}” ${action} nell’archivio ${record.archive} di EdilKappa, intervento “${record.intervention}”.${warning}` }],
     structuredContent: output
   };
 }
@@ -111,7 +135,7 @@ function toolMeta(schemes: readonly { type: 'oauth2'; scopes: readonly string[] 
 }
 
 function createServer(repository: EdilKappaRepository, config: AppConfig): McpServer {
-  const server = new McpServer({ name: 'edilkappa-gestionale', version: '1.1.0' });
+  const server = new McpServer({ name: 'edilkappa-gestionale', version: '1.2.0' });
 
   registerAppTool(server, 'cerca_clienti', {
     title: 'Cerca clienti EdilKappa',
@@ -131,6 +155,33 @@ function createServer(repository: EdilKappaRepository, config: AppConfig): McpSe
       const output = { clienti: clients.map((client) => ({ id: client.id, nome: client.name, indirizzo: client.address })) };
       return {
         content: [{ type: 'text', text: clients.length ? `Trovati ${clients.length} clienti nel gestionale.` : 'Nessun cliente corrispondente trovato.' }],
+        structuredContent: output
+      };
+    } catch (error) {
+      return toolError(error);
+    }
+  });
+
+  registerAppTool(server, 'cerca_interventi', {
+    title: 'Cerca interventi EdilKappa',
+    description: 'Cerca le schede intervento già presenti per un cliente o condominio. Usalo prima di archiviare preventivi, relazioni, foto o video nello stesso lavoro.',
+    inputSchema: {
+      cliente: z.string().max(160).default('').describe('Nome del cliente o condominio.'),
+      cliente_id: z.string().max(128).optional().describe('ID restituito da cerca_clienti, quando disponibile.'),
+      query: z.string().max(200).default('').describe('Titolo, stato o data dell’intervento.')
+    },
+    outputSchema: {
+      interventi: z.array(z.object(interventionOutputSchema))
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true },
+    _meta: toolMeta(READ_SCHEME, 'Ricerca interventi…', 'Interventi trovati')
+  }, async ({ cliente, cliente_id, query }, extra) => {
+    if (!hasScope(extra.authInfo, READ_SCOPE)) return oauthToolError(config, READ_SCOPE);
+    try {
+      const records = await repository.searchInterventions(cliente, cliente_id, query);
+      const output = { interventi: records.map(interventionOutput) };
+      return {
+        content: [{ type: 'text', text: records.length ? `Trovati ${records.length} interventi per il cliente.` : 'Nessun intervento corrispondente trovato.' }],
         structuredContent: output
       };
     } catch (error) {
@@ -229,6 +280,8 @@ function createServer(repository: EdilKappaRepository, config: AppConfig): McpSe
       oggetto: z.string().min(1).max(200).describe('Oggetto sintetico del preventivo.'),
       cliente: z.string().max(160).default('').describe('Nome del cliente o condominio.'),
       cliente_id: z.string().max(128).optional().describe('ID restituito da cerca_clienti, quando disponibile.'),
+      intervento: z.string().max(200).optional().describe('Titolo della scheda intervento. Se omesso, viene usato l’oggetto del preventivo.'),
+      intervento_id: z.string().max(128).optional().describe('ID restituito da cerca_interventi per aggiungere il file a un intervento esistente.'),
       numero: z.string().max(80).optional().describe('Numero del preventivo; se omesso viene generato.'),
       importo_netto: z.number().min(0).max(100_000_000).optional(),
       data: isoDate.default(() => new Date().toISOString().slice(0, 10)),
@@ -247,6 +300,8 @@ function createServer(repository: EdilKappaRepository, config: AppConfig): McpSe
         subject: input.oggetto,
         clientName: input.cliente,
         ...(input.cliente_id ? { clientId: input.cliente_id } : {}),
+        ...(input.intervento ? { interventionTitle: input.intervento } : {}),
+        ...(input.intervento_id ? { interventionId: input.intervento_id } : {}),
         ...(input.numero ? { quoteNumber: input.numero } : {}),
         ...(input.importo_netto !== undefined ? { netAmount: input.importo_netto } : {}),
         date: input.data,
@@ -267,6 +322,8 @@ function createServer(repository: EdilKappaRepository, config: AppConfig): McpSe
       titolo: z.string().min(1).max(200).describe('Titolo della relazione tecnica.'),
       cliente: z.string().max(160).default('').describe('Nome del cliente o condominio.'),
       cliente_id: z.string().max(128).optional().describe('ID restituito da cerca_clienti, quando disponibile.'),
+      intervento: z.string().max(200).optional().describe('Titolo della scheda intervento. Se omesso, viene usato il titolo della relazione.'),
+      intervento_id: z.string().max(128).optional().describe('ID restituito da cerca_interventi per aggiungere il file a un intervento esistente.'),
       data_documento: isoDate.default(() => new Date().toISOString().slice(0, 10)),
       note: z.string().max(2_000).optional(),
       scadenza: isoDate.optional()
@@ -284,6 +341,8 @@ function createServer(repository: EdilKappaRepository, config: AppConfig): McpSe
         title: input.titolo,
         clientName: input.cliente,
         ...(input.cliente_id ? { clientId: input.cliente_id } : {}),
+        ...(input.intervento ? { interventionTitle: input.intervento } : {}),
+        ...(input.intervento_id ? { interventionId: input.intervento_id } : {}),
         documentDate: input.data_documento,
         ...(input.note ? { notes: input.note } : {}),
         ...(input.scadenza ? { expiry: input.scadenza } : {}),
@@ -315,7 +374,7 @@ const protectedResourceMetadata = {
 };
 
 app.get('/healthz', (_request, response) => {
-  response.json({ ok: true, service: 'edilkappa-gestionale', version: '1.0.0' });
+  response.json({ ok: true, service: 'edilkappa-gestionale', version: '1.2.0' });
 });
 
 app.get(['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp'], (_request, response) => {

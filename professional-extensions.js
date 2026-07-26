@@ -81,9 +81,11 @@
   }
 
   window.openCompanyDocument = function (id) {
-    const item = db.documents.find((x) => x.id === id) || { id: uid('documento'), client: '', category: 'Relazione tecnica', title: '', expiry: '', notes: '', fileName: '' };
+    const draft = db.documents.find((x) => x.id === id) || { id: uid('documento'), client: '', interventionId: '', category: 'Relazione tecnica', title: '', expiry: '', notes: '', fileName: '' };
+    const item = window.prepareArchiveItem ? window.prepareArchiveItem(draft, id) : draft;
     modal(id ? 'Modifica documento' : 'Nuovo documento', `<div class="formGrid">
-      <div class="field"><label>Cliente / condominio</label><select name="client">${clientOptions(item.client)}</select></div>
+      <div class="field"><label>Cliente / condominio</label><select name="client" onchange="refreshInterventionSelect(this.form)">${clientOptions(item.client)}</select></div>
+      <div class="field"><label>Intervento</label><select name="interventionId">${window.interventionOptions ? window.interventionOptions(item.client, item.interventionId) : '<option value="">Da assegnare</option>'}</select></div>
       <div class="field"><label>Categoria</label><select name="category">${selectOptions(['Preventivo', 'Relazione tecnica', 'Foto e video', 'Videoispezione drone', 'Cantiere', 'Sicurezza', 'Personale', 'Mezzi', 'Fornitore', 'Amministrativo'], item.category)}</select></div>
       ${field('Titolo documento', 'title', 'text', item.title, true)}
       <div class="field"><label>Scadenza facoltativa</label><input name="expiry" type="date" value="${esc(item.expiry || '')}"></div>
@@ -91,15 +93,16 @@
       <div class="field full"><label>Note</label><textarea name="notes">${esc(item.notes || '')}</textarea></div>
     </div>`, async (form) => {
       const file = form.get('file');
-      const data = { client: form.get('client'), category: form.get('category'), title: form.get('title'), expiry: form.get('expiry'), notes: form.get('notes') };
+      const data = { client: form.get('client'), interventionId: form.get('interventionId'), category: form.get('category'), title: form.get('title'), expiry: form.get('expiry'), notes: form.get('notes') };
+      data.clientId = db.condomini.find((client) => client.name === data.client)?.id || item.clientId || '';
       let cloudUploaded = false;
       if (file && file.size) {
         const fileType = String(file.type || '').toLowerCase();
         const isVideo = fileType.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(file.name || '');
         if (window.EdilKappaCloud?.ready && window.EdilKappaCloud.uploadDocument && window.EdilKappaCloud.uploadMedia) {
           const uploaded = isVideo
-            ? await window.EdilKappaCloud.uploadMedia(file, { mediaId: item.id, category: data.category, client: data.client })
-            : await window.EdilKappaCloud.uploadDocument(file, { documentId: item.id, category: data.category, client: data.client });
+            ? await window.EdilKappaCloud.uploadMedia(file, { mediaId: item.id, category: data.category, client: data.client, interventionId: data.interventionId })
+            : await window.EdilKappaCloud.uploadDocument(file, { documentId: item.id, category: data.category, client: data.client, interventionId: data.interventionId });
           if (item.storagePath && item.storagePath !== uploaded.storagePath) await window.EdilKappaCloud.deleteDocument(item.storagePath).catch(() => {});
           Object.assign(data, uploaded);
           cloudUploaded = true;

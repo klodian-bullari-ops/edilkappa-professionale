@@ -207,7 +207,8 @@ async function uploadDocument(file, options = {}) {
       orgId: ORG_ID,
       ownerUid: user.uid,
       category: String(options.category || 'Documento').slice(0, 80),
-      client: String(options.client || '').slice(0, 160)
+      client: String(options.client || '').slice(0, 160),
+      interventionId: String(options.interventionId || '').slice(0, 128)
     }
   });
   return {
@@ -236,7 +237,8 @@ async function uploadMedia(file, options = {}) {
       orgId: ORG_ID,
       ownerUid: user.uid,
       category: String(options.category || 'Foto e video').slice(0, 80),
-      client: String(options.client || '').slice(0, 160)
+      client: String(options.client || '').slice(0, 160),
+      interventionId: String(options.interventionId || '').slice(0, 128)
     }
   });
   await new Promise((resolve, reject) => {
@@ -567,7 +569,15 @@ function mergeSnapshot(remoteName, snapshot) {
   });
   remoteIds.set(remoteName, new Set(map.keys()));
   loadedCollections.add(remoteName);
-  local.getDB()[localName] = Array.from(map.values());
+  const values = Array.from(map.values());
+  if (remoteName === 'documents') {
+    local.getDB().interventions = values
+      .filter((item) => item.recordType === 'Intervention')
+      .map(({ recordType, ...item }) => item);
+    local.getDB().documents = values.filter((item) => item.recordType !== 'Intervention');
+  } else {
+    local.getDB()[localName] = values;
+  }
   if (localName === 'teams' && profile?.role === 'worker') local.setWorkerRole(profile, user.uid);
   local.persist();
   updateAdministratorPortal();
@@ -620,7 +630,14 @@ function workerItems(remoteName, items) {
 
 async function pushCollection(localName, remoteName) {
   if (!canPush(remoteName)) return;
-  const items = workerItems(remoteName, local.getDB()[localName] || []).filter((item) => item?.id);
+  const database = local.getDB();
+  const localItems = remoteName === 'documents'
+    ? [
+        ...(database.documents || []),
+        ...(database.interventions || []).map((item) => ({ ...item, recordType: 'Intervention' }))
+      ]
+    : database[localName] || [];
+  const items = workerItems(remoteName, localItems).filter((item) => item?.id);
   const known = remoteIds.get(remoteName) || new Set();
   await Promise.all(items.map((item) => setDoc(doc(firestore, remoteName, String(item.id)), envelope(item, remoteName, !known.has(String(item.id))), { merge: true })));
   if ((profile.role === 'owner' || profile.role === 'office') && loadedCollections.has(remoteName)) {
