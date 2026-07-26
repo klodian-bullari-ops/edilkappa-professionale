@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v12-private-settings`;
+const CACHE = `${CACHE_PREFIX}v13-danea`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./professional-extensions.js",
   "./business-suite.js",
   "./smart-operations.js",
+  "./danea-integration.js",
   "./firebase-cloud.js",
   "./richiesta.html",
   "./public-request.js",

@@ -3,10 +3,12 @@
 Server MCP privato che consente a ChatGPT di:
 
 - cercare i clienti già presenti nel gestionale;
+- cercare le richieste Danea già importate;
+- importare o aggiornare una richiesta Danea senza creare doppioni;
 - salvare un PDF/Word nella sezione **Preventivi**;
 - salvare un PDF/Word nella sezione **Documenti**, categoria **Relazione tecnica**.
 
-I comandi di scrittura sono idempotenti: se ChatGPT ritenta lo stesso salvataggio, non crea un doppione. I file hanno un limite di 25 MB e vengono conservati nel bucket Firebase privato; nel database viene memorizzato soltanto il percorso.
+I comandi di scrittura sono idempotenti: se ChatGPT ritenta lo stesso salvataggio, non crea un doppione. Per Danea viene usato prima l’ID del messaggio e-mail, poi la coppia studio + codice intervento. I link sono accettati soltanto se HTTPS e appartenenti ai domini ufficiali Danea o MioCondominio. I file hanno un limite di 25 MB e vengono conservati nel bucket Firebase privato; nel database viene memorizzato soltanto il percorso.
 
 ## Sicurezza
 
@@ -71,8 +73,10 @@ https://YOUR_CLOUD_RUN_HOST/mcp
 Completare il collegamento OAuth e provare, nell’ordine:
 
 1. “Cerca il cliente Rossi nel gestionale EdilKappa.”
-2. “Salva questo PDF come preventivo per Rossi.”
-3. “Salva questo PDF come relazione tecnica per Rossi.”
+2. “Cerca le richieste Danea aperte per lo Studio Rossi.”
+3. “Importa questa richiesta Danea nel gestionale.”
+4. “Salva questo PDF come preventivo per Rossi.”
+5. “Salva questo PDF come relazione tecnica per Rossi.”
 
 ## Sviluppo locale
 
