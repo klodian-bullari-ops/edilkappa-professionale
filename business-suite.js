@@ -5,12 +5,14 @@
   db.portalUsers = db.portalUsers || [];
   db.reports = db.reports || [];
   db.quotes = db.quotes || [];
+  db.drone = db.drone || [];
 
   const style = document.createElement('style');
   style.textContent = `
     .suiteTabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.suiteTabs button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 13px;font-weight:800;color:var(--ink)}
     .reportCard{border-left:5px solid var(--green)}.reportMeta{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0}.reportMeta span{background:#eef2ed;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:750}
     .photoGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:12px}.photoTile{border:1px solid var(--line);border-radius:14px;background:#f6f7f3;padding:10px;text-align:left;cursor:pointer}.photoTile strong{display:block;margin-bottom:4px}.photoTile small{color:var(--muted)}
+    .mediaBox{border:1px dashed #aeb8ae;border-radius:14px;background:#f6f7f3;padding:13px}.mediaBox input{margin-top:8px}.mediaCount{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;font-weight:750;margin-top:5px}.mediaFileList{display:grid;gap:8px;margin:12px 0}.mediaFile{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.mediaFile div{min-width:0;flex:1}.mediaFile b,.mediaFile small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .signatureBox{width:100%;height:175px;border:1px solid #aeb8ae;border-radius:14px;background:#fff;touch-action:none}.quoteLines{width:100%;border-collapse:collapse}.quoteLines th,.quoteLines td{padding:7px;border-bottom:1px solid var(--line)}.quoteLines input{width:100%;min-width:75px;border:1px solid #ccd2cb;border-radius:9px;padding:9px}.quoteLines .desc{min-width:190px}.quoteTotals{margin-left:auto;width:min(360px,100%);display:grid;grid-template-columns:1fr auto;gap:7px;padding:14px;background:#f3f5f0;border-radius:14px}.quoteTotals b{text-align:right}
     .deadlineUrgent{border-left:5px solid #c3382b}.deadlineSoon{border-left:5px solid #d69b18}.deadlineDone{opacity:.58}.portalHero{background:linear-gradient(135deg,#172419,#315c3b);color:#fff;border-radius:22px;padding:24px;margin-bottom:18px}.portalHero p{color:#dbe5dc;margin-bottom:0}.syncState{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;color:#5d675f}.syncDot{width:9px;height:9px;border-radius:50%;background:#d69b18}.sectionNote{font-size:12px;color:var(--muted);margin-top:6px}
     @media(max-width:720px){.quoteLines{min-width:680px}.quoteLinesWrap{overflow:auto}.photoGrid{grid-template-columns:1fr 1fr}}
@@ -252,6 +254,76 @@
     return item.storagePath ? 'Nel PDF originale' : euro(numeric);
   }
 
+  function mediaFiles(item) {
+    return Array.isArray(item?.media) ? item.media : [];
+  }
+
+  function mediaIcon(file) {
+    return String(file?.fileType || '').startsWith('video/') ? '🎬' : '📷';
+  }
+
+  function mediaInput(name = 'media') {
+    return `<div class="field full mediaBox"><label>Foto e video</label><input name="${name}" type="file" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm" multiple><small>Puoi selezionare più foto e video. I filmati vengono salvati nell’archivio cloud protetto.</small></div>`;
+  }
+
+  async function uploadMediaFiles(files, options) {
+    const selected = Array.from(files || []).filter((file) => file?.size);
+    if (!selected.length) return [];
+    if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.uploadMedia) {
+      throw new Error('Accedi al gestionale e verifica la connessione internet prima di caricare foto o video.');
+    }
+    const output = [];
+    for (const [index, file] of selected.entries()) {
+      const type = String(file.type || '').toLowerCase();
+      if (!type.startsWith('image/') && !type.startsWith('video/') && !/\.(jpe?g|png|webp|heic|heif|mp4|mov|m4v|webm)$/i.test(file.name || '')) {
+        throw new Error(`Il file ${file.name} non è una foto o un video supportato.`);
+      }
+      const stored = await window.EdilKappaCloud.uploadMedia(file, {
+        mediaId: `${options.ownerId}-${Date.now()}-${index}`,
+        category: options.category,
+        client: options.client
+      });
+      output.push(stored);
+    }
+    return output;
+  }
+
+  window.openStoredMedia = async function (collectionName, itemId, index) {
+    const item = (db[collectionName] || []).find((entry) => entry.id === itemId);
+    const file = mediaFiles(item)[index];
+    if (!file?.storagePath) return alert('File multimediale non disponibile.');
+    try {
+      await window.EdilKappaCloud?.openDocument?.(file.storagePath);
+    } catch (error) {
+      alert(error.message || 'Impossibile aprire il file.');
+    }
+  };
+
+  function mediaLibrary(item, collectionName) {
+    const files = mediaFiles(item);
+    return files.length
+      ? `<div class="mediaFileList">${files.map((file, index) => `<div class="mediaFile"><span>${mediaIcon(file)}</span><div><b>${esc(file.fileName || 'Allegato')}</b><small>${String(file.fileType || '').startsWith('video/') ? 'Video' : 'Fotografia'} · ${Math.max(1, Math.round(Number(file.fileSize || 0) / 1024 / 1024))} MB</small></div><button class="btn sm light" type="button" onclick="openStoredMedia('${collectionName}','${item.id}',${index})">Apri</button></div>`).join('')}</div>`
+      : '<div class="empty">Nessuna foto o video ancora allegato.</div>';
+  }
+
+  function manageMedia(collectionName, itemId, title, category) {
+    const item = (db[collectionName] || []).find((entry) => entry.id === itemId);
+    if (!item) return;
+    modal(title, `${mediaLibrary(item, collectionName)}${mediaInput('newMedia')}`, async (formData) => {
+      const added = await uploadMediaFiles(formData.getAll('newMedia'), { ownerId: item.id, category, client: item.client });
+      item.media = mediaFiles(item).concat(added);
+      item.updatedAt = new Date().toISOString();
+    });
+  }
+
+  window.manageQuoteMedia = function (id) {
+    manageMedia('quotes', id, 'Foto e video del preventivo', 'Preventivo - foto e video');
+  };
+
+  window.manageDroneMedia = function (id) {
+    manageMedia('drone', id, 'Video e foto dell’ispezione drone', 'Videoispezione drone');
+  };
+
   function updateQuotePreview() {
     const form = document.getElementById('modalForm');
     if (!form) return;
@@ -276,8 +348,8 @@
   }
 
   openQuote = function (id) {
-    const item = db.quotes.find((quote) => quote.id === id) || { code: `PREV-${new Date().getFullYear()}-${String(db.quotes.length + 1).padStart(3, '0')}`, client: '', subject: '', date: localToday(), status: 'Bozza', discount: 0, vatRate: 22, validityDays: 30, paymentTerms: '30% all’accettazione, saldo a fine lavori', notes: '' };
-    modal(id ? 'Modifica preventivo professionale' : 'Nuovo preventivo automatico', `<div class="formGrid">${field('Numero', 'code', 'text', item.code)}<div class="field"><label>Cliente</label><select name="client">${clientOptions(item.client)}</select></div>${field('Oggetto', 'subject', 'text', item.subject, true)}${field('Data', 'date', 'date', item.date)}<div class="field"><label>Stato</label><select name="status">${selectOptions(['Bozza', 'Inviato', 'In attesa', 'Accettato', 'Rifiutato'], item.status)}</select></div>${field('Validità in giorni', 'validityDays', 'number', item.validityDays ?? 30)}<div class="field full quoteLinesWrap"><label>Voci del preventivo</label><table class="quoteLines"><thead><tr><th>Descrizione</th><th>Quantità</th><th>Unità</th><th>Prezzo unitario</th><th>Totale</th></tr></thead><tbody>${quoteLineRows(item)}</tbody></table></div>${field('Sconto %', 'discount', 'number', item.discount ?? 0)}${field('IVA %', 'vatRate', 'number', item.vatRate ?? 22)}${field('Condizioni di pagamento', 'paymentTerms', 'text', item.paymentTerms || '', true)}<div class="field full"><label>Note e condizioni</label><textarea name="notes" placeholder="Esclusioni, tempi di esecuzione, accessi...">${esc(item.notes || '')}</textarea></div><div class="field full"><div class="quoteTotals"><span>Subtotale</span><b id="quoteSubtotal">€ 0,00</b><span>Sconto</span><b id="quoteDiscount">€ 0,00</b><span>Imponibile</span><b id="quoteNet">€ 0,00</b><span>IVA</span><b id="quoteVat">€ 0,00</b><span>Totale</span><b id="quoteGross">€ 0,00</b></div></div></div>`, (formData) => {
+    const item = db.quotes.find((quote) => quote.id === id) || { id: uid('p'), code: `PREV-${new Date().getFullYear()}-${String(db.quotes.length + 1).padStart(3, '0')}`, client: '', subject: '', date: localToday(), status: 'Bozza', discount: 0, vatRate: 22, validityDays: 30, paymentTerms: '30% all’accettazione, saldo a fine lavori', notes: '', media: [] };
+    modal(id ? 'Modifica preventivo professionale' : 'Nuovo preventivo automatico', `<div class="formGrid">${field('Numero', 'code', 'text', item.code)}<div class="field"><label>Cliente</label><select name="client">${clientOptions(item.client)}</select></div>${field('Oggetto', 'subject', 'text', item.subject, true)}${field('Data', 'date', 'date', item.date)}<div class="field"><label>Stato</label><select name="status">${selectOptions(['Bozza', 'Inviato', 'In attesa', 'Accettato', 'Rifiutato'], item.status)}</select></div>${field('Validità in giorni', 'validityDays', 'number', item.validityDays ?? 30)}<div class="field full quoteLinesWrap"><label>Voci del preventivo</label><table class="quoteLines"><thead><tr><th>Descrizione</th><th>Quantità</th><th>Unità</th><th>Prezzo unitario</th><th>Totale</th></tr></thead><tbody>${quoteLineRows(item)}</tbody></table></div>${field('Sconto %', 'discount', 'number', item.discount ?? 0)}${field('IVA %', 'vatRate', 'number', item.vatRate ?? 22)}${field('Condizioni di pagamento', 'paymentTerms', 'text', item.paymentTerms || '', true)}<div class="field full"><label>Note e condizioni</label><textarea name="notes" placeholder="Esclusioni, tempi di esecuzione, accessi...">${esc(item.notes || '')}</textarea></div>${mediaInput()}${mediaFiles(item).length ? `<div class="field full"><span class="mediaCount">📎 ${mediaFiles(item).length} file già allegati</span></div>` : ''}<div class="field full"><div class="quoteTotals"><span>Subtotale</span><b id="quoteSubtotal">€ 0,00</b><span>Sconto</span><b id="quoteDiscount">€ 0,00</b><span>Imponibile</span><b id="quoteNet">€ 0,00</b><span>IVA</span><b id="quoteVat">€ 0,00</b><span>Totale</span><b id="quoteGross">€ 0,00</b></div></div></div>`, async (formData) => {
       const form = document.getElementById('modalForm');
       const descriptions = formData.getAll('lineDescription');
       const quantities = formData.getAll('lineQuantity');
@@ -289,8 +361,10 @@
       const discount = Number(formData.get('discount') || 0);
       const vatRate = Number(formData.get('vatRate') || 0);
       const net = subtotal * (1 - discount / 100);
-      const data = { code: formData.get('code'), client: formData.get('client'), subject: formData.get('subject'), date: formData.get('date'), status: formData.get('status'), validityDays: Number(formData.get('validityDays') || 30), paymentTerms: formData.get('paymentTerms'), notes: formData.get('notes'), lines, subtotal, discount, vatRate, net, vat: net * vatRate / 100, gross: net * (1 + vatRate / 100), updatedAt: new Date().toISOString() };
-      if (id) Object.assign(item, data); else db.quotes.push({ id: uid('p'), ...data, createdAt: new Date().toISOString(), revisions: [] });
+      const client = formData.get('client');
+      const addedMedia = await uploadMediaFiles(formData.getAll('media'), { ownerId: item.id, category: 'Preventivo - foto e video', client });
+      const data = { code: formData.get('code'), client, subject: formData.get('subject'), date: formData.get('date'), status: formData.get('status'), validityDays: Number(formData.get('validityDays') || 30), paymentTerms: formData.get('paymentTerms'), notes: formData.get('notes'), lines, subtotal, discount, vatRate, net, vat: net * vatRate / 100, gross: net * (1 + vatRate / 100), media: mediaFiles(item).concat(addedMedia), updatedAt: new Date().toISOString() };
+      if (id) Object.assign(item, data); else db.quotes.push({ ...item, ...data, createdAt: new Date().toISOString(), revisions: [] });
       void form;
     });
     setTimeout(() => {
@@ -302,7 +376,37 @@
 
   quotes = function () {
     return pageHead('Preventivi professionali', 'Calcoli automatici, IVA, condizioni, PDF e firma', '<button class="btn light" onclick="openPdfUpload()">↑ Carica PDF</button><button class="btn lime" onclick="openQuote()">＋ Nuovo preventivo</button>') +
-      `<div class="card"><div class="tableWrap"><table class="table"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Imponibile</th><th>Totale</th><th>Stato</th><th>Firma</th><th></th></tr></thead><tbody>${db.quotes.map((item) => `<tr><td><b>${esc(item.code)}</b></td><td>${esc(dateText(item.date))}</td><td>${esc(item.client)}</td><td>${esc(item.subject)}</td><td class="money">${quoteAmountText(item, item.net)}</td><td class="money">${quoteAmountText(item, item.gross ?? item.net)}</td><td>${badge(item.status)}</td><td>${item.acceptedAt ? `✓ ${esc(item.signedBy)}` : '—'}</td><td><div class="actions">${quoteHasStoredDocument(item) ? `<button class="btn sm green" onclick="openQuotePdf('${item.id}')">${item.storagePath ? 'Apri originale' : 'Apri PDF'}</button>` : `<button class="btn sm light" onclick="printQuote('${item.id}')">Stampa / PDF</button>`}${!item.acceptedAt ? `<button class="btn sm green" onclick="openQuoteSignature('${item.id}')">Firma</button>` : ''}<button class="btn sm light" onclick="openQuote('${item.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('quotes','${item.id}','questo preventivo')">Elimina</button></div></td></tr>`).join('') || '<tr><td colspan="9">Nessun preventivo.</td></tr>'}</tbody></table></div></div>`;
+      `<div class="card"><div class="tableWrap"><table class="table"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Imponibile</th><th>Totale</th><th>Stato</th><th>Firma</th><th></th></tr></thead><tbody>${db.quotes.map((item) => `<tr><td><b>${esc(item.code)}</b>${mediaFiles(item).length ? `<br><span class="mediaCount">📷🎬 ${mediaFiles(item).length}</span>` : ''}</td><td>${esc(dateText(item.date))}</td><td>${esc(item.client)}</td><td>${esc(item.subject)}</td><td class="money">${quoteAmountText(item, item.net)}</td><td class="money">${quoteAmountText(item, item.gross ?? item.net)}</td><td>${badge(item.status)}</td><td>${item.acceptedAt ? `✓ ${esc(item.signedBy)}` : '—'}</td><td><div class="actions">${quoteHasStoredDocument(item) ? `<button class="btn sm green" onclick="openQuotePdf('${item.id}')">${item.storagePath ? 'Apri originale' : 'Apri PDF'}</button>` : `<button class="btn sm light" onclick="printQuote('${item.id}')">Stampa / PDF</button>`}<button class="btn sm light" onclick="manageQuoteMedia('${item.id}')">📷 Foto/Video${mediaFiles(item).length ? ` (${mediaFiles(item).length})` : ''}</button>${!item.acceptedAt ? `<button class="btn sm green" onclick="openQuoteSignature('${item.id}')">Firma</button>` : ''}<button class="btn sm light" onclick="openQuote('${item.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('quotes','${item.id}','questo preventivo')">Elimina</button></div></td></tr>`).join('') || '<tr><td colspan="9">Nessun preventivo.</td></tr>'}</tbody></table></div></div>`;
+  };
+
+  openPdfUpload = function () {
+    modal('Carica preventivo PDF', `<div class="formGrid"><div class="field full"><label>File PDF</label><input name="pdf" type="file" accept="application/pdf,.pdf" required><small>Il documento viene conservato nell’archivio cloud protetto.</small></div>${field('Numero preventivo', 'code', 'text', `PREV-${new Date().getFullYear()}-${String(db.quotes.length + 1).padStart(3, '0')}`)}<div class="field"><label>Cliente</label><select name="client">${clientOptions()}</select></div>${field('Oggetto', 'subject', 'text', 'Preventivo caricato', true)}${field('Importo netto € (facoltativo)', 'net', 'number', '0')}${field('Data', 'date', 'date', localToday())}<div class="field"><label>Stato</label><select name="status"><option>Bozza</option><option>Inviato</option><option>In attesa</option><option>Accettato</option><option>Rifiutato</option></select></div>${mediaInput()}</div>`, async (formData) => {
+      const file = formData.get('pdf');
+      const type = file?.type || (/\.pdf$/i.test(file?.name || '') ? 'application/pdf' : '');
+      if (!file || type !== 'application/pdf') throw new Error('Seleziona un file PDF valido.');
+      const id = uid('p');
+      const client = formData.get('client');
+      let stored = { pdfKey: id, fileName: file.name, fileType: type, fileSize: file.size };
+      if (window.EdilKappaCloud?.ready && window.EdilKappaCloud.uploadDocument) stored = await window.EdilKappaCloud.uploadDocument(file, { documentId: id, category: 'Preventivo', client });
+      else await storePdf(id, file);
+      const media = await uploadMediaFiles(formData.getAll('media'), { ownerId: id, category: 'Preventivo - foto e video', client });
+      db.quotes.push({ id, ...stored, code: formData.get('code'), client, subject: formData.get('subject'), net: Number(formData.get('net') || 0), date: formData.get('date'), status: formData.get('status'), media });
+    });
+  };
+
+  openDrone = function (id) {
+    const item = db.drone.find((entry) => entry.id === id) || { id: uid('d'), client: '', date: localToday(), area: 'Copertura e facciate', findings: '', status: 'Da relazionare', media: [] };
+    modal(id ? 'Modifica videoispezione' : 'Nuova videoispezione', `<div class="formGrid"><div class="field"><label>Cliente</label><select name="client">${clientOptions(item.client)}</select></div>${field('Data', 'date', 'date', item.date)}${field('Area ispezionata', 'area', 'text', item.area, true)}<div class="field full"><label>Anomalie rilevate</label><textarea name="findings" required>${esc(item.findings)}</textarea></div><div class="field"><label>Stato</label><select name="status">${selectOptions(['Da relazionare', 'Relazione pronta', 'Completato'], item.status)}</select></div>${mediaInput()}${mediaFiles(item).length ? `<div class="field full"><span class="mediaCount">📎 ${mediaFiles(item).length} file già allegati</span></div>` : ''}</div>`, async (formData) => {
+      const client = formData.get('client');
+      const addedMedia = await uploadMediaFiles(formData.getAll('media'), { ownerId: item.id, category: 'Videoispezione drone', client });
+      const data = { client, date: formData.get('date'), area: formData.get('area'), findings: formData.get('findings'), status: formData.get('status'), media: mediaFiles(item).concat(addedMedia), updatedAt: new Date().toISOString() };
+      if (id) Object.assign(item, data); else db.drone.push({ ...item, ...data, createdAt: new Date().toISOString() });
+    });
+  };
+
+  drone = function () {
+    return pageHead('Videoispezioni drone', 'Rilievi di coperture, facciate e parti non accessibili', '<button class="btn lime" onclick="openDrone()">＋ Nuova ispezione</button>') +
+      `<div class="notice">Foto e video vengono archiviati nel cloud protetto e restano collegati alla relativa ispezione.</div><div style="height:14px"></div><div class="grid cols"><section class="card"><div class="list">${db.drone.map((item) => `<div class="row"><div class="rowIcon">🚁</div><div class="rowBody"><b>${esc(item.client)}</b><small>${esc(dateText(item.date))} · ${esc(item.area)}<br>${esc(item.findings)}</small>${mediaFiles(item).length ? `<span class="mediaCount">📷🎬 ${mediaFiles(item).length} file allegati</span>` : ''}</div><div class="actions">${badge(item.status)}<button class="btn sm green" onclick="manageDroneMedia('${item.id}')">🎬 Video/Foto${mediaFiles(item).length ? ` (${mediaFiles(item).length})` : ''}</button><button class="btn sm light" onclick="openDrone('${item.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('drone','${item.id}','questa videoispezione')">Elimina</button></div></div>`).join('') || '<div class="empty">Nessuna videoispezione registrata.</div>'}</div></section><section class="card"><h3>Relazione tecnica</h3><p class="company">Ogni rilievo può contenere video completi, fotografie selezionate, anomalie riscontrate e interventi consigliati.</p></section></div>`;
   };
 
   printQuote = function (id) {

@@ -28,7 +28,8 @@ import {
   getDownloadURL,
   getStorage,
   ref as storageRef,
-  uploadBytes
+  uploadBytes,
+  uploadBytesResumable
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 
 const FIREBASE_CONFIG = {
@@ -51,6 +52,7 @@ const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
+const MEDIA_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',
@@ -60,6 +62,17 @@ const DOCUMENT_MIME_TYPES = new Set([
   'image/webp',
   'image/heic',
   'image/heif'
+]);
+const MEDIA_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/x-m4v'
 ]);
 
 const mappings = [
@@ -111,6 +124,7 @@ const api = {
   },
   uploadAttachment,
   openAttachment,
+  uploadMedia,
   uploadDocument,
   openDocument,
   deleteDocument,
@@ -161,7 +175,11 @@ function inferredMimeType(file) {
     png: 'image/png',
     webp: 'image/webp',
     heic: 'image/heic',
-    heif: 'image/heif'
+    heif: 'image/heif',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    m4v: 'video/x-m4v',
+    webm: 'video/webm'
   })[extension] || '';
 }
 
@@ -195,6 +213,42 @@ async function uploadDocument(file, options = {}) {
   return {
     storagePath: path,
     fileName: String(file.name || 'documento').slice(0, 180),
+    fileType: contentType,
+    fileSize: file.size,
+    uploadedAt: new Date().toISOString()
+  };
+}
+
+async function uploadMedia(file, options = {}) {
+  if (!ready || !user || !profile?.active) throw new Error('Accedi al gestionale prima di caricare foto o video.');
+  if (!navigator.onLine) throw new Error('Serve una connessione internet per archiviare foto o video.');
+  if (!file?.size) throw new Error('Il file selezionato è vuoto.');
+  if (file.size > MEDIA_MAX_BYTES) throw new Error('Il file supera il limite di 2 GB.');
+  const contentType = inferredMimeType(file);
+  if (!MEDIA_MIME_TYPES.has(contentType)) throw new Error('Sono ammessi foto JPG, PNG, WEBP o HEIC e video MP4, MOV, M4V o WEBM.');
+
+  const mediaId = uploadIdentifier(options.mediaId);
+  const path = `organisations/${ORG_ID}/documents/${user.uid}/${mediaId}/${safeFileName(file.name)}`;
+  const reference = storageRef(storage, path);
+  const task = uploadBytesResumable(reference, file, {
+    contentType,
+    customMetadata: {
+      orgId: ORG_ID,
+      ownerUid: user.uid,
+      category: String(options.category || 'Foto e video').slice(0, 80),
+      client: String(options.client || '').slice(0, 160)
+    }
+  });
+  await new Promise((resolve, reject) => {
+    task.on('state_changed', (snapshot) => {
+      const progress = Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100);
+      setSyncState(`Caricamento ${progress}%`, '#d69b18', file.name);
+    }, reject, resolve);
+  });
+  setSyncState('Sincronizzato', '#2f7d32');
+  return {
+    storagePath: path,
+    fileName: String(file.name || 'allegato').slice(0, 180),
     fileType: contentType,
     fileSize: file.size,
     uploadedAt: new Date().toISOString()

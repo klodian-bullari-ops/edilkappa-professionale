@@ -12,8 +12,16 @@ service firebase.storage {
 
     function supportedDocument() {
       return request.resource.size > 0
-        && request.resource.size <= 25 * 1024 * 1024
-        && request.resource.contentType.matches('application/pdf|application/msword|application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document|image/(jpeg|png|webp|heic|heif)');
+        && (
+          (
+            request.resource.size <= 25 * 1024 * 1024
+            && request.resource.contentType.matches('application/pdf|application/msword|application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\.document')
+          )
+          || (
+            request.resource.size <= 2 * 1024 * 1024 * 1024
+            && request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif)|video/(mp4|quicktime|webm|x-m4v)')
+          )
+        );
     }
 
     match /organisations/edilkappa/documents/{ownerUid}/{documentId}/{fileName} {
