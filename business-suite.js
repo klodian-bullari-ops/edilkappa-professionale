@@ -242,6 +242,16 @@
     }).join('');
   }
 
+  function quoteHasStoredDocument(item) {
+    return Boolean(item?.storagePath || item?.pdfKey);
+  }
+
+  function quoteAmountText(item, amount) {
+    const numeric = Number(amount || 0);
+    if (numeric > 0 || item.lines?.length) return euro(numeric);
+    return item.storagePath ? 'Nel PDF originale' : euro(numeric);
+  }
+
   function updateQuotePreview() {
     const form = document.getElementById('modalForm');
     if (!form) return;
@@ -292,12 +302,14 @@
 
   quotes = function () {
     return pageHead('Preventivi professionali', 'Calcoli automatici, IVA, condizioni, PDF e firma', '<button class="btn light" onclick="openPdfUpload()">↑ Carica PDF</button><button class="btn lime" onclick="openQuote()">＋ Nuovo preventivo</button>') +
-      `<div class="card"><div class="tableWrap"><table class="table"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Imponibile</th><th>Totale</th><th>Stato</th><th>Firma</th><th></th></tr></thead><tbody>${db.quotes.map((item) => `<tr><td><b>${esc(item.code)}</b></td><td>${esc(dateText(item.date))}</td><td>${esc(item.client)}</td><td>${esc(item.subject)}</td><td class="money">${euro(item.net || 0)}</td><td class="money">${euro(item.gross ?? item.net ?? 0)}</td><td>${badge(item.status)}</td><td>${item.acceptedAt ? `✓ ${esc(item.signedBy)}` : '—'}</td><td><div class="actions">${item.pdfKey ? `<button class="btn sm green" onclick="openQuotePdf('${item.id}')">Apri PDF</button>` : `<button class="btn sm light" onclick="printQuote('${item.id}')">Stampa / PDF</button>`}${!item.acceptedAt ? `<button class="btn sm green" onclick="openQuoteSignature('${item.id}')">Firma</button>` : ''}<button class="btn sm light" onclick="openQuote('${item.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('quotes','${item.id}','questo preventivo')">Elimina</button></div></td></tr>`).join('') || '<tr><td colspan="9">Nessun preventivo.</td></tr>'}</tbody></table></div></div>`;
+      `<div class="card"><div class="tableWrap"><table class="table"><thead><tr><th>Numero</th><th>Data</th><th>Cliente</th><th>Oggetto</th><th>Imponibile</th><th>Totale</th><th>Stato</th><th>Firma</th><th></th></tr></thead><tbody>${db.quotes.map((item) => `<tr><td><b>${esc(item.code)}</b></td><td>${esc(dateText(item.date))}</td><td>${esc(item.client)}</td><td>${esc(item.subject)}</td><td class="money">${quoteAmountText(item, item.net)}</td><td class="money">${quoteAmountText(item, item.gross ?? item.net)}</td><td>${badge(item.status)}</td><td>${item.acceptedAt ? `✓ ${esc(item.signedBy)}` : '—'}</td><td><div class="actions">${quoteHasStoredDocument(item) ? `<button class="btn sm green" onclick="openQuotePdf('${item.id}')">${item.storagePath ? 'Apri originale' : 'Apri PDF'}</button>` : `<button class="btn sm light" onclick="printQuote('${item.id}')">Stampa / PDF</button>`}${!item.acceptedAt ? `<button class="btn sm green" onclick="openQuoteSignature('${item.id}')">Firma</button>` : ''}<button class="btn sm light" onclick="openQuote('${item.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('quotes','${item.id}','questo preventivo')">Elimina</button></div></td></tr>`).join('') || '<tr><td colspan="9">Nessun preventivo.</td></tr>'}</tbody></table></div></div>`;
   };
 
   printQuote = function (id) {
     const item = db.quotes.find((quote) => quote.id === id);
     if (!item) return;
+    if (quoteHasStoredDocument(item)) return openQuotePdf(id);
+    if (!item.lines?.length && !Number(item.net || 0)) return alert('Questo preventivo non contiene ancora voci o importi. Apri Modifica e inserisci le lavorazioni prima di generare il PDF.');
     const lines = item.lines?.length ? item.lines : [{ description: item.subject, quantity: 1, unit: 'a corpo', unitPrice: item.net }];
     const popup = window.open('', '_blank');
     if (!popup) return alert('Consenti l’apertura della finestra per generare il PDF.');
