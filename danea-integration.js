@@ -4,6 +4,7 @@
   const SOURCE = 'Danea Interventi';
   const DANEA_STATUSES = ['Nuovo', 'Preso in carico', 'In corso', 'Posticipato', 'Completato', 'Inoltrato', 'Rifiutato'];
   const INTERNAL_STATUSES = ['Nuova', 'In attesa', 'In corso', 'Sospeso', 'Completato', 'Assegnato', 'Rifiutato', 'Archiviata'];
+  const AUTO_SITE_DANEA_STATUSES = new Set(['Nuovo', 'In corso']);
   const INTERNAL_LABELS = {
     Nuova: 'Da valutare',
     'In attesa': 'Programmato',
@@ -15,6 +16,8 @@
     Archiviata: 'Archiviato'
   };
   let daneaFilter = 'Aperti';
+  let daneaSiteSyncTimer = null;
+  const cloudCollectionsReady = new Set();
 
   const style = document.createElement('style');
   style.textContent = `
@@ -98,6 +101,180 @@
     return (db.leads || []).filter((item) => item.source === SOURCE || item.source === 'Danea');
   }
 
+  function canManageDaneaSites() {
+    return typeof isOffice === 'function' && isOffice();
+  }
+
+  function daneaSiteFor(item) {
+    return (db.sites || []).find((site) =>
+      String(site.daneaRequestId || '') === String(item.id || '') ||
+      (
+        item.daneaId &&
+        identityText(site.daneaId) === identityText(item.daneaId) &&
+        identityText(site.daneaStudio || site.studio) === identityText(item.studio)
+      )
+    );
+  }
+
+  function daneaSiteStatus(item, currentStatus = '') {
+    const daneaStatus = String(item.daneaStatus || 'Nuovo');
+    if (daneaStatus === 'Completato') return 'Completato';
+    if (daneaStatus === 'Posticipato' && currentStatus !== 'Completato') return 'Pianificato';
+    if (daneaStatus === 'In corso' && ['Nuovo', 'Pianificato', ''].includes(currentStatus)) return 'In corso';
+    if (currentStatus) return currentStatus;
+    return 'Pianificato';
+  }
+
+  function ensureDaneaClient(item) {
+    db.condomini = db.condomini || [];
+    const requestedName = String(item.client || item.name || 'Cliente da definire').trim();
+    const requestedAddress = String(item.address || '').trim();
+    let client = db.condomini.find((entry) =>
+      identityText(entry.name) === identityText(requestedName) ||
+      (requestedAddress && identityText(entry.address) === identityText(requestedAddress))
+    );
+    let created = false;
+    let changed = false;
+    if (!client) {
+      client = {
+        id: `c-danea-${hashText(`${requestedName}|${requestedAddress}`)}`,
+        name: requestedName,
+        address: requestedAddress,
+        manager: item.studio || '',
+        phone: item.phone || '',
+        email: '',
+        source: SOURCE,
+        createdAt: new Date().toISOString()
+      };
+      db.condomini.push(client);
+      created = true;
+      changed = true;
+    } else {
+      const additions = {
+        address: client.address || requestedAddress,
+        manager: client.manager || item.studio || '',
+        phone: client.phone || item.phone || ''
+      };
+      Object.entries(additions).forEach(([key, value]) => {
+        if (String(client[key] || '') !== String(value || '')) {
+          client[key] = value;
+          changed = true;
+        }
+      });
+    }
+    return { client, created, changed };
+  }
+
+  function updateDaneaSiteFields(site, fields) {
+    let changed = false;
+    Object.entries(fields).forEach(([key, value]) => {
+      if (String(site[key] ?? '') !== String(value ?? '')) {
+        site[key] = value;
+        changed = true;
+      }
+    });
+    if (changed) site.updatedAt = new Date().toISOString();
+    return changed;
+  }
+
+  function ensureDaneaSite(item) {
+    db.sites = db.sites || [];
+    let site = daneaSiteFor(item);
+    const shouldCreate = AUTO_SITE_DANEA_STATUSES.has(String(item.daneaStatus || 'Nuovo'));
+    if (!site && !shouldCreate) return { site: null, created: false, changed: false, clientCreated: false };
+
+    const clientResult = ensureDaneaClient(item);
+    const client = clientResult.client;
+    const codeLabel = item.daneaId ? `Danea ${item.daneaId}` : 'Danea';
+    const title = `${codeLabel} · ${item.title || 'Richiesta di intervento'}`;
+    const now = new Date().toISOString();
+
+    if (!site) {
+      site = {
+        id: `site-danea-${hashText(item.id || daneaKey(item))}`,
+        code: item.daneaId ? `DANEA-${item.daneaId}` : `DANEA-${hashText(item.id).toUpperCase()}`,
+        title,
+        client: client.name,
+        clientId: client.id,
+        address: item.address || client.address || '',
+        worker: '',
+        start: item.scheduledDate || String(item.receivedAt || now).slice(0, 10),
+        value: 0,
+        cost: 0,
+        status: daneaSiteStatus(item),
+        progress: 0,
+        source: SOURCE,
+        daneaManaged: true,
+        daneaRequestId: item.id,
+        daneaId: item.daneaId || '',
+        daneaStudio: item.studio || '',
+        daneaLink: safeDaneaUrl(item.sourceUrl),
+        description: item.request || item.description || '',
+        priority: item.priority || 'Normale',
+        createdAt: now,
+        updatedAt: now
+      };
+      db.sites.push(site);
+      return { site, created: true, changed: true, clientCreated: clientResult.created };
+    }
+
+    const changed = updateDaneaSiteFields(site, {
+      title: site.daneaManaged === false ? site.title : title,
+      client: client.name,
+      clientId: client.id,
+      address: item.address || client.address || site.address || '',
+      status: daneaSiteStatus(item, site.status),
+      source: SOURCE,
+      daneaManaged: site.daneaManaged !== false,
+      daneaRequestId: item.id,
+      daneaId: item.daneaId || '',
+      daneaStudio: item.studio || '',
+      daneaLink: safeDaneaUrl(item.sourceUrl),
+      description: item.request || item.description || site.description || '',
+      priority: item.priority || site.priority || 'Normale'
+    });
+    return {
+      site,
+      created: false,
+      changed: changed || clientResult.changed,
+      clientCreated: clientResult.created
+    };
+  }
+
+  function reconcileDaneaSites() {
+    const result = { created: 0, updated: 0, clientsCreated: 0, total: 0, changed: false };
+    if (!canManageDaneaSites()) return result;
+    daneaRows().forEach((item) => {
+      const existing = daneaSiteFor(item);
+      if (!existing && !AUTO_SITE_DANEA_STATUSES.has(String(item.daneaStatus || 'Nuovo'))) return;
+      const outcome = ensureDaneaSite(item);
+      if (!outcome.site) return;
+      result.total += 1;
+      if (outcome.created) result.created += 1;
+      else if (outcome.changed) result.updated += 1;
+      if (outcome.clientCreated) result.clientsCreated += 1;
+      result.changed = result.changed || outcome.changed;
+    });
+    if (result.changed) save();
+    return result;
+  }
+
+  function scheduleDaneaSiteSync() {
+    clearTimeout(daneaSiteSyncTimer);
+    daneaSiteSyncTimer = setTimeout(() => {
+      if (!cloudCollectionsReady.has('leads') || !cloudCollectionsReady.has('sites')) return;
+      const result = reconcileDaneaSites();
+      if (result.changed) render();
+    }, 140);
+  }
+
+  window.addEventListener('edilkappa:cloud-collection-synced', (event) => {
+    const remoteName = String(event.detail?.remoteName || '');
+    if (!['leads', 'sites'].includes(remoteName)) return;
+    cloudCollectionsReady.add(remoteName);
+    scheduleDaneaSiteSync();
+  });
+
   function dateTimeText(value) {
     if (!value) return '—';
     const parsed = new Date(value);
@@ -140,6 +317,7 @@
         createdAt: existing.createdAt || data.createdAt || now,
         updatedAt: now
       });
+      ensureDaneaSite(existing);
       return { item: existing, updated: true };
     }
     const item = {
@@ -151,6 +329,7 @@
       ...data
     };
     db.leads.push(item);
+    ensureDaneaSite(item);
     return { item, updated: false };
   }
 
@@ -234,8 +413,13 @@
       const duplicate = daneaRows().find((entry) => entry.id !== item.id && (entry.daneaKey === data.daneaKey || daneaKey(entry) === data.daneaKey));
       if (duplicate) throw new Error('Questa richiesta Danea è già presente nel gestionale.');
       data.updatedAt = new Date().toISOString();
-      if (existing) Object.assign(existing, data);
-      else db.leads.push({ id: `danea-${data.daneaKey.replace(/[^a-z0-9-]/gi, '').slice(0, 80)}`, createdAt: data.updatedAt, ...data });
+      let savedItem = existing;
+      if (savedItem) Object.assign(savedItem, data);
+      else {
+        savedItem = { id: `danea-${data.daneaKey.replace(/[^a-z0-9-]/gi, '').slice(0, 80)}`, createdAt: data.updatedAt, ...data };
+        db.leads.push(savedItem);
+      }
+      ensureDaneaSite(savedItem);
     });
   };
 

@@ -8,14 +8,17 @@ type DaneaTestContext = {
     leads: Array<Record<string, unknown>>;
     condomini: Array<Record<string, unknown>>;
     inspections: Array<Record<string, unknown>>;
+    sites: Array<Record<string, unknown>>;
   };
   modalHandler?: (form: { get(name: string): unknown }) => unknown;
   openDaneaImport: () => void;
   convertDaneaRequest: (id: string) => void;
+  emitCloudSync: (remoteName: string) => void;
 };
 
 function loadDaneaModule(): DaneaTestContext {
   let sequence = 0;
+  const listeners = new Map<string, Array<(event: { detail?: Record<string, unknown> }) => void>>();
   const context: Record<string, unknown> = {
     URL,
     Date,
@@ -23,12 +26,14 @@ function loadDaneaModule(): DaneaTestContext {
     String,
     console,
     setTimeout: (callback: () => void) => { callback(); return 0; },
+    clearTimeout: () => {},
     document: {
       createElement: () => ({ textContent: '' }),
       head: { appendChild: () => {} },
-      getElementById: () => ({ textContent: '', innerHTML: '' })
+      getElementById: () => ({ textContent: '', innerHTML: '' }),
+      querySelector: () => ({})
     },
-    db: { leads: [], condomini: [], inspections: [] },
+    db: { leads: [], condomini: [], inspections: [], sites: [] },
     ownerNav: [['inspections', '⌖', 'Sopralluoghi']],
     more: () => '',
     dashboard: () => '',
@@ -49,6 +54,12 @@ function loadDaneaModule(): DaneaTestContext {
     uid: (prefix: string) => `${prefix}-${++sequence}`,
     modal: (_title: string, _body: string, onSave: DaneaTestContext['modalHandler']) => {
       context.modalHandler = onSave;
+    },
+    addEventListener: (name: string, listener: (event: { detail?: Record<string, unknown> }) => void) => {
+      listeners.set(name, [...(listeners.get(name) || []), listener]);
+    },
+    emitCloudSync: (remoteName: string) => {
+      (listeners.get('edilkappa:cloud-collection-synced') || []).forEach((listener) => listener({ detail: { remoteName } }));
     }
   };
   context.window = context;
@@ -73,16 +84,16 @@ test('importa una richiesta Danea e aggiorna il duplicato senza creare una secon
   assert.ok(app.modalHandler);
 
   app.modalHandler(importForm(
-    'BALAUSTRA BALCONE\nCondominio CAPPELLETTA 28\nVia Cappelletta 28\nRichiesta di intervento (45538)\n23/07/2026 12:26',
-    'Studio DCR'
+    'INTERVENTO DI PROVA\nCondominio DEMO ALFA\nVia Fittizia 1\nRichiesta di intervento (900001)\n01/01/2000 10:00',
+    'Studio Demo'
   ));
   assert.equal(app.db.leads.length, 1);
-  assert.equal(app.db.leads[0]?.daneaId, '45538');
-  assert.equal(app.db.leads[0]?.client, 'CAPPELLETTA 28');
+  assert.equal(app.db.leads[0]?.daneaId, '900001');
+  assert.equal(app.db.leads[0]?.client, 'DEMO ALFA');
 
   app.modalHandler(importForm(
-    'BALAUSTRA BALCONE\nCondominio CAPPELLETTA 28\nVia Cappelletta 28\nIntervento n. 45538\n23/07/2026 12:26\nIn corso',
-    'STUDIODCR'
+    'INTERVENTO DI PROVA\nCondominio DEMO ALFA\nVia Fittizia 1\nIntervento n. 900001\n01/01/2000 10:00\nIn corso',
+    'STUDIODEMO'
   ));
   assert.equal(app.db.leads.length, 1);
   assert.equal(app.db.leads[0]?.status, 'In corso');
@@ -92,8 +103,8 @@ test('crea una sola volta cliente e sopralluogo collegati alla richiesta Danea',
   const app = loadDaneaModule();
   app.openDaneaImport();
   app.modalHandler?.(importForm(
-    'INFILTRAZIONE LOCALE ASCENSORE\nCondominio PADOVA 213/A\nVia Padova 213/A\nRichiesta di intervento (45539)\n16/06/2026 15:24',
-    'Studio DCR'
+    'SECONDO INTERVENTO DI PROVA\nCondominio DEMO BETA\nVia Fittizia 2\nRichiesta di intervento (900002)\n02/01/2000 11:00',
+    'Studio Demo'
   ));
 
   const requestId = String(app.db.leads[0]?.id || '');
@@ -110,8 +121,53 @@ test('rifiuta nell’importazione un collegamento esterno non ufficiale', () => 
   app.openDaneaImport();
 
   assert.throws(() => app.modalHandler?.(importForm(
-    'LAVORI STUDIO DENTISTICO\nCondominio PORPORA 32\nRichiesta di intervento (45540)',
-    'Studio DCR',
-    'https://danea.it.evil.example/intervento/45540'
+    'TERZO INTERVENTO DI PROVA\nCondominio DEMO GAMMA\nRichiesta di intervento (900003)',
+    'Studio Demo',
+    'https://danea.it.evil.example/intervento/900003'
   )), /deve appartenere a Danea o MioCondominio/);
+});
+
+test('apre automaticamente un solo cantiere per ogni richiesta Danea nuova o in corso', () => {
+  const app = loadDaneaModule();
+  app.db.leads.push(
+    {
+      id: 'danea-demo-1',
+      source: 'Danea Interventi',
+      daneaId: '900101',
+      studio: 'STUDIODEMO',
+      client: 'Condominio DEMO DELTA',
+      address: 'Via Fittizia 3 - Città Demo',
+      title: 'Intervento automatico di prova',
+      request: 'Descrizione sintetica non riferita a un intervento reale',
+      daneaStatus: 'Nuovo',
+      receivedAt: '2000-01-03T12:00:00Z'
+    },
+    {
+      id: 'danea-demo-2',
+      source: 'Danea Interventi',
+      daneaId: '900102',
+      studio: 'STUDIODEMO',
+      client: 'Condominio DEMO EPSILON',
+      title: 'Secondo intervento automatico di prova',
+      daneaStatus: 'In corso'
+    },
+    {
+      id: 'danea-demo-3',
+      source: 'Danea Interventi',
+      daneaId: '900103',
+      studio: 'STUDIODEMO',
+      client: 'Condominio DEMO ZETA',
+      title: 'Intervento di prova terminato',
+      daneaStatus: 'Completato'
+    }
+  );
+
+  app.emitCloudSync('leads');
+  app.emitCloudSync('sites');
+  app.emitCloudSync('sites');
+
+  assert.equal(app.db.sites.length, 2);
+  assert.deepEqual(app.db.sites.map((site) => site.status).sort(), ['In corso', 'Pianificato']);
+  assert.equal(new Set(app.db.sites.map((site) => site.daneaRequestId)).size, 2);
+  assert.equal(app.db.condomini.length, 2);
 });
