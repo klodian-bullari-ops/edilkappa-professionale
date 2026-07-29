@@ -4,7 +4,7 @@
   const SOURCE = 'Danea Interventi';
   const DANEA_STATUSES = ['Nuovo', 'Preso in carico', 'In corso', 'Posticipato', 'Completato', 'Inoltrato', 'Rifiutato'];
   const INTERNAL_STATUSES = ['Nuova', 'In attesa', 'In corso', 'Sospeso', 'Completato', 'Assegnato', 'Rifiutato', 'Archiviata'];
-  const AUTO_SITE_DANEA_STATUSES = new Set(['Nuovo', 'In corso']);
+  const AUTO_SITE_DANEA_STATUSES = new Set(['Nuovo', 'Preso in carico', 'In corso']);
   const INTERNAL_LABELS = {
     Nuova: 'Da valutare',
     'In attesa': 'Programmato',
@@ -88,13 +88,22 @@
   }
 
   function mappedStatus(daneaStatus) {
-    if (daneaStatus === 'Preso in carico') return 'In attesa';
+    if (daneaStatus === 'Preso in carico') return 'In corso';
     if (daneaStatus === 'In corso') return 'In corso';
     if (daneaStatus === 'Posticipato') return 'Sospeso';
     if (daneaStatus === 'Completato') return 'Completato';
     if (daneaStatus === 'Inoltrato') return 'Assegnato';
     if (daneaStatus === 'Rifiutato') return 'Rifiutato';
     return 'Nuova';
+  }
+
+  function daneaStatusFromText(value) {
+    const text = normalizeText(value);
+    if (/(incarico\s+concluso|completat|conclus[oa]|chius[oa])/.test(text)) return 'Completato';
+    if (/posticipat/.test(text)) return 'Posticipato';
+    if (/(pres[oa]\s+in\s+carico|incarico\s+accettat|concludi\s+incarico)/.test(text)) return 'Preso in carico';
+    if (/(in\s+corso|in\s+ritardo|esecuzione\s+prevista)/.test(text)) return 'In corso';
+    return 'Nuovo';
   }
 
   function daneaRows() {
@@ -120,9 +129,14 @@
     const daneaStatus = String(item.daneaStatus || 'Nuovo');
     if (daneaStatus === 'Completato') return 'Completato';
     if (daneaStatus === 'Posticipato' && currentStatus !== 'Completato') return 'Pianificato';
-    if (daneaStatus === 'In corso' && ['Nuovo', 'Pianificato', ''].includes(currentStatus)) return 'In corso';
+    if (['Preso in carico', 'In corso'].includes(daneaStatus) && currentStatus !== 'Completato') return 'In corso';
     if (currentStatus) return currentStatus;
     return 'Pianificato';
+  }
+
+  function daneaSiteProgress(item, currentProgress = 0) {
+    if (String(item.daneaStatus || '') === 'Completato') return 100;
+    return Math.min(99, Math.max(0, Number(currentProgress || 0)));
   }
 
   function ensureDaneaClient(item) {
@@ -202,7 +216,7 @@
         value: 0,
         cost: 0,
         status: daneaSiteStatus(item),
-        progress: 0,
+        progress: daneaSiteProgress(item),
         source: SOURCE,
         daneaManaged: true,
         daneaRequestId: item.id,
@@ -224,6 +238,7 @@
       clientId: client.id,
       address: item.address || client.address || site.address || '',
       status: daneaSiteStatus(item, site.status),
+      progress: daneaSiteProgress(item, site.progress),
       source: SOURCE,
       daneaManaged: site.daneaManaged !== false,
       daneaRequestId: item.id,
@@ -340,6 +355,10 @@
     const client = String(form.get('client') || '').trim();
     const daneaId = String(form.get('daneaId') || '').trim();
     const studio = String(form.get('studio') || '').trim();
+    const daneaStatus = String(form.get('daneaStatus') || 'Nuovo');
+    const status = daneaStatus !== String(item.daneaStatus || 'Nuovo')
+      ? mappedStatus(daneaStatus)
+      : String(form.get('status') || mappedStatus(daneaStatus));
     if (!daneaId && !String(item.sourceMessageId || '').trim()) {
       const duplicate = daneaRows().find((candidate) =>
         identityText(candidate.studio) === identityText(studio) &&
@@ -360,8 +379,8 @@
       address: String(form.get('address') || '').trim(),
       request: String(form.get('request') || '').trim(),
       priority: String(form.get('priority') || 'Normale'),
-      daneaStatus: String(form.get('daneaStatus') || 'Nuovo'),
-      status: String(form.get('status') || 'Nuova'),
+      daneaStatus,
+      status,
       receivedAt: Number.isNaN(receivedDate.getTime()) ? new Date().toISOString() : receivedDate.toISOString(),
       scheduledDate: String(form.get('scheduledDate') || ''),
       reference: String(form.get('reference') || '').trim(),
@@ -456,7 +475,7 @@
       address: addressLine || '',
       request: text,
       priority: /urgent|emergenz/i.test(text) ? 'Urgente' : 'Normale',
-      daneaStatus: /completat/i.test(text) ? 'Completato' : /posticipat/i.test(text) ? 'Posticipato' : /in corso/i.test(text) ? 'In corso' : 'Nuovo',
+      daneaStatus: daneaStatusFromText(text),
       receivedAt,
       scheduledDate: '',
       reference: '',
