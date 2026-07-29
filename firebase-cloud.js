@@ -582,6 +582,9 @@ function mergeSnapshot(remoteName, snapshot) {
   local.persist();
   updateAdministratorPortal();
   local.render();
+  window.dispatchEvent(new CustomEvent('edilkappa:cloud-collection-synced', {
+    detail: { remoteName, localName, count: values.length }
+  }));
   setSyncState(snapshot.metadata.fromCache && !navigator.onLine ? 'Offline' : 'Sincronizzato', snapshot.metadata.fromCache && !navigator.onLine ? '#d69b18' : '#167448');
 }
 
