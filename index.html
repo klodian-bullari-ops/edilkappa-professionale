@@ -182,7 +182,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const 
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=20').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=21').catch(()=>{});
 </script>
 <script src="./professional-extensions.js?v=17"></script>
 <script src="./business-suite.js?v=17"></script>
@@ -217,7 +217,7 @@ window.EdilKappaLocal={
 <script src="./linea-vita/vendor/jspdf.umd.min.js"></script>
 <script src="./linea-vita/vendor/jspdf.plugin.autotable.min.js"></script>
 <script src="./smart-operations.js?v=15"></script>
-<script src="./danea-integration.js?v=20"></script>
+<script src="./danea-integration.js?v=21"></script>
 <script type="module" src="./firebase-cloud.js?v=20"></script>
 </body>
 </html>
