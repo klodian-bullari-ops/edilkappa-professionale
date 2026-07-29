@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mapDaneaStatus, normalizeDaneaLink, sameDaneaRequest, stableRecordId, type DaneaStatus } from './repository.js';
+import {
+  mapDaneaSiteProgress,
+  mapDaneaSiteStatus,
+  mapDaneaStatus,
+  normalizeDaneaLink,
+  sameDaneaRequest,
+  shouldCreateDaneaSite,
+  stableRecordId,
+  type DaneaStatus
+} from './repository.js';
 
 test('mappa gli stati Danea negli stati operativi EdilKappa', () => {
   const expected: Record<DaneaStatus, string> = {
     Nuovo: 'Nuova',
-    'Preso in carico': 'In attesa',
+    'Preso in carico': 'In corso',
     'In corso': 'In corso',
     Posticipato: 'Sospeso',
     Completato: 'Completato',
@@ -16,6 +25,18 @@ test('mappa gli stati Danea negli stati operativi EdilKappa', () => {
   for (const [status, mapped] of Object.entries(expected)) {
     assert.equal(mapDaneaStatus(status as DaneaStatus), mapped);
   }
+});
+
+test('sincronizza accettazione e completamento sul cantiere Danea', () => {
+  assert.equal(shouldCreateDaneaSite('Preso in carico'), true);
+  assert.equal(mapDaneaSiteStatus('Preso in carico', 'Pianificato'), 'In corso');
+  assert.equal(mapDaneaSiteStatus('Completato', 'In corso'), 'Completato');
+  assert.equal(mapDaneaSiteProgress('Completato', 35, 'In corso'), 100);
+});
+
+test('non riapre automaticamente un cantiere Danea già completato', () => {
+  assert.equal(mapDaneaSiteStatus('In corso', 'Completato'), 'Completato');
+  assert.equal(mapDaneaSiteProgress('In corso', 100, 'Completato'), 100);
 });
 
 test('accetta soltanto collegamenti HTTPS ufficiali Danea o MioCondominio', () => {
