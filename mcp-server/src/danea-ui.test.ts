@@ -99,6 +99,30 @@ test('importa una richiesta Danea e aggiorna il duplicato senza creare una secon
   assert.equal(app.db.leads[0]?.status, 'In corso');
 });
 
+test('sincronizza incarico accettato e completato sullo stesso cantiere', () => {
+  const app = loadDaneaModule();
+  app.openDaneaImport();
+
+  app.modalHandler?.(importForm(
+    'INTERVENTO SINCRONIZZATO\nCondominio DEMO ETA\nVia Fittizia 7\nIntervento n. 900007\nIncarico in ritardo\nConcludi incarico\nCambia data',
+    'Studio Demo'
+  ));
+  assert.equal(app.db.leads[0]?.daneaStatus, 'Preso in carico');
+  assert.equal(app.db.leads[0]?.status, 'In corso');
+  assert.equal(app.db.sites.length, 1);
+  assert.equal(app.db.sites[0]?.status, 'In corso');
+
+  app.modalHandler?.(importForm(
+    'INTERVENTO SINCRONIZZATO\nCondominio DEMO ETA\nVia Fittizia 7\nIntervento n. 900007\nIncarico concluso',
+    'STUDIODEMO'
+  ));
+  assert.equal(app.db.leads.length, 1);
+  assert.equal(app.db.leads[0]?.daneaStatus, 'Completato');
+  assert.equal(app.db.sites.length, 1);
+  assert.equal(app.db.sites[0]?.status, 'Completato');
+  assert.equal(app.db.sites[0]?.progress, 100);
+});
+
 test('crea una sola volta cliente e sopralluogo collegati alla richiesta Danea', () => {
   const app = loadDaneaModule();
   app.openDaneaImport();
@@ -152,6 +176,15 @@ test('apre automaticamente un solo cantiere per ogni richiesta Danea nuova o in 
       daneaStatus: 'In corso'
     },
     {
+      id: 'danea-demo-accepted',
+      source: 'Danea Interventi',
+      daneaId: '900104',
+      studio: 'STUDIODEMO',
+      client: 'Condominio DEMO THETA',
+      title: 'Incarico accettato automaticamente',
+      daneaStatus: 'Preso in carico'
+    },
+    {
       id: 'danea-demo-3',
       source: 'Danea Interventi',
       daneaId: '900103',
@@ -166,8 +199,8 @@ test('apre automaticamente un solo cantiere per ogni richiesta Danea nuova o in 
   app.emitCloudSync('sites');
   app.emitCloudSync('sites');
 
-  assert.equal(app.db.sites.length, 2);
-  assert.deepEqual(app.db.sites.map((site) => site.status).sort(), ['In corso', 'Pianificato']);
-  assert.equal(new Set(app.db.sites.map((site) => site.daneaRequestId)).size, 2);
-  assert.equal(app.db.condomini.length, 2);
+  assert.equal(app.db.sites.length, 3);
+  assert.deepEqual(app.db.sites.map((site) => site.status).sort(), ['In corso', 'In corso', 'Pianificato']);
+  assert.equal(new Set(app.db.sites.map((site) => site.daneaRequestId)).size, 3);
+  assert.equal(app.db.condomini.length, 3);
 });
