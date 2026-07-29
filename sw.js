@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v18-danea-transfernow`;
+const CACHE = `${CACHE_PREFIX}v19-foto-rapide`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "./danea-integration.js",
   "./firebase-cloud.js",
   "./sharing-integration.js",
+  "./quick-site-photos.js",
   "./richiesta.html",
   "./public-request.js",
   "./assets/icona-edilkappa.svg",

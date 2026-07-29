@@ -229,7 +229,7 @@
   };
 
   window.reportsView = function () {
-    const rows = db.reports.slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const rows = db.reports.filter((item) => item.photoOnly !== true).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const hours = rows.reduce((sum, item) => sum + Number(item.hours || 0), 0);
     const photos = rows.reduce((sum, item) => sum + Number(item.photoCount || 0), 0);
     return pageHead('Rapportini completi', 'Attività, fotografie, costi e firme dei clienti', '<button class="btn lime" onclick="go(\'report\')">＋ Nuovo rapportino</button>') +
@@ -550,7 +550,7 @@
 
   const originalSiteRow = siteRow;
   siteRow = function (site) {
-    const count = db.reports.filter((item) => item.site === site.id).length;
+    const count = db.reports.filter((item) => item.site === site.id && item.photoOnly !== true).length;
     return originalSiteRow(site).replace('</small>', `<br><b>${count} rapportin${count === 1 ? 'o' : 'i'}</b></small>`);
   };
 
