@@ -378,7 +378,10 @@
       return true;
     });
     const active = all.filter((item) => ['In attesa', 'In corso', 'Sospeso', 'Assegnato'].includes(item.status)).length;
-    return pageHead('Richieste Danea', 'Incarichi ricevuti dagli amministratori e gestione interna EdilKappa', '<button class="btn light" onclick="openDaneaImport()">↓ Importa testo/e-mail</button><button class="btn lime" onclick="openDaneaRequest()">＋ Nuova manuale</button>') +
+    const transferNowSettings = window.EdilKappaCloud?.currentProfile?.role === 'owner'
+      ? '<button class="btn light" onclick="openTransferNowSettings()">⚙ TransferNow</button>'
+      : '';
+    return pageHead('Richieste Danea', 'Incarichi ricevuti dagli amministratori e gestione interna EdilKappa', `${transferNowSettings}<button class="btn light" onclick="openDaneaImport()">↓ Importa testo/e-mail</button><button class="btn lime" onclick="openDaneaRequest()">＋ Nuova manuale</button>`) +
       `<div class="notice daneaSecurity"><span>🔒</span><div><strong>Archivio riservato.</strong> I collegamenti alle pratiche Danea sono disponibili soltanto a Titolare e Ufficio.</div></div>
       <div style="height:14px"></div>
       <div class="grid stats">${stat('Da valutare', all.filter((item) => item.status === 'Nuova').length, '📥')}${stat('In gestione', active, '🔧')}${stat('Completate', all.filter((item) => item.status === 'Completato').length, '✓')}${stat('Totali', all.length, '▦')}</div>
@@ -441,3 +444,11 @@
   initRoles();
   render();
 })();
+
+if (!document.querySelector('script[data-edilkappa-sharing]')) {
+  const sharingScript = document.createElement('script');
+  sharingScript.type = 'module';
+  sharingScript.src = './sharing-integration.js';
+  sharingScript.dataset.edilkappaSharing = 'true';
+  document.head.appendChild(sharingScript);
+}
