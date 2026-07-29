@@ -288,3 +288,7 @@ function queueEnhancement() {
 new MutationObserver(queueEnhancement).observe(document.body, { childList: true, subtree: true });
 window.addEventListener('load', queueEnhancement);
 queueEnhancement();
+
+import('./quick-site-photos.js').catch((error) => {
+  console.error('Caricamento foto rapido non disponibile:', error);
+});
