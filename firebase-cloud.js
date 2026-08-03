@@ -545,6 +545,7 @@ function parseEnvelope(snapshot) {
   item.assignedTeamId = data.assignedTeamId;
   item.workerUid = data.workerUid;
   item.ownerUid = data.ownerUid;
+  item.__cloudUpdatedAt = data.updatedAt?.toDate?.().toISOString?.() || '';
   if (snapshot.ref.parent.id === 'reports' || snapshot.ref.parent.id === 'timesheets') item.hours = data.workHours;
   if (snapshot.ref.parent.id === 'reports') item.material = data.materialAmount;
   if ('progress' in item) item.progress = data.progress;
