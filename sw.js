@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v24-layout-agenda-verticale`;
+const CACHE = `${CACHE_PREFIX}v25-completati-avvisi-foto`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -12,6 +12,7 @@ const APP_SHELL = [
   "./client-archive.js",
   "./smart-operations.js",
   "./danea-integration.js",
+  "./completion-center.js",
   "./firebase-cloud.js",
   "./sharing-integration.js",
   "./quick-site-photos.js",
@@ -69,5 +70,20 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
     )
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || "./";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (windows) => {
+      const absoluteTarget = new URL(target, self.location.href).href;
+      for (const client of windows) {
+        if ("navigate" in client) await client.navigate(absoluteTarget);
+        if ("focus" in client) return client.focus();
+      }
+      return self.clients.openWindow ? self.clients.openWindow(absoluteTarget) : undefined;
+    })
   );
 });
