@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v25-completati-avvisi-foto`;
+const CACHE = `${CACHE_PREFIX}v26-ricerca-apertura-completa`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const APP_SHELL = [
   "./professional-extensions.js",
   "./business-suite.js",
   "./client-archive.js",
+  "./direct-search.js",
   "./smart-operations.js",
   "./danea-integration.js",
   "./completion-center.js",
