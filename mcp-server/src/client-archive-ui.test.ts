@@ -20,8 +20,13 @@ test('la scheda cliente raggruppa i file per singolo intervento', () => {
 test('preventivi, documenti, foto e video si possono aggiungere dalla scheda intervento', () => {
   assert.ok(archiveUi.includes('openQuoteForIntervention'));
   assert.ok(archiveUi.includes('openDocumentForIntervention'));
+  assert.ok(archiveUi.includes('openSiteForIntervention'));
   assert.ok(archiveUi.includes('＋ Preventivo PDF'));
   assert.ok(archiveUi.includes('＋ Documento / Foto / Video'));
+  assert.ok(archiveUi.includes('＋ Cantiere'));
+  assert.ok(archiveUi.includes('Foto cantiere'));
+  assert.ok(archiveUi.includes('Operai e ore'));
+  assert.ok(archiveUi.includes('Cronologia intervento'));
 });
 
 test('gli interventi vengono sincronizzati come cartelle nell’archivio documenti protetto', () => {
@@ -55,7 +60,12 @@ test('la scheda mostra soltanto i file collegati al relativo intervento', () => 
     documents: [
       { id: 'doc-a', clientId: 'cliente-1', client: 'Condominio Prova', interventionId: 'intervento-a', title: 'Relazione tetto', category: 'Relazione tecnica', fileName: 'tetto.pdf' }
     ],
-    drone: []
+    drone: [],
+    inspections: [{ id: 'sop-a', clientId: 'cliente-1', client: 'Condominio Prova', interventionId: 'intervento-a', date: '2026-07-26', time: '09:00', status: 'Pianificato', problem: 'Controllo tetto' }],
+    sites: [{ id: 'site-a', clientId: 'cliente-1', client: 'Condominio Prova', interventionId: 'intervento-a', title: 'Cantiere tetto', address: 'Via Prova 1', worker: 'team-1', start: '2026-07-27', status: 'In corso', progress: 50 }],
+    reports: [{ id: 'report-a', clientId: 'cliente-1', client: 'Condominio Prova', interventionId: 'intervento-a', site: 'site-a', workDate: '2026-07-28', workerName: 'Ajet', hours: 8, photoCount: 3, photos: [{ key: 'uno' }, { key: 'due' }, { key: 'tre' }] }],
+    timesheets: [{ id: 'hours-a', clientId: 'cliente-1', interventionId: 'intervento-a', siteId: 'site-a', date: '2026-07-28', worker: 'worker-1', workerName: 'Ajet', team: 'team-1', teamName: 'Squadra A', hours: 8, job: 'Cantiere tetto · Condominio Prova' }],
+    teams: [{ id: 'team-1', name: 'Squadra A' }]
   };
   const context = {
     db,
@@ -105,7 +115,14 @@ test('la scheda mostra soltanto i file collegati al relativo intervento', () => 
   const coverSection = html.slice(coverStart, facadeStart);
   const facadeSection = html.slice(facadeStart);
   assert.match(coverSection, /PREV-A/);
+  assert.match(coverSection, /Cantiere tetto/);
+  assert.match(coverSection, /Ajet/);
+  assert.match(coverSection, /8\.0 ore/);
+  assert.match(coverSection, /3 fotografie collegate/);
+  assert.match(coverSection, /Cronologia intervento/);
   assert.doesNotMatch(coverSection, /PREV-B/);
   assert.match(facadeSection, /PREV-B/);
+  assert.doesNotMatch(facadeSection, /Cantiere tetto/);
+  assert.doesNotMatch(facadeSection, /Ajet/);
   assert.doesNotMatch(facadeSection, /PREV-A/);
 });
