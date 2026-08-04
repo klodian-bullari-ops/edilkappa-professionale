@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v27-ricerca-con-azioni`;
+const CACHE = `${CACHE_PREFIX}v28-foto-storiche-cantiere`;
 const APP_SHELL = [
   "./",
   "./index.html",
