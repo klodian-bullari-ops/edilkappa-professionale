@@ -184,12 +184,12 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const 
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=28').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=29').catch(()=>{});
 </script>
 <script src="./professional-extensions.js?v=17"></script>
 <script src="./business-suite.js?v=17"></script>
 <script src="./client-archive.js?v=18"></script>
-<script src="./direct-search.js?v=3"></script>
+<script src="./direct-search.js?v=4"></script>
 <script>
 window.EdilKappaLocal={
   getDB:()=>db,
