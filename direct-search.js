@@ -110,7 +110,10 @@
     }
     if (command === 'file') return window.openBusinessDocument?.(id);
     if (command === 'photo') {
-      if (action === 'site') return window.openQuickPhotoAlbums?.(id) || window.openQuickPhotoUpload?.(id);
+      if (action === 'site') {
+        if (typeof window.openQuickPhotoAlbums === 'function') return window.openQuickPhotoAlbums(id);
+        return window.openQuickPhotoUpload?.(id);
+      }
       if (action === 'quote') return window.manageQuoteMedia?.(id);
       if (action === 'drone') return window.manageDroneMedia?.(id);
       if (['lifeline', 'roof', 'drain'].includes(action)) return window.openSearchAttachments(action, id);
