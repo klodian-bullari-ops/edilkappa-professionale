@@ -3,10 +3,10 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .searchResultRow{width:100%;appearance:none;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s}
-    .searchResultRow:hover{transform:translateY(-1px);border-color:var(--green);box-shadow:0 8px 22px rgba(17,17,17,.08)}
-    .searchResultRow:focus-visible{outline:3px solid rgba(244,196,0,.65);outline-offset:2px}
-    .searchResultOpen{width:35px;height:35px;border-radius:11px;background:var(--green);color:#fff;display:grid;place-items:center;font-size:24px;font-weight:850;flex:none}
+    .searchResultRow{width:100%;align-items:center;flex-wrap:wrap;transition:border-color .15s,box-shadow .15s}
+    .searchResultRow:hover{border-color:var(--green);box-shadow:0 8px 22px rgba(17,17,17,.08)}
+    .searchResultActions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+    @media(max-width:760px){.searchResultActions{width:100%;margin-left:54px;justify-content:flex-start}.searchResultActions .btn{flex:1 1 auto}}
   `;
   document.head.appendChild(style);
 
@@ -58,13 +58,104 @@
   };
 
   window.openSearchResultFromElement = function (element) {
-    const data = element?.dataset || {};
+    const data = element?.closest?.('.searchResultRow')?.dataset || element?.dataset || {};
     return openSearchResult(data.action || '', data.id || '', data.clientId || '', data.interventionId || '');
   };
 
+  function attachmentItem(action, id) {
+    const collections = { lifeline: 'lifelines', roof: 'roofs', drain: 'drains' };
+    return (db[collections[action]] || []).find((item) => String(item.id) === String(id));
+  }
+
+  window.openSearchAttachments = function (action, id) {
+    const item = attachmentItem(action, id);
+    if (!item) return alert('Elemento non più disponibile.');
+    const adders = { lifeline: 'addLifelineFiles', roof: 'addRoofFiles', drain: 'addDrainFiles' };
+    const files = item.files || [];
+    const content = document.getElementById('modalContent');
+    const dialog = document.getElementById('modal');
+    if (!content || !dialog) return;
+    content.innerHTML = `<div class="modalHead"><div><h3>Foto e documenti</h3><small>${esc(item.client || '')} · ${esc(item.name || item.type || '')}</small></div><button class="close" type="button" onclick="closeModal()">×</button></div><div class="modalBody"><div class="actions" style="margin-bottom:14px"><button class="btn lime" type="button" onclick="closeModal();${adders[action]}('${esc(id)}')">＋ Aggiungi foto/documenti</button></div><div class="list">${files.map((file) => `<button class="row" type="button" onclick="openStoredFile('${esc(file.key)}')"><span class="rowIcon">${String(file.type || '').startsWith('image/') ? '📷' : '📄'}</span><span class="rowBody"><b>${esc(file.name || 'Allegato')}</b><small>${esc(file.type || '')}</small></span></button>`).join('') || '<div class="empty">Nessuna foto o documento caricato.</div>'}</div></div><div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
+    dialog.showModal();
+  };
+
+  function deleteSearchResult(action, id) {
+    const targets = {
+      client: ['condomini', 'questo cliente'],
+      intervention: ['interventions', 'questo intervento'],
+      inspection: ['inspections', 'questo sopralluogo'],
+      quote: ['quotes', 'questo preventivo'],
+      document: ['documents', 'questo documento'],
+      site: ['sites', 'questo cantiere'],
+      drone: ['drone', 'questa videoispezione'],
+      lifeline: ['lifelines', 'questa linea vita'],
+      roof: ['roofs', 'questo intervento'],
+      drain: ['drains', 'questo intervento'],
+      danea: ['leads', 'questa richiesta Danea']
+    };
+    if (action === 'team') return deleteTeam(id);
+    const target = targets[action];
+    if (target) return deleteItem(target[0], id, target[1]);
+  }
+
+  window.runSearchResultAction = function (element, command) {
+    const data = element?.closest?.('.searchResultRow')?.dataset || {};
+    const action = data.action || '', id = data.id || '';
+    if (command === 'open') return openSearchResult(action, id, data.clientId || '', data.interventionId || '');
+    if (command === 'delete') return deleteSearchResult(action, id);
+    if (command === 'calendar') return downloadInspectionCalendar(id);
+    if (command === 'pdf') {
+      const quote = (db.quotes || []).find((item) => String(item.id) === String(id));
+      return quote?.storagePath || quote?.pdfKey ? openQuotePdf(id) : printQuote(id);
+    }
+    if (command === 'file') return window.openBusinessDocument?.(id);
+    if (command === 'photo') {
+      if (action === 'site') return window.openQuickPhotoAlbums?.(id) || window.openQuickPhotoUpload?.(id);
+      if (action === 'quote') return window.manageQuoteMedia?.(id);
+      if (action === 'drone') return window.manageDroneMedia?.(id);
+      if (['lifeline', 'roof', 'drain'].includes(action)) return window.openSearchAttachments(action, id);
+      return openSearchResult(action, id, data.clientId || '', data.interventionId || '');
+    }
+    if (command === 'update') return action === 'roof' ? window.updateRoofTask(id) : window.updateDrainTask(id);
+    if (command === 'external') return window.openDaneaLink?.(id);
+    if (command === 'convert') return window.convertDaneaRequest?.(id);
+    if (command === 'edit') {
+      const editors = {
+        client: 'openCondo', intervention: 'openIntervention', inspection: 'openInspection', quote: 'openQuote',
+        document: 'openCompanyDocument', site: 'openSite', team: 'openTeam', drone: 'openDrone',
+        lifeline: 'openLifeline', roof: 'openRoof', drain: 'openDrain', danea: 'openDaneaRequest'
+      };
+      const editor = window[editors[action]];
+      return action === 'intervention' ? editor?.(id, data.clientId || '') : editor?.(id);
+    }
+  };
+
+  function actionButton(command, label, color = 'light') {
+    return `<button type="button" class="btn sm ${color}" onclick="runSearchResultAction(this,'${command}')">${label}</button>`;
+  }
+
+  function resultActions(row) {
+    const edit = actionButton('edit', 'Modifica');
+    const remove = isOffice() ? actionButton('delete', 'Elimina', 'red') : '';
+    switch (row.action) {
+      case 'client': return actionButton('open', 'Apri tutto', 'green') + edit + remove;
+      case 'intervention': return actionButton('open', 'Apri tutto', 'green') + actionButton('photo', '📷 Foto/Documenti') + edit + remove;
+      case 'inspection': return actionButton('calendar', '📅 Calendario', 'green') + edit + remove;
+      case 'quote': return actionButton('pdf', row.item.storagePath || row.item.pdfKey ? 'Apri PDF' : 'Genera PDF', 'green') + actionButton('photo', `📷 Foto/Video${row.mediaCount ? ` (${row.mediaCount})` : ''}`) + edit + remove;
+      case 'document': return actionButton('file', 'Apri', 'green') + edit + remove;
+      case 'site': return actionButton('photo', `📷 Foto${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove;
+      case 'team': return edit + remove;
+      case 'drone': return actionButton('photo', `🎬 Video/Foto${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove;
+      case 'lifeline': return actionButton('photo', `📷 Foto/Documenti${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove;
+      case 'roof': return actionButton('photo', `📷 Foto/Documenti${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + actionButton('update', 'Aggiorna') + edit + remove;
+      case 'drain': return actionButton('photo', `📷 Foto/Documenti${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + actionButton('update', 'Aggiorna') + edit + remove;
+      case 'danea': return (row.item.sourceUrl ? actionButton('external', 'Apri in Danea', 'green') : '') + actionButton('convert', 'Crea sopralluogo') + edit + remove;
+      default: return actionButton('open', 'Apri', 'green');
+    }
+  }
+
   function resultRow(row) {
-    const label = `Apri tutti i dettagli di ${row.title}`;
-    return `<button type="button" class="row searchResultRow" data-action="${esc(row.action)}" data-id="${esc(row.id)}" data-client-id="${esc(row.clientId || '')}" data-intervention-id="${esc(row.interventionId || '')}" onclick="openSearchResultFromElement(this)" aria-label="${esc(label)}"><span class="rowIcon">${row.icon}</span><span class="rowBody"><span class="pill blue">${esc(row.type)}</span><b style="margin-top:5px">${esc(row.title)}</b><small>${esc(row.meta)}</small></span><span class="searchResultOpen" aria-hidden="true">›</span></button>`;
+    return `<section class="row searchResultRow" data-action="${esc(row.action)}" data-id="${esc(row.id)}" data-client-id="${esc(row.clientId || '')}" data-intervention-id="${esc(row.interventionId || '')}"><span class="rowIcon">${row.icon}</span><span class="rowBody"><span class="pill blue">${esc(row.type)}</span><b style="margin-top:5px">${esc(row.title)}</b><small>${esc(row.meta)}</small></span><span class="searchResultActions">${resultActions(row)}</span></section>`;
   }
 
   function buildSearchResults() {
@@ -82,7 +173,9 @@
           clientId: client?.id || '',
           interventionId: config.interventionId ? config.interventionId(item) : (item.interventionId || ''),
           title: config.title(item),
-          meta: config.meta(item)
+          meta: config.meta(item),
+          item,
+          mediaCount: config.mediaCount ? config.mediaCount(item) : ((item.media || item.files || []).length || 0)
         });
       });
 
@@ -92,7 +185,7 @@
       add(db.inspections, { type: 'Sopralluogo', icon: '📅', action: 'inspection', title: (item) => item.client, meta: (item) => `${item.date || ''} · ${item.type || ''} · ${item.address || ''}` });
       add(db.quotes, { type: 'Preventivo', icon: '📄', action: 'quote', title: (item) => `${item.code || 'Preventivo'} · ${item.client || ''}`, meta: (item) => `${item.subject || ''} · ${item.status || ''}` });
       add(db.documents, { type: 'Documento', icon: '📁', action: 'document', title: (item) => item.title || item.fileName || 'Documento', meta: (item) => `${item.client || ''} · ${item.category || ''} · ${item.fileName || ''}` });
-      add(db.sites, { type: 'Cantiere', icon: '🏗️', action: 'site', title: (item) => item.title, meta: (item) => `${item.client || ''} · ${item.address || ''}` });
+      add(db.sites, { type: 'Cantiere', icon: '🏗️', action: 'site', title: (item) => item.title, meta: (item) => `${item.client || ''} · ${item.address || ''}`, mediaCount: (item) => (db.reports || []).filter((report) => report.photoOnly === true && String(report.site || report.siteId) === String(item.id)).reduce((total, report) => total + Number(report.photoCount || report.photos?.length || 0), 0) });
       add(WORKERS, { type: 'Squadra', icon: '👥', action: 'team', client: () => null, title: (item) => item.name, meta: (item) => `${item.member1 || ''} · ${item.member2 || ''}` });
       add(db.drone, { type: 'Drone', icon: '🚁', action: 'drone', title: (item) => item.client, meta: (item) => `${item.date || ''} · ${item.area || ''}` });
       add(db.lifelines, { type: 'Linea vita', icon: '⚓', action: 'lifeline', title: (item) => `${item.name || 'Linea vita'} · ${item.client || ''}`, meta: (item) => item.address || '' });
@@ -101,7 +194,7 @@
       add((db.leads || []).filter((item) => item.source === 'Danea Interventi'), { type: 'Richiesta Danea', icon: '🔧', action: 'danea', title: (item) => item.title || 'Richiesta di intervento', meta: (item) => `${item.client || item.name || ''} · ${item.studio || ''} · ${item.status || ''}` });
     } else {
       const teamId = currentTeamId();
-      add((db.sites || []).filter((item) => item.worker === teamId), { type: 'Cantiere', icon: '🏗️', action: 'site', title: (item) => item.title, meta: (item) => `${item.client || ''} · ${item.address || ''}` });
+      add((db.sites || []).filter((item) => item.worker === teamId), { type: 'Cantiere', icon: '🏗️', action: 'site', title: (item) => item.title, meta: (item) => `${item.client || ''} · ${item.address || ''}`, mediaCount: (item) => (db.reports || []).filter((report) => report.photoOnly === true && String(report.site || report.siteId) === String(item.id)).reduce((total, report) => total + Number(report.photoCount || report.photos?.length || 0), 0) });
       add((db.roofs || []).filter((item) => item.worker === teamId), { type: 'Tetti e gronde', icon: '🏠', action: 'roof', title: (item) => item.type, meta: (item) => `${item.client || ''} · ${item.address || ''}` });
       add((db.drains || []).filter((item) => item.worker === teamId), { type: 'Pozzetti e tombini', icon: '🕳️', action: 'drain', title: (item) => item.type, meta: (item) => `${item.client || ''} · ${item.address || ''}` });
     }
@@ -111,7 +204,7 @@
 
   searchResults = function () {
     const rows = buildSearchResults();
-    const subtitle = `${rows.length} risultati per “${esc(searchQuery)}” · Tocca un risultato per aprire tutti i dettagli`;
+    const subtitle = `${rows.length} risultati per “${esc(searchQuery)}” · Foto, modifica, elimina e gli altri comandi sono disponibili qui`;
     const empty = isOffice()
       ? 'Nessun risultato. Prova con cliente, indirizzo, intervento, preventivo o documento.'
       : 'Nessun incarico trovato nella tua squadra.';
