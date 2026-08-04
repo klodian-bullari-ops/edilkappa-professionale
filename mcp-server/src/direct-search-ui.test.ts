@@ -100,8 +100,8 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./direct-search.js?v=4'));
-  assert.ok(indexHtml.includes('./client-archive.js?v=18'));
-  assert.ok(indexHtml.includes('./sw.js?v=29'));
-  assert.ok(serviceWorker.includes('v29-apertura-galleria-foto'));
+  assert.ok(indexHtml.includes('./client-archive.js?v=19'));
+  assert.ok(indexHtml.includes('./sw.js?v=30'));
+  assert.ok(serviceWorker.includes('v30-interventi-automatici'));
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });
