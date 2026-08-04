@@ -16,6 +16,7 @@
     .archiveFileIcon{width:39px;height:39px;display:grid;place-items:center;border-radius:11px;background:#fff;font-size:19px;flex:none}
     .archiveFileBody{min-width:0;flex:1}.archiveFileBody b,.archiveFileBody small{display:block}.archiveFileBody b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.archiveFileBody small{color:var(--muted);margin-top:3px}
     .clientNameButton{border:0;background:transparent;padding:0;color:var(--green);font-weight:850;text-align:left}
+    .archiveFocus{outline:4px solid rgba(244,196,0,.55);box-shadow:0 0 0 8px rgba(244,196,0,.16),var(--shadow);transition:outline-color .25s,box-shadow .25s}
     @media(max-width:620px){.clientArchiveHero h2{font-size:25px}.archiveFiles{grid-template-columns:1fr}}
   `;
   document.head.appendChild(style);
@@ -80,10 +81,20 @@
     return prepared;
   };
 
-  window.openClientArchive = function (clientId) {
+  function revealArchiveFocus(focus) {
+    if (!focus) return;
+    const target = document.getElementById(focus.itemId ? `archive-item-${focus.itemId}` : `intervention-${focus.interventionId}`);
+    if (!target) return;
+    target.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    target.classList?.add?.('archiveFocus');
+    setTimeout(() => target.classList?.remove?.('archiveFocus'), 2600);
+  }
+
+  window.openClientArchive = function (clientId, focus = null) {
     selectedClientId = clientId;
     view = 'clientArchive';
     render();
+    if (focus?.interventionId || focus?.itemId) setTimeout(() => revealArchiveFocus(focus), 60);
   };
 
   window.openIntervention = function (id, clientId = selectedClientId) {
@@ -163,15 +174,15 @@
   function archiveItem(kind, item, unassigned) {
     if (kind === 'quote') {
       const mediaCount = Array.isArray(item.media) ? item.media.length : 0;
-      return `<div class="archiveFile"><div class="archiveFileIcon">📄</div><div class="archiveFileBody"><b>${esc(item.code || 'Preventivo')}</b><small>${esc(item.subject || item.fileName || '')}<br>${esc(item.date || '')} · ${esc(item.status || 'Bozza')}${mediaCount ? ` · ${mediaCount} foto/video` : ''}</small><div class="actions" style="margin-top:9px">${item.storagePath || item.pdfKey ? `<button class="btn sm green" onclick="openQuotePdf('${item.id}')">Apri</button>` : ''}<button class="btn sm light" onclick="manageQuoteMedia('${item.id}')">Foto/Video</button>${unassigned ? `<button class="btn sm light" onclick="assignArchiveItem('quotes','${item.id}')">Assegna</button>` : ''}</div></div></div>`;
+      return `<div class="archiveFile" id="archive-item-${esc(item.id)}"><div class="archiveFileIcon">📄</div><div class="archiveFileBody"><b>${esc(item.code || 'Preventivo')}</b><small>${esc(item.subject || item.fileName || '')}<br>${esc(item.date || '')} · ${esc(item.status || 'Bozza')}${mediaCount ? ` · ${mediaCount} foto/video` : ''}</small><div class="actions" style="margin-top:9px">${item.storagePath || item.pdfKey ? `<button class="btn sm green" onclick="openQuotePdf('${item.id}')">Apri</button>` : ''}<button class="btn sm light" onclick="manageQuoteMedia('${item.id}')">Foto/Video</button>${unassigned ? `<button class="btn sm light" onclick="assignArchiveItem('quotes','${item.id}')">Assegna</button>` : ''}</div></div></div>`;
     }
     if (kind === 'document') {
       const type = String(item.fileType || '');
       const icon = type.startsWith('video/') ? '🎬' : type.startsWith('image/') ? '🖼️' : '📁';
-      return `<div class="archiveFile"><div class="archiveFileIcon">${icon}</div><div class="archiveFileBody"><b>${esc(item.title || item.fileName || 'Documento')}</b><small>${esc(item.category || 'Documento')}<br>${esc(item.fileName || '')}</small><div class="actions" style="margin-top:9px"><button class="btn sm green" onclick="openBusinessDocument('${item.id}')">Apri</button>${unassigned ? `<button class="btn sm light" onclick="assignArchiveItem('documents','${item.id}')">Assegna</button>` : ''}</div></div></div>`;
+      return `<div class="archiveFile" id="archive-item-${esc(item.id)}"><div class="archiveFileIcon">${icon}</div><div class="archiveFileBody"><b>${esc(item.title || item.fileName || 'Documento')}</b><small>${esc(item.category || 'Documento')}<br>${esc(item.fileName || '')}</small><div class="actions" style="margin-top:9px"><button class="btn sm green" onclick="openBusinessDocument('${item.id}')">Apri</button>${unassigned ? `<button class="btn sm light" onclick="assignArchiveItem('documents','${item.id}')">Assegna</button>` : ''}</div></div></div>`;
     }
     const mediaCount = Array.isArray(item.media) ? item.media.length : 0;
-    return `<div class="archiveFile"><div class="archiveFileIcon">🚁</div><div class="archiveFileBody"><b>${esc(item.area || 'Videoispezione drone')}</b><small>${esc(item.date || '')} · ${esc(item.status || '')}<br>${mediaCount} foto/video</small><div class="actions" style="margin-top:9px"><button class="btn sm green" onclick="manageDroneMedia('${item.id}')">Apri media</button>${unassigned ? `<button class="btn sm light" onclick="assignArchiveItem('drone','${item.id}')">Assegna</button>` : ''}</div></div></div>`;
+    return `<div class="archiveFile" id="archive-item-${esc(item.id)}"><div class="archiveFileIcon">🚁</div><div class="archiveFileBody"><b>${esc(item.area || 'Videoispezione drone')}</b><small>${esc(item.date || '')} · ${esc(item.status || '')}<br>${mediaCount} foto/video</small><div class="actions" style="margin-top:9px"><button class="btn sm green" onclick="manageDroneMedia('${item.id}')">Apri media</button>${unassigned ? `<button class="btn sm light" onclick="assignArchiveItem('drone','${item.id}')">Assegna</button>` : ''}</div></div></div>`;
   }
 
   function groupedFiles(rows, unassigned = false) {
@@ -187,7 +198,7 @@
   function interventionCard(client, item) {
     const rows = rowsFor(client, item.id);
     const total = rows.quotes.length + rows.documents.length + rows.drone.length;
-    return `<section class="card archiveIntervention"><div class="cardHead"><div><span class="pill blue">${esc(item.category || 'Intervento')}</span><h3 style="margin:9px 0 3px">${esc(item.title)}</h3><small>${esc(item.date || 'Data da definire')} · ${total} element${total === 1 ? 'o' : 'i'}</small></div>${badge(item.status || 'Pianificato')}</div>
+    return `<section class="card archiveIntervention" id="intervention-${esc(item.id)}"><div class="cardHead"><div><span class="pill blue">${esc(item.category || 'Intervento')}</span><h3 style="margin:9px 0 3px">${esc(item.title)}</h3><small>${esc(item.date || 'Data da definire')} · ${total} element${total === 1 ? 'o' : 'i'}</small></div>${badge(item.status || 'Pianificato')}</div>
       ${item.notes ? `<p class="company">${esc(item.notes)}</p>` : ''}
       <div class="actions"><button class="btn sm lime" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm green" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica intervento</button></div>
       ${groupedFiles(rows)}
