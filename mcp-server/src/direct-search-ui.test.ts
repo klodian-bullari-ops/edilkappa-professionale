@@ -9,8 +9,10 @@ const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf
 
 function testContext() {
   const opened: Array<{ clientId: string; focus: { interventionId: string; itemId: string } }> = [];
+  const photoAlbums: string[] = [];
   const windowObject: Record<string, unknown> = {
-    openClientArchive: (clientId: string, focus: { interventionId: string; itemId: string }) => opened.push({ clientId, focus })
+    openClientArchive: (clientId: string, focus: { interventionId: string; itemId: string }) => opened.push({ clientId, focus }),
+    openQuickPhotoAlbums: (siteId: string) => photoAlbums.push(siteId)
   };
   const context = {
     window: windowObject,
@@ -25,7 +27,9 @@ function testContext() {
       inspections: [],
       quotes: [{ id: 'preventivo-1', clientId: 'cliente-1', interventionId: 'intervento-1', client: 'Condominio Prova', code: 'PREV-1', subject: 'Preventivo tetto', status: 'Bozza' }],
       documents: [{ id: 'documento-1', clientId: 'cliente-1', interventionId: 'intervento-1', client: 'Condominio Prova', title: 'Relazione tetto', category: 'Relazione tecnica', fileName: 'tetto.pdf' }],
-      sites: [], drone: [], lifelines: [], roofs: [], drains: [], leads: []
+      sites: [{ id: 'cantiere-1', title: 'Sostituzione tubo tetto', client: 'Condominio Prova', address: 'Via Prova 1' }],
+      reports: [{ id: 'foto-1', photoOnly: true, site: 'cantiere-1', photoCount: 3 }],
+      drone: [], lifelines: [], roofs: [], drains: [], leads: []
     },
     WORKERS: [],
     searchQuery: 'tetto',
@@ -38,19 +42,34 @@ function testContext() {
     go: () => undefined,
     openSearchResult: () => undefined,
     searchResults: () => '',
-    alert: () => undefined
+    alert: () => undefined,
+    downloadInspectionCalendar: () => undefined,
+    openQuotePdf: () => undefined,
+    printQuote: () => undefined,
+    deleteItem: () => undefined,
+    deleteTeam: () => undefined
   };
   vm.runInNewContext(directSearch, context);
-  return { context, windowObject, opened };
+  return { context, windowObject, opened, photoAlbums };
 }
 
-test('tutta la riga del risultato apre direttamente i dettagli senza il pulsante Apri scheda', () => {
+test('ogni risultato mostra direttamente i comandi disponibili', () => {
   const { context } = testContext();
   const html = context.searchResults();
   assert.match(html, /searchResultRow/);
-  assert.match(html, /Tocca un risultato per aprire tutti i dettagli/);
+  assert.match(html, /Foto, modifica, elimina e gli altri comandi sono disponibili qui/);
   assert.doesNotMatch(html, />Apri scheda</);
+  assert.match(html, /📷 Foto \(3\)/);
+  assert.match(html, />Modifica</);
+  assert.match(html, />Elimina</);
   assert.match(html, /Relazione tetto/);
+});
+
+test('il comando Foto del cantiere apre direttamente gli album fotografici', () => {
+  const { windowObject, photoAlbums } = testContext();
+  const runAction = windowObject.runSearchResultAction as (element: { closest: () => { dataset: Record<string, string> } }, command: string) => void;
+  runAction({ closest: () => ({ dataset: { action: 'site', id: 'cantiere-1' } }) }, 'photo');
+  assert.deepEqual(photoAlbums, ['cantiere-1']);
 });
 
 test('un intervento trovato apre l’archivio completo del cliente sul punto esatto', () => {
@@ -74,9 +93,9 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 });
 
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
-  assert.ok(indexHtml.includes('./direct-search.js?v=1'));
+  assert.ok(indexHtml.includes('./direct-search.js?v=2'));
   assert.ok(indexHtml.includes('./client-archive.js?v=18'));
-  assert.ok(indexHtml.includes('./sw.js?v=26'));
-  assert.ok(serviceWorker.includes('v26-ricerca-apertura-completa'));
+  assert.ok(indexHtml.includes('./sw.js?v=27'));
+  assert.ok(serviceWorker.includes('v27-ricerca-con-azioni'));
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });
