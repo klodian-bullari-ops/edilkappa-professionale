@@ -45,9 +45,17 @@
     );
   }
 
+  function albumPhotoCount(item) {
+    return Math.max(Number(item?.photoCount || 0), Array.isArray(item?.photos) ? item.photos.length : 0);
+  }
+
   function photoAlbums(siteId = '') {
     return (database().reports || [])
-      .filter((item) => item.photoOnly === true && (!siteId || String(item.site) === String(siteId)))
+      .filter((item) => {
+        const linkedSiteId = item.site || item.siteId || '';
+        const belongsToSite = !siteId || String(linkedSiteId) === String(siteId);
+        return belongsToSite && (item.photoOnly === true || albumPhotoCount(item) > 0);
+      })
       .sort((left, right) => String(right.date || '').localeCompare(String(left.date || '')));
   }
 
@@ -187,32 +195,46 @@
   window.openQuickSitePhoto = async function (albumId, photoIndex) {
     const album = photoAlbums().find((item) => String(item.id) === String(albumId));
     const photo = album?.photos?.[photoIndex];
-    if (!photo?.storagePath) return alert('Fotografia non disponibile.');
+    if (!photo) return alert('Fotografia non disponibile.');
     try {
-      await window.EdilKappaCloud.openDocument(photo.storagePath);
+      if (photo.storagePath) return await window.EdilKappaCloud?.openDocument?.(photo.storagePath);
+      if ((photo.key || photo.attachmentId) && typeof window.openReportPhoto === 'function') {
+        return await window.openReportPhoto(album.id, photoIndex);
+      }
+      if (photo.attachmentId) return await window.EdilKappaCloud?.openAttachment?.(photo.attachmentId);
+      const directUrl = photo.url || photo.dataUrl || '';
+      if (directUrl) return window.open(directUrl, '_blank', 'noopener');
+      alert('Fotografia non disponibile su questo dispositivo.');
     } catch (error) {
       alert(error.message || 'Impossibile aprire la fotografia.');
     }
   };
 
   function albumHtml(album) {
-    const site = (database().sites || []).find((item) => String(item.id) === String(album.site)) || {};
+    const linkedSiteId = album.site || album.siteId || '';
+    const site = (database().sites || []).find((item) => String(item.id) === String(linkedSiteId)) || {};
+    const sourceLabel = album.photoOnly === true ? 'Album fotografico' : (album.code ? `Rapportino ${album.code}` : 'Rapportino con foto');
     const photos = (album.photos || []).map((photo, index) =>
       `<button class="photoTile" type="button" onclick="openQuickSitePhoto('${esc(album.id)}',${index})"><strong>📷 Foto ${index + 1}</strong><small>${esc(photo.fileName || photo.name || '')}</small></button>`
     ).join('');
+    const unavailable = !photos && albumPhotoCount(album)
+      ? `<div class="notice">${albumPhotoCount(album)} foto registrate nel vecchio rapportino, ma i file non sono disponibili su questo dispositivo.</div>`
+      : '';
     const remove = ownerAccess()
+      && album.photoOnly === true
       ? `<button class="btn sm red" type="button" onclick="deleteQuickPhotoAlbum('${esc(album.id)}')">Elimina album</button>`
       : '';
-    return `<section class="card quickPhotoAlbum"><div class="cardHead"><div><h3>${esc(site.title || 'Cantiere')}</h3><small>${esc(album.workDate || String(album.date || '').slice(0, 10))} · ${esc(album.workerName || 'Operaio')} · ${Number(album.photoCount || album.photos?.length || 0)} foto</small></div>${badge(album.status || 'In corso')}</div><div class="photoGrid">${photos}</div>${remove ? `<div class="actions" style="margin-top:12px">${remove}</div>` : ''}</section>`;
+    return `<section class="card quickPhotoAlbum"><div class="cardHead"><div><h3>${esc(sourceLabel)}</h3><small>${esc(site.title || 'Cantiere')} · ${esc(album.workDate || String(album.date || '').slice(0, 10))} · ${esc(album.workerName || 'Operaio')} · ${albumPhotoCount(album)} foto</small></div>${badge(album.status || 'In corso')}</div><div class="photoGrid">${photos}</div>${unavailable}${remove ? `<div class="actions" style="margin-top:12px">${remove}</div>` : ''}</section>`;
   }
 
   window.openQuickPhotoAlbums = function (siteId = '') {
     const site = (database().sites || []).find((item) => String(item.id) === String(siteId));
     const albums = photoAlbums(siteId);
+    const totalPhotos = albums.reduce((total, album) => total + albumPhotoCount(album), 0);
     const dialog = document.getElementById('modal');
     const content = document.getElementById('modalContent');
     if (!dialog || !content) return;
-    content.innerHTML = `<div class="modalHead"><div><h3>Foto ${esc(site?.title || 'cantieri')}</h3><small>${albums.length} album separati</small></div><button class="close" type="button" onclick="closeModal()">×</button></div>
+    content.innerHTML = `<div class="modalHead"><div><h3>Foto ${esc(site?.title || 'cantieri')}</h3><small>${totalPhotos} fotografie · ${albums.length} album e rapportini</small></div><button class="close" type="button" onclick="closeModal()">×</button></div>
       <div class="modalBody"><div class="actions" style="margin-bottom:14px"><button class="btn lime" type="button" onclick="closeModal();openQuickPhotoUpload('${esc(siteId)}')">＋ Carica foto</button></div>
       <div class="list">${albums.map(albumHtml).join('') || '<div class="empty">Nessuna fotografia caricata per questo cantiere.</div>'}</div></div>
       <div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
@@ -237,7 +259,7 @@
   window.captureInfo = window.openQuickPhotoUpload;
 
   function countForSite(siteId) {
-    return photoAlbums(siteId).reduce((total, album) => total + Number(album.photoCount || album.photos?.length || 0), 0);
+    return photoAlbums(siteId).reduce((total, album) => total + albumPhotoCount(album), 0);
   }
 
   function makeButton(label, handler, className = 'btn sm green') {

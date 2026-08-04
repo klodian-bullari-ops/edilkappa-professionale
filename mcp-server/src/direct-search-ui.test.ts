@@ -28,7 +28,10 @@ function testContext() {
       quotes: [{ id: 'preventivo-1', clientId: 'cliente-1', interventionId: 'intervento-1', client: 'Condominio Prova', code: 'PREV-1', subject: 'Preventivo tetto', status: 'Bozza' }],
       documents: [{ id: 'documento-1', clientId: 'cliente-1', interventionId: 'intervento-1', client: 'Condominio Prova', title: 'Relazione tetto', category: 'Relazione tecnica', fileName: 'tetto.pdf' }],
       sites: [{ id: 'cantiere-1', title: 'Sostituzione tubo tetto', client: 'Condominio Prova', address: 'Via Prova 1' }],
-      reports: [{ id: 'foto-1', photoOnly: true, site: 'cantiere-1', photoCount: 3 }],
+      reports: [
+        { id: 'foto-1', photoOnly: true, site: 'cantiere-1', photoCount: 3 },
+        { id: 'rapportino-1', siteId: 'cantiere-1', photoCount: 2, photos: [{ key: 'foto-prima' }, { attachmentId: 'foto-dopo' }] }
+      ],
       drone: [], lifelines: [], roofs: [], drains: [], leads: []
     },
     WORKERS: [],
@@ -59,7 +62,7 @@ test('ogni risultato mostra direttamente i comandi disponibili', () => {
   assert.match(html, /searchResultRow/);
   assert.match(html, /Foto, modifica, elimina e gli altri comandi sono disponibili qui/);
   assert.doesNotMatch(html, />Apri scheda</);
-  assert.match(html, /📷 Foto \(3\)/);
+  assert.match(html, /📷 Foto \(5\)/);
   assert.match(html, />Modifica</);
   assert.match(html, />Elimina</);
   assert.match(html, /Relazione tetto/);
@@ -93,9 +96,9 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 });
 
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
-  assert.ok(indexHtml.includes('./direct-search.js?v=2'));
+  assert.ok(indexHtml.includes('./direct-search.js?v=3'));
   assert.ok(indexHtml.includes('./client-archive.js?v=18'));
-  assert.ok(indexHtml.includes('./sw.js?v=27'));
-  assert.ok(serviceWorker.includes('v27-ricerca-con-azioni'));
+  assert.ok(indexHtml.includes('./sw.js?v=28'));
+  assert.ok(serviceWorker.includes('v28-foto-storiche-cantiere'));
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });
