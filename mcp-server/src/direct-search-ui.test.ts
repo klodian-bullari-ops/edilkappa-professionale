@@ -10,9 +10,11 @@ const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf
 function testContext() {
   const opened: Array<{ clientId: string; focus: { interventionId: string; itemId: string } }> = [];
   const photoAlbums: string[] = [];
+  const photoUploads: string[] = [];
   const windowObject: Record<string, unknown> = {
     openClientArchive: (clientId: string, focus: { interventionId: string; itemId: string }) => opened.push({ clientId, focus }),
-    openQuickPhotoAlbums: (siteId: string) => photoAlbums.push(siteId)
+    openQuickPhotoAlbums: (siteId: string) => { photoAlbums.push(siteId); },
+    openQuickPhotoUpload: (siteId: string) => { photoUploads.push(siteId); }
   };
   const context = {
     window: windowObject,
@@ -53,7 +55,7 @@ function testContext() {
     deleteTeam: () => undefined
   };
   vm.runInNewContext(directSearch, context);
-  return { context, windowObject, opened, photoAlbums };
+  return { context, windowObject, opened, photoAlbums, photoUploads };
 }
 
 test('ogni risultato mostra direttamente i comandi disponibili', () => {
@@ -68,11 +70,12 @@ test('ogni risultato mostra direttamente i comandi disponibili', () => {
   assert.match(html, /Relazione tetto/);
 });
 
-test('il comando Foto del cantiere apre direttamente gli album fotografici', () => {
-  const { windowObject, photoAlbums } = testContext();
+test('il comando Foto del cantiere apre la galleria senza sostituirla con il caricamento', () => {
+  const { windowObject, photoAlbums, photoUploads } = testContext();
   const runAction = windowObject.runSearchResultAction as (element: { closest: () => { dataset: Record<string, string> } }, command: string) => void;
   runAction({ closest: () => ({ dataset: { action: 'site', id: 'cantiere-1' } }) }, 'photo');
   assert.deepEqual(photoAlbums, ['cantiere-1']);
+  assert.deepEqual(photoUploads, []);
 });
 
 test('un intervento trovato apre l’archivio completo del cliente sul punto esatto', () => {
@@ -96,9 +99,9 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 });
 
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
-  assert.ok(indexHtml.includes('./direct-search.js?v=3'));
+  assert.ok(indexHtml.includes('./direct-search.js?v=4'));
   assert.ok(indexHtml.includes('./client-archive.js?v=18'));
-  assert.ok(indexHtml.includes('./sw.js?v=28'));
-  assert.ok(serviceWorker.includes('v28-foto-storiche-cantiere'));
+  assert.ok(indexHtml.includes('./sw.js?v=29'));
+  assert.ok(serviceWorker.includes('v29-apertura-galleria-foto'));
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });
