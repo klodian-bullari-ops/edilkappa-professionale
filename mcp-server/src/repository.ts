@@ -416,6 +416,7 @@ export class EdilKappaRepository {
       orgId: ORG_ID,
       clientId,
       assignedTeamId: '',
+      assignedTeamIds: [],
       workerUid: '',
       ownerUid,
       status,
@@ -630,6 +631,11 @@ export class EdilKappaRepository {
     const contractValue = Number(existingPayload.value ?? existingData.contractValue ?? 0);
     const recordedCost = Number(existingPayload.cost ?? existingData.recordedCost ?? 0);
     const assignedTeamId = String(existingData.assignedTeamId || existingPayload.worker || '');
+    const assignedTeamIds = Array.from(new Set([
+      ...(Array.isArray(existingData.assignedTeamIds) ? existingData.assignedTeamIds : []),
+      ...(Array.isArray(existingPayload.teamIds) ? existingPayload.teamIds : []),
+      assignedTeamId
+    ].map((value) => String(value || '')).filter(Boolean))).slice(0, 10);
     const workerUid = String(existingData.workerUid || '');
 
     const item = compact({
@@ -641,6 +647,8 @@ export class EdilKappaRepository {
       clientId: client.id,
       address: input.address || String(existingPayload.address || client.address || ''),
       worker: assignedTeamId,
+      teamIds: assignedTeamIds,
+      assignedTeamIds,
       start: input.scheduledDate || String(existingPayload.start || input.receivedAt.slice(0, 10)),
       value: contractValue,
       cost: recordedCost,
@@ -659,6 +667,7 @@ export class EdilKappaRepository {
     });
     const envelope = this.envelope(id, client.id, String(existingData.ownerUid || ownerUid), status, item) as Record<string, unknown>;
     envelope.assignedTeamId = assignedTeamId;
+    envelope.assignedTeamIds = assignedTeamIds;
     envelope.workerUid = workerUid;
     envelope.progress = progress;
     envelope.contractValue = contractValue;
@@ -743,6 +752,7 @@ export class EdilKappaRepository {
     if (existing.exists) {
       delete envelope.createdAt;
       envelope.assignedTeamId = String(existingData.assignedTeamId || '');
+      envelope.assignedTeamIds = Array.isArray(existingData.assignedTeamIds) ? existingData.assignedTeamIds.slice(0, 10) : [];
       envelope.workerUid = String(existingData.workerUid || '');
       envelope.ownerUid = ownerUid;
     }

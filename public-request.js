@@ -74,6 +74,7 @@ form.addEventListener('submit', async (event) => {
       orgId: 'edilkappa',
       clientId: '',
       assignedTeamId: '',
+      assignedTeamIds: [],
       workerUid: '',
       ownerUid: 'public',
       status: 'Nuova',

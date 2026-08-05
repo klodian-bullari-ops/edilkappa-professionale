@@ -103,6 +103,7 @@ const mappingByRemote = new Map(mappings.map(([localName, remoteName]) => [remot
 const clientCollections = new Set(['clients', 'inspections', 'sites', 'quotes', 'reports', 'drone', 'lifelines', 'roofs', 'drains', 'deadlines', 'payments', 'documents', 'certificates']);
 const workerCollections = new Set(['sites', 'reports', 'timesheets', 'roofs', 'drains', 'teams']);
 const remoteMaps = new Map();
+const listenerMaps = new Map();
 const remoteIds = new Map();
 const loadedCollections = new Set();
 let user = null;
@@ -399,6 +400,7 @@ function stopDataListeners() {
   unsubscribers.forEach((unsubscribe) => unsubscribe());
   unsubscribers = [];
   remoteMaps.clear();
+  listenerMaps.clear();
   remoteIds.clear();
   loadedCollections.clear();
   ready = false;
@@ -504,6 +506,17 @@ function safePayload(item) {
   return JSON.stringify(item, (key, value) => key.startsWith('__cloud') ? undefined : value);
 }
 
+function teamIdsFor(item, fallback = '') {
+  const values = [
+    ...(Array.isArray(item?.teamIds) ? item.teamIds : []),
+    ...(Array.isArray(item?.assignedTeamIds) ? item.assignedTeamIds : []),
+    item?.assignedTeamId,
+    item?.worker,
+    fallback
+  ];
+  return Array.from(new Set(values.map((value) => String(value || '')).filter(Boolean))).slice(0, 10);
+}
+
 function boundedNumber(value, minimum, maximum) {
   const numeric = Number(value || 0);
   return Number.isFinite(numeric) ? Math.min(maximum, Math.max(minimum, numeric)) : minimum;
@@ -513,7 +526,16 @@ function envelope(item, remoteName, isNew) {
   const database = local.getDB();
   const site = remoteName === 'reports' ? (database.sites || []).find((entry) => entry.id === item.site) : null;
   const isWorkerItem = profile?.role === 'worker' && ['reports', 'timesheets'].includes(remoteName);
-  const assignedTeamId = String(item.assignedTeamId || (['sites', 'roofs', 'drains'].includes(remoteName) ? item.worker : '') || site?.worker || (isWorkerItem ? profile.teamId : '') || '');
+  const taskCollection = ['sites', 'roofs', 'drains'].includes(remoteName);
+  const assignedTeamIds = taskCollection
+    ? teamIdsFor(item)
+    : remoteName === 'reports'
+      ? teamIdsFor(site || { worker: item.team || (isWorkerItem ? profile.teamId : '') })
+      : remoteName === 'timesheets'
+        ? teamIdsFor({ worker: item.team || (isWorkerItem ? profile.teamId : '') })
+        : teamIdsFor({ teamIds: item.assignedTeamIds, assignedTeamId: item.assignedTeamId });
+  const assignedTeamId = String(item.assignedTeamId || (taskCollection ? item.worker : '') || (isWorkerItem ? profile.teamId : '') || assignedTeamIds[0] || '');
+  if (assignedTeamId && !assignedTeamIds.includes(assignedTeamId)) assignedTeamIds.unshift(assignedTeamId);
   const workerUid = String(item.workerUid || (isWorkerItem ? user.uid : '') || '');
   const ownerUid = String(item.ownerUid || user?.uid || '');
   const data = {
@@ -521,6 +543,7 @@ function envelope(item, remoteName, isNew) {
     orgId: ORG_ID,
     clientId: clientIdFor(item, remoteName),
     assignedTeamId,
+    assignedTeamIds: assignedTeamIds.slice(0, 10),
     workerUid,
     ownerUid,
     status: String(item.status || ''),
@@ -543,6 +566,7 @@ function parseEnvelope(snapshot) {
   item.id = snapshot.id;
   item.clientId = data.clientId;
   item.assignedTeamId = data.assignedTeamId;
+  item.assignedTeamIds = teamIdsFor({ assignedTeamIds: data.assignedTeamIds, assignedTeamId: data.assignedTeamId });
   item.workerUid = data.workerUid;
   item.ownerUid = data.ownerUid;
   item.__cloudUpdatedAt = data.updatedAt?.toDate?.().toISOString?.() || '';
@@ -555,19 +579,28 @@ function parseEnvelope(snapshot) {
     item.__cloudContractValue = data.contractValue;
     item.__cloudRecordedCost = data.recordedCost;
   }
-  if (['sites', 'roofs', 'drains'].includes(snapshot.ref.parent.id)) item.worker = data.assignedTeamId;
+  if (snapshot.ref.parent.id === 'sites') {
+    item.teamIds = item.assignedTeamIds.slice();
+    item.worker = data.assignedTeamId || item.teamIds[0] || '';
+  } else if (['roofs', 'drains'].includes(snapshot.ref.parent.id)) item.worker = data.assignedTeamId;
   return item;
 }
 
-function mergeSnapshot(remoteName, snapshot) {
+function mergeSnapshot(remoteName, snapshot, sourceKey = `${remoteName}:default`) {
   const localName = mappingByRemote.get(remoteName);
   if (!localName) return;
-  let map = remoteMaps.get(remoteName);
-  if (!map) { map = new Map(); remoteMaps.set(remoteName, map); }
+  let sourceMap = listenerMaps.get(sourceKey);
+  if (!sourceMap) { sourceMap = new Map(); listenerMaps.set(sourceKey, sourceMap); }
   snapshot.docChanges().forEach((change) => {
-    if (change.type === 'removed') map.delete(change.doc.id);
-    else map.set(change.doc.id, parseEnvelope(change.doc));
+    if (change.type === 'removed') sourceMap.delete(change.doc.id);
+    else sourceMap.set(change.doc.id, parseEnvelope(change.doc));
   });
+  const map = new Map();
+  for (const [key, rows] of listenerMaps) {
+    if (!key.startsWith(`${remoteName}:`)) continue;
+    for (const [id, item] of rows) map.set(id, item);
+  }
+  remoteMaps.set(remoteName, map);
   remoteIds.set(remoteName, new Set(map.keys()));
   loadedCollections.add(remoteName);
   const values = Array.from(map.values());
@@ -589,9 +622,10 @@ function mergeSnapshot(remoteName, snapshot) {
   setSyncState(snapshot.metadata.fromCache && !navigator.onLine ? 'Offline' : 'Sincronizzato', snapshot.metadata.fromCache && !navigator.onLine ? '#d69b18' : '#167448');
 }
 
-function listenTo(remoteName, constraints = []) {
+function listenTo(remoteName, constraints = [], listenerId = 'default') {
   const target = query(collection(firestore, remoteName), ...constraints);
-  unsubscribers.push(onSnapshot(target, (snapshot) => mergeSnapshot(remoteName, snapshot), (error) => {
+  const sourceKey = `${remoteName}:${listenerId}`;
+  unsubscribers.push(onSnapshot(target, (snapshot) => mergeSnapshot(remoteName, snapshot, sourceKey), (error) => {
     console.error(`Sincronizzazione ${remoteName}:`, error);
     setSyncState('Errore sync', '#ad2a2a', errorText(error));
   }));
@@ -604,7 +638,9 @@ function startDataListeners() {
   }
   listenTo('settings', [where('orgId', '==', ORG_ID)]);
   if (profile.role === 'worker') {
-    ['sites', 'roofs', 'drains'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)]));
+    listenTo('sites', [where('orgId', '==', ORG_ID), where('assignedTeamIds', 'array-contains', profile.teamId)], 'multiple-teams');
+    listenTo('sites', [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)], 'legacy-team');
+    ['roofs', 'drains'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)]));
     ['reports', 'timesheets'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('workerUid', '==', user.uid), where('ownerUid', '==', user.uid)]));
     const teamRef = doc(firestore, 'teams', profile.teamId);
     unsubscribers.push(onSnapshot(teamRef, (snapshot) => {
@@ -628,7 +664,8 @@ function canPush(remoteName) {
 
 function workerItems(remoteName, items) {
   if (profile?.role !== 'worker') return items;
-  if (['sites', 'roofs', 'drains'].includes(remoteName)) return items.filter((item) => String(item.worker || item.assignedTeamId) === profile.teamId);
+  if (remoteName === 'sites') return items.filter((item) => teamIdsFor(item).includes(profile.teamId));
+  if (['roofs', 'drains'].includes(remoteName)) return items.filter((item) => String(item.worker || item.assignedTeamId) === profile.teamId);
   return items.filter((item) => String(item.workerUid || user.uid) === user.uid);
 }
 
@@ -754,7 +791,7 @@ async function uploadAttachment({ file, reportId, phase = 'Documento', site = {}
       orgId: ORG_ID,
       clientId: clientIdFor(site, 'sites'),
       reportId: String(reportId),
-      assignedTeamId: String(site.worker || site.assignedTeamId || (isWorker ? profile.teamId : '') || ''),
+      assignedTeamId: String((isWorker ? profile.teamId : '') || site.worker || site.assignedTeamId || teamIdsFor(site)[0] || ''),
       workerUid: isWorker ? user.uid : '',
       ownerUid: user.uid,
       name: String(file.name || 'foto.jpg').slice(0, 180),

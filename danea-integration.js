@@ -212,6 +212,8 @@
         clientId: client.id,
         address: item.address || client.address || '',
         worker: '',
+        teamIds: [],
+        assignedTeamIds: [],
         start: item.scheduledDate || String(item.receivedAt || now).slice(0, 10),
         value: 0,
         cost: 0,

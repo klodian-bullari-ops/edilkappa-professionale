@@ -190,6 +190,13 @@
       (typeof WORKERS !== 'undefined' ? WORKERS.find((item) => item.id === teamId)?.name : '') || '';
   }
 
+  function siteTeamsLabel(site) {
+    const ids = typeof siteTeamIds === 'function'
+      ? siteTeamIds(site)
+      : [site.worker].filter(Boolean);
+    return ids.map(teamName).filter(Boolean).join(' + ');
+  }
+
   function photoCount(rows) {
     return rows.reports.reduce((total, item) => total + Math.max(Number(item.photoCount || 0), Array.isArray(item.photos) ? item.photos.length : 0), 0);
   }
@@ -237,7 +244,8 @@
     rows.inspections.forEach((inspection) => add({ id: `inspection-${inspection.id}`, date: `${inspection.date || ''}${inspection.time ? `T${inspection.time}` : ''}`, label: 'Sopralluogo', detail: `${inspection.status || 'Da programmare'}${inspection.problem ? ` · ${inspection.problem}` : ''}` }));
     rows.quotes.forEach((quote) => add({ id: `quote-${quote.id}`, date: quote.date || quote.createdAt, label: `Preventivo ${quote.code || ''}`.trim(), detail: `${quote.status || 'Bozza'}${quote.subject ? ` · ${quote.subject}` : ''}` }));
     rows.sites.forEach((site) => {
-      add({ id: `site-start-${site.id}`, date: site.start || site.createdAt, label: 'Inizio cantiere', detail: `${site.title || 'Cantiere'}${teamName(site.worker) ? ` · ${teamName(site.worker)}` : ''}` });
+      const teams = siteTeamsLabel(site);
+      add({ id: `site-start-${site.id}`, date: site.start || site.createdAt, label: 'Inizio cantiere', detail: `${site.title || 'Cantiere'}${teams ? ` · ${teams}` : ''}` });
       if (site.end || site.status === 'Completato') add({ id: `site-end-${site.id}`, date: site.end || site.updatedAt, label: 'Fine cantiere', detail: site.title || 'Cantiere completato' });
     });
     rows.reports.forEach((report) => {
@@ -252,7 +260,8 @@
   function operationalGroups(item, rows) {
     const sites = rows.sites.map((site) => {
       const count = rows.reports.filter((report) => String(report.siteId || report.site || '') === String(site.id)).reduce((total, report) => total + Math.max(Number(report.photoCount || 0), Array.isArray(report.photos) ? report.photos.length : 0), 0);
-      return `<div class="archiveOperation"><b>🏗️ ${esc(site.title || 'Cantiere')}</b><small>${esc(site.address || '')}<br>${esc(site.status || 'Pianificato')} · avanzamento ${Number(site.progress || 0)}%${teamName(site.worker) ? ` · ${esc(teamName(site.worker))}` : ''}</small><div class="actions" style="margin-top:9px"><button class="btn sm green" onclick="openSite('${site.id}')">Modifica cantiere</button><button class="btn sm light" onclick="openQuickPhotoAlbums('${site.id}')">📷 Foto (${count})</button></div></div>`;
+      const teams = siteTeamsLabel(site);
+      return `<div class="archiveOperation"><b>🏗️ ${esc(site.title || 'Cantiere')}</b><small>${esc(site.address || '')}<br>${esc(site.status || 'Pianificato')} · avanzamento ${Number(site.progress || 0)}%${teams ? ` · ${esc(teams)}` : ''}</small><div class="actions" style="margin-top:9px"><button class="btn sm green" onclick="openSite('${site.id}')">Modifica cantiere</button><button class="btn sm light" onclick="openQuickPhotoAlbums('${site.id}')">📷 Foto (${count})</button></div></div>`;
     }).join('');
     const inspections = rows.inspections.map((inspection) => `<div class="archiveOperation"><b>📅 Sopralluogo</b><small>${esc(inspection.date || 'Da programmare')}${inspection.time ? ` · ${esc(inspection.time)}` : ''}<br>${esc(inspection.status || '')}${inspection.problem ? ` · ${esc(inspection.problem)}` : ''}</small></div>`).join('');
     const workers = workersSummary(rows);

@@ -9,7 +9,7 @@ rules_version = '2';
 //   payments, documents, teams, timesheets, inspections, lifelines,
 //   roofs, drains, drone, expenses, leads, priceList, certificates,
 //   inventory, equipment, settings. Ogni documento usa un envelope chiuso:
-//   id, orgId, clientId, assignedTeamId, workerUid, ownerUid, status,
+//   id, orgId, clientId, assignedTeamId, assignedTeamIds, workerUid, ownerUid, status,
 //   workHours, materialAmount, progress, contractValue, recordedCost,
 //   payload (JSON con limite),
 //   createdAt, updatedAt.
@@ -132,13 +132,14 @@ service cloud.firestore {
     }
 
     function validEnvelope(d, docId) {
-      return d.keys().hasAll(['id', 'orgId', 'clientId', 'assignedTeamId', 'workerUid', 'ownerUid', 'status', 'workHours', 'materialAmount', 'progress', 'contractValue', 'recordedCost', 'payload', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['id', 'orgId', 'clientId', 'assignedTeamId', 'workerUid', 'ownerUid', 'status', 'workHours', 'materialAmount', 'progress', 'contractValue', 'recordedCost', 'payload', 'createdAt', 'updatedAt'])
+      return d.keys().hasAll(['id', 'orgId', 'clientId', 'assignedTeamId', 'assignedTeamIds', 'workerUid', 'ownerUid', 'status', 'workHours', 'materialAmount', 'progress', 'contractValue', 'recordedCost', 'payload', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['id', 'orgId', 'clientId', 'assignedTeamId', 'assignedTeamIds', 'workerUid', 'ownerUid', 'status', 'workHours', 'materialAmount', 'progress', 'contractValue', 'recordedCost', 'payload', 'createdAt', 'updatedAt'])
         && d.id == docId
         && d.orgId == 'edilkappa'
         && shortText(d.id, 128)
         && shortText(d.clientId, 128)
         && shortText(d.assignedTeamId, 128)
+        && validClientIds(d.assignedTeamIds)
         && shortText(d.workerUid, 128)
         && shortText(d.ownerUid, 128)
         && validStatus(d.status)
@@ -166,7 +167,9 @@ service cloud.firestore {
     }
 
     function workerAssigned(d) {
-      return isWorker() && d.assignedTeamId == me().teamId && me().teamId.size() > 0;
+      return isWorker() && me().teamId.size() > 0
+        && (d.assignedTeamId == me().teamId
+          || ('assignedTeamIds' in d && me().teamId in d.assignedTeamIds));
     }
 
     function workerOwns(d) {
@@ -184,6 +187,7 @@ service cloud.firestore {
         && request.resource.data.ownerUid == 'public'
         && request.resource.data.clientId == ''
         && request.resource.data.assignedTeamId == ''
+        && request.resource.data.assignedTeamIds.size() == 0
         && request.resource.data.workerUid == ''
         && request.resource.data.status == 'Nuova'
         && request.resource.data.workHours == 0
