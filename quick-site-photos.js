@@ -31,7 +31,9 @@
 
   function visibleSites() {
     const rows = database().sites || [];
-    const allowed = officeAccess() ? rows : rows.filter((site) => String(site.worker || '') === String(currentTeam()));
+    const allowed = officeAccess() ? rows : rows.filter((site) => typeof siteHasTeam === 'function'
+      ? siteHasTeam(site, currentTeam())
+      : String(site.worker || '') === String(currentTeam()));
     return allowed.slice().sort((left, right) => {
       const leftDone = left.status === 'Completato' ? 1 : 0;
       const rightDone = right.status === 'Completato' ? 1 : 0;

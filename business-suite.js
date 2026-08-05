@@ -91,7 +91,8 @@
   window.clearReportSignature = function () { reportSignature?.clear(); };
 
   report = function () {
-    const mine = isOffice() ? db.sites : db.sites.filter((site) => site.worker === role || STAFF.find((p) => p.id === role)?.team === site.worker);
+    const teamId = typeof currentTeamId === 'function' ? currentTeamId() : STAFF.find((person) => person.id === role)?.team || '';
+    const mine = isOffice() ? db.sites : db.sites.filter((site) => typeof siteHasTeam === 'function' ? siteHasTeam(site, teamId) : site.worker === teamId);
     setTimeout(() => { reportSignature = canvasController('reportSignatureCanvas'); }, 20);
     return pageHead('Nuovo rapportino completo', 'Foto prima/dopo, ore, materiali e firma del cliente') +
       `<div class="card"><form onsubmit="saveReport(event)" class="formGrid">

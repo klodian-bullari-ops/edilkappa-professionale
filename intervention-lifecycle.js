@@ -341,7 +341,7 @@
     const item = existing || {
       title: context?.title || '', client: contextClient?.name || '', clientId: contextClient?.id || '',
       interventionId: context?.interventionId || '', address: contextClient?.address || '',
-      worker: WORKERS[0]?.id || '', start: localToday(), end: '', value: 0, cost: 0,
+      teamIds: WORKERS[0]?.id ? [WORKERS[0].id] : [], worker: WORKERS[0]?.id || '', start: localToday(), end: '', value: 0, cost: 0,
       status: 'Pianificato', progress: 0
     };
     modal(id ? 'Modifica cantiere' : 'Nuovo cantiere collegato', `<div class="formGrid">
@@ -349,7 +349,7 @@
       <div class="field"><label>Cliente</label><select name="client" onchange="refreshInterventionSelect(this.form)">${clientOptions(item.client)}</select></div>
       <div class="field"><label>Intervento collegato</label><select name="interventionId">${window.interventionOptions ? window.interventionOptions(item.client, item.interventionId) : '<option value="">Crea automaticamente</option>'}</select></div>
       ${field('Indirizzo', 'address', 'text', item.address, true)}
-      <div class="field"><label>Squadra assegnata</label><select name="worker">${teamOptions(item.worker)}</select></div>
+      ${typeof teamChecklist === 'function' ? teamChecklist(item) : `<div class="field"><label>Squadra assegnata</label><select name="worker">${teamOptions(item.worker)}</select></div>`}
       ${field('Data inizio', 'start', 'date', item.start)}${field('Data fine', 'end', 'date', item.end || '')}
       ${field('Valore lavoro €', 'value', 'number', item.value)}${field('Costi previsti €', 'cost', 'number', item.cost)}
       <div class="field"><label>Stato</label><select name="status">${selectOptions(['Pianificato', 'In corso', 'Completato'], item.status)}</select></div>
@@ -360,14 +360,21 @@
       if (!intervention) intervention = ensureManualIntervention(client, formData.get('title'), '', formData.get('start'));
       const status = String(formData.get('status') || 'Pianificato');
       const end = status === 'Completato' ? String(formData.get('end') || localToday()) : String(formData.get('end') || '');
+      const selectedTeamIds = typeof formTeamIds === 'function' ? formTeamIds(formData) : [String(formData.get('worker') || '')].filter(Boolean);
       const data = {
         title: formData.get('title'), client: client.name, clientId: client.id, interventionId: intervention.id,
-        address: formData.get('address'), worker: formData.get('worker'), start: formData.get('start'), end,
+        address: formData.get('address'), worker: selectedTeamIds[0] || '', teamIds: selectedTeamIds, assignedTeamIds: selectedTeamIds, start: formData.get('start'), end,
         value: Number(formData.get('value') || 0), cost: Number(formData.get('cost') || 0), status,
         updatedAt: new Date().toISOString()
       };
-      if (existing) Object.assign(existing, data);
-      else db.sites.push({ id: uid('l'), code: uid('EK'), ...data, progress: 0, createdAt: data.updatedAt });
+      if (existing) {
+        Object.assign(existing, data);
+        if (typeof applySiteTeams === 'function') applySiteTeams(existing, selectedTeamIds);
+      } else {
+        const created = { id: uid('l'), code: uid('EK'), ...data, progress: 0, createdAt: data.updatedAt };
+        if (typeof applySiteTeams === 'function') applySiteTeams(created, selectedTeamIds);
+        db.sites.push(created);
+      }
     });
   }
 
