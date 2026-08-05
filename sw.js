@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v31-multi-squadra`;
+const CACHE = `${CACHE_PREFIX}v32-edilconnect`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "./danea-integration.js",
   "./intervention-lifecycle.js",
   "./completion-center.js",
+  "./edilconnect.js",
   "./firebase-cloud.js",
   "./sharing-integration.js",
   "./quick-site-photos.js",
@@ -61,7 +62,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then(
+    caches.match(event.request, { ignoreSearch: true }).then(
       (cached) =>
         cached ||
         fetch(event.request).then((response) => {

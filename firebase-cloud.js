@@ -82,6 +82,7 @@ const mappings = [
   ['quotes', 'quotes'],
   ['reports', 'reports'],
   ['timesheets', 'timesheets'],
+  ['edilconnect', 'edilconnect'],
   ['drone', 'drone'],
   ['lifelines', 'lifelines'],
   ['roofs', 'roofs'],
