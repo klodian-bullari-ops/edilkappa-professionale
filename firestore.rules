@@ -6,7 +6,7 @@ rules_version = '2';
 // users/{uid}: orgId, displayName, email, role, active, teamId,
 //   clientIds (massimo 10 ID stringa), createdAt, updatedAt.
 // Business collections: clients, sites, reports, quotes, deadlines,
-//   payments, documents, teams, timesheets, inspections, lifelines,
+//   payments, documents, teams, timesheets, edilconnect, inspections, lifelines,
 //   roofs, drains, drone, expenses, leads, priceList, certificates,
 //   inventory, equipment, settings. Ogni documento usa un envelope chiuso:
 //   id, orgId, clientId, assignedTeamId, assignedTeamIds, workerUid, ownerUid, status,
@@ -106,7 +106,8 @@ service cloud.firestore {
         'Contattato', 'Sopralluogo fissato', 'Archiviata', 'Disponibile',
         'Assegnato', 'In manutenzione', 'Da sostituire', 'Da riordinare',
         'In scadenza', 'Scaduta', 'Positivo', 'Con prescrizioni', 'Negativo',
-        'Da completare', 'Da programmare', 'Disattivo'];
+        'Da completare', 'Da programmare', 'Disattivo',
+        'Pronto da inviare', 'Inviato al consulente'];
     }
 
     function uidUnchanged() {
@@ -272,6 +273,15 @@ service cloud.firestore {
         && (isStaff() || (uidUnchanged() && workerOwns(request.resource.data)));
       allow update: if validUpdateEnvelope(docId)
         && (isStaff() || (workerOwns(resource.data) && workerLimitedUpdate()));
+      allow delete: if isStaff();
+    }
+
+    // CUC, DNL, importi di congruità e note per il consulente non devono mai
+    // essere leggibili dagli operai o dal portale clienti.
+    match /edilconnect/{docId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && validCreateEnvelope(docId);
+      allow update: if isStaff() && validUpdateEnvelope(docId);
       allow delete: if isStaff();
     }
 

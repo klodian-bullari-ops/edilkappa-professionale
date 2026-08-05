@@ -65,6 +65,17 @@ La notifica dell'app funziona quando supportata; il pulsante "Promemoria
 giornaliero" aggiunge al calendario del telefono un avviso che funziona anche
 quando l'app è chiusa.
 
+CASSA EDILE / EDILCONNECT
+Titolare e Ufficio dispongono della sezione riservata "Cassa Edile / EdilConnect".
+Dentro ogni cantiere il pulsante EdilConnect permette di registrare tipo di
+committente, ruolo dell'impresa, valore complessivo, importo dei lavori edili,
+tipologia, CUC, DNL, attestazione, subappaltatori e note per il consulente.
+Le ore comunicate dagli operai vengono collegate al cantiere tramite il suo ID e
+confluiscono automaticamente nel riepilogo mensile. Il gestionale segnala ore non
+collegate, dati mancanti e giornate superiori a 12 ore, quindi genera CSV per
+Excel, stampa/PDF e testo pronto da inviare. L'invio ufficiale alla Cassa Edile e
+a CNCE EdilConnect rimane a cura del consulente del lavoro.
+
 GESTIONE OPERAI NELLE SQUADRE
 Nel modulo "Squadre" puoi aggiungere un singolo operaio, modificarne nome,
 telefono, squadra e orario del promemoria, oppure rimuoverlo. Le ore già
