@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v32-edilconnect`;
+const CACHE = `${CACHE_PREFIX}v33-modal-scroll`;
 const APP_SHELL = [
   "./",
   "./index.html",
