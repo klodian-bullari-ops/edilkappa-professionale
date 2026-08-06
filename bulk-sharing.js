@@ -4,6 +4,9 @@
   const FEATURE_RELEASE_AT = '2026-08-06T10:00:00.000Z';
   const AUTO_SNAPSHOT_KEY = 'edilkappa_bulk_completion_snapshot_v1';
   const PACKAGE_MAX_BYTES = 1900 * 1024 * 1024;
+  const SHARING_URL = 'https://edilkappa-condivisioni.edilkappasas.chatgpt.site';
+  const FIREBASE_AUTH_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
+  const TRANSFER_MAX_AGE = 6 * 24 * 60 * 60 * 1000;
   const FIREBASE_STORAGE_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
   const FIREBASE_FIRESTORE_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
   const COMPLETED_PATTERN = /complet|conclus|chius|eseguit|fatturat/i;
@@ -401,6 +404,83 @@
     try { await navigator.clipboard.writeText(value); return true; } catch (_) { return false; }
   }
 
+  async function sharingToken() {
+    const { getAuth } = await import(FIREBASE_AUTH_MODULE);
+    const user = getAuth().currentUser;
+    if (!user) throw new Error('Accedi nuovamente a EdilKappa per condividere.');
+    return user.getIdToken();
+  }
+
+  async function sharingRequest(path, token, options = {}) {
+    const headers = new Headers(options.headers || {});
+    headers.set('authorization', `Bearer ${token}`);
+    const response = await fetch(`${SHARING_URL}${path}`, { ...options, headers });
+    let body = {};
+    try { body = await response.json(); } catch (_) {}
+    if (!response.ok) throw new Error(body.error || 'Il servizio di condivisione non risponde.');
+    return body;
+  }
+
+  function reusableTransfer(session, file) {
+    const value = session.transfer;
+    return value && value.key === `${session.preparedKey}:${file.size}` && value.link && Date.now() - value.createdAt < TRANSFER_MAX_AGE ? value : null;
+  }
+
+  async function transferLink(session, file, button) {
+    const reusable = reusableTransfer(session, file);
+    if (reusable) return reusable.link;
+    const token = await sharingToken();
+    const context = daneaContext(session.info);
+    let uploadToken = '';
+    try {
+      setBusy(button, true, 'Avvio caricamento…');
+      const started = await sharingRequest('/api/transfernow/direct/start', token, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileSize: file.size,
+          interventionId: context?.interventionId || `${session.info.kind}-${session.info.id}`,
+          daneaRequestId: context?.requestId || 'manuale',
+          subject: `EdilKappa · ${session.info.title}`,
+          message: `Allegati EdilKappa · ${session.info.client || 'Cliente'} · ${session.info.title}`,
+        }),
+      });
+      uploadToken = started.uploadToken;
+      const uploadedParts = [];
+      let sent = 0;
+      for (const part of started.parts) {
+        const blob = file.slice(part.start, part.start + part.size);
+        const percent = Math.max(1, Math.round((sent / file.size) * 100));
+        if (button) button.textContent = `Caricamento ${percent}%`;
+        const uploaded = await sharingRequest('/api/transfernow/direct/part', token, {
+          method: 'PUT',
+          headers: {
+            'content-type': 'application/octet-stream',
+            'x-upload-token': uploadToken,
+            'x-part-number': String(part.partNumber),
+          },
+          body: blob,
+        });
+        uploadedParts.push({ ETag: uploaded.etag, PartNumber: uploaded.partNumber });
+        sent += part.size;
+      }
+      if (button) button.textContent = 'Creo il link…';
+      const finished = await sharingRequest('/api/transfernow/direct/finish', token, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ uploadToken, parts: uploadedParts }),
+      });
+      session.transfer = { key: `${session.preparedKey}:${file.size}`, link: finished.link, transferId: finished.transferId, createdAt: Date.now() };
+      return finished.link;
+    } catch (error) {
+      if (uploadToken) sharingRequest('/api/transfernow/direct/cancel', token, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uploadToken }),
+      }).catch(() => {});
+      throw error;
+    }
+  }
+
   function selectedFiles() {
     if (!activeSession) return [];
     const selectedIds = new Set(Array.from(document.querySelectorAll('[data-share-file]:checked')).map((input) => input.value));
@@ -492,12 +572,12 @@
     if (targetWindow) { targetWindow.document.write('<p style="font:16px Arial;padding:24px">Preparazione del pacchetto EdilKappa…</p>'); targetWindow.document.close(); }
     try {
       const file = preparedFile || await packageFileForSelection(session, selected);
-      downloadFile(file);
+      const link = await transferLink(session, file, button);
       const code = context.request.daneaId || context.requestId;
-      const message = `Intervento Danea ${code} – pacchetto completo EdilKappa (${file.name})`;
+      const message = `Intervento Danea ${code} – pacchetto completo EdilKappa: ${link}`;
       const copied = await clipboard(message);
       if (targetWindow) targetWindow.location.replace(context.url); else window.open(context.url, '_blank', 'noopener');
-      alert(`Ho aperto la pratica Danea ${code} e scaricato un solo ZIP. ${copied ? 'Il testo è già copiato: incollalo e allega il file ZIP.' : 'Allega il file ZIP appena scaricato.'}`);
+      alert(`Ho aperto la pratica Danea ${code}. ${copied ? 'Il link è già copiato: incollalo nell’intervento.' : `Incolla questo link: ${link}`}`);
     } catch (error) {
       targetWindow?.close();
       throw error;
@@ -591,33 +671,25 @@
         return;
       }
       if (mode === 'copy') {
-        if (await clipboard(text)) alert('Testo del pacchetto copiato.'); else prompt('Copia questo testo:', text);
+        const link = await transferLink(session, file, button);
+        if (await clipboard(link)) alert('Link temporaneo copiato.'); else prompt('Copia questo link:', link);
         return;
       }
-      const shareFiles = nativeShareFiles(session);
-      if (shareFiles.length) {
-        const destination = mode === 'whatsapp' ? 'Scegli WhatsApp dal pannello che si apre.' : mode === 'email' ? 'Scegli Mail o la tua app e-mail dal pannello che si apre.' : 'Scegli l’app con cui inviare gli allegati.';
-        setBusy(button, true, 'Apro condivisione…');
-        try {
-          await navigator.share({ title: `EdilKappa · ${session.info.title}`, text: destination, files: shareFiles });
-          return;
-        } catch (error) {
-          if (error?.name === 'AbortError') return;
-          downloadFile(file);
-          alert('Il pannello di condivisione non ha accettato gli allegati. Ho scaricato lo ZIP, pronto da allegare.');
-          return;
-        }
-      }
-      downloadFile(file);
+      const targetWindow = window.open('', '_blank');
+      if (targetWindow) { targetWindow.document.write('<p style="font:16px Arial;padding:24px">Caricamento protetto del pacchetto EdilKappa…</p>'); targetWindow.document.close(); }
+      const link = await transferLink(session, file, button);
+      const shareText = `${text}\nScarica tutti gli allegati: ${link}`;
       if (mode === 'whatsapp') {
-        const target = `https://wa.me/?text=${encodeURIComponent(text)}`;
-        if (!window.open(target, '_blank', 'noopener')) window.location.href = target;
-        alert('Questo browser non permette di allegare file direttamente a WhatsApp. Ho scaricato lo ZIP: allegalo alla chat aperta.');
+        const target = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+        if (targetWindow) targetWindow.location.replace(target); else window.location.href = target;
       } else if (mode === 'email') {
-        window.location.href = `mailto:?subject=${encodeURIComponent(`EdilKappa · ${session.info.title}`)}&body=${encodeURIComponent(text)}`;
-        alert('Questo browser non permette di allegare file direttamente all’e-mail. Ho scaricato lo ZIP: allegalo al messaggio aperto.');
+        const target = `mailto:?subject=${encodeURIComponent(`EdilKappa · ${session.info.title}`)}&body=${encodeURIComponent(shareText)}`;
+        if (targetWindow) targetWindow.location.replace(target); else window.location.href = target;
       } else {
-        alert('Questo dispositivo non supporta la condivisione diretta dei file. Ho scaricato lo ZIP, pronto da allegare.');
+        targetWindow?.close();
+        if (typeof navigator.share === 'function') await navigator.share({ title: `EdilKappa · ${session.info.title}`, text: shareText, url: link });
+        else if (await clipboard(shareText)) alert('Link temporaneo copiato: incollalo nell’app che vuoi usare.');
+        else prompt('Copia e condividi questo link:', link);
       }
     } catch (error) {
       alert(error.message || 'Condivisione non riuscita.');
@@ -631,7 +703,7 @@
     let result;
     try { result = filesForScope(kind, id); } catch (error) { return alert(error.message); }
     if (!result.files.length) return alert('Non ci sono ancora foto, video o documenti disponibili per questo lavoro.');
-    activeSession = { ...result, preparedFile: null, preparedOriginalFiles: [], preparedKey: '', preparationRevision: 0, preparationTimer: null };
+    activeSession = { ...result, preparedFile: null, preparedOriginalFiles: [], preparedKey: '', preparationRevision: 0, preparationTimer: null, transfer: null };
     const danea = daneaContext(result.info);
     const dialog = document.getElementById('modal');
     const content = document.getElementById('modalContent');
@@ -640,7 +712,7 @@
     content.innerHTML = `<div class="modalHead"><div><h3>Condividi</h3><small>${html(result.info.client)} · ${html(result.info.title)}</small></div><button class="close" type="button" onclick="closeModal()">×</button></div>
       <div class="modalBody"><div class="shareSelectBar"><label><input type="checkbox" checked onchange="toggleAllShareFiles(this.checked)"> Seleziona tutto</label><b id="shareSelectionCount">${result.files.length} file selezionati</b></div><div class="shareFileList">${rows}</div>
       <div id="sharePreparationStatus" class="sharePreparationStatus" data-state="preparing" aria-live="polite">Preparazione degli allegati…</div>
-      <div class="shareMethods"><button type="button" class="shareMethod primary" data-share-action disabled onclick="runShareAction('native',this)"><span>↗</span><b>Condividi</b><small>WhatsApp, Mail e altre app</small></button><button type="button" class="shareMethod whatsapp" data-share-action disabled onclick="runShareAction('whatsapp',this)"><span>💬</span><b>WhatsApp</b><small>Allegati già pronti</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('email',this)"><span>✉️</span><b>E-mail</b><small>Allegati già pronti</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('copy',this)"><span>📋</span><b>Copia testo</b><small>Nome e riepilogo</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('download',this)"><span>📦</span><b>Scarica ZIP</b><small>Un solo allegato</small></button>${danea ? `<button type="button" class="shareMethod danea" data-share-action disabled onclick="runShareAction('danea',this)"><span>🔧</span><b>Danea</b><small>Apri pratica esatta</small></button>` : ''}</div></div><div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
+      <div class="shareMethods"><button type="button" class="shareMethod primary" data-share-action disabled onclick="runShareAction('native',this)"><span>↗</span><b>Condividi</b><small>Link temporaneo automatico</small></button><button type="button" class="shareMethod whatsapp" data-share-action disabled onclick="runShareAction('whatsapp',this)"><span>💬</span><b>WhatsApp</b><small>Invia link con tutti i file</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('email',this)"><span>✉️</span><b>E-mail</b><small>Invia link con tutti i file</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('copy',this)"><span>📋</span><b>Copia link</b><small>Link temporaneo protetto</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('download',this)"><span>📦</span><b>Scarica ZIP</b><small>Un solo allegato</small></button>${danea ? `<button type="button" class="shareMethod danea" data-share-action disabled onclick="runShareAction('danea',this)"><span>🔧</span><b>Danea</b><small>Apri pratica con link</small></button>` : ''}</div></div><div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
     dialog.showModal();
     queueSharePreparation(0);
   };
