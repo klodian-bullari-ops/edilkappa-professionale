@@ -227,7 +227,7 @@
     if (source.blob instanceof Blob) return source.blob;
     if (source.storagePath) {
       const { getStorage, getDownloadURL, ref } = await import(FIREBASE_STORAGE_MODULE);
-      const response = await fetch(await getDownloadURL(ref(getStorage(), source.storagePath)));
+      const response = await fetchCloudSource(await getDownloadURL(ref(getStorage(), source.storagePath)));
       if (!response.ok) throw new Error(`Non riesco a scaricare ${source.fileName || source.name || 'un file'}.`);
       return response.blob();
     }
@@ -244,7 +244,9 @@
     }
     const directUrl = source.dataUrl || source.url || source.data || '';
     if (directUrl) {
-      const response = await fetch(directUrl);
+      const response = /^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//i.test(directUrl)
+        ? await fetchCloudSource(directUrl)
+        : await fetch(directUrl);
       if (response.ok) return response.blob();
     }
     throw new Error(`File non disponibile: ${source.fileName || source.name || 'allegato'}`);
@@ -409,6 +411,18 @@
     const user = getAuth().currentUser;
     if (!user) throw new Error('Accedi nuovamente a EdilKappa per condividere.');
     return user.getIdToken();
+  }
+
+  async function fetchCloudSource(sourceUrl) {
+    const token = await sharingToken();
+    return fetch(`${SHARING_URL}/api/source`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ sourceUrl }),
+    });
   }
 
   async function sharingRequest(path, token, options = {}) {
