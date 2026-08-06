@@ -92,15 +92,21 @@
 
   report = function () {
     const teamId = typeof currentTeamId === 'function' ? currentTeamId() : STAFF.find((person) => person.id === role)?.team || '';
-    const mine = isOffice() ? db.sites : db.sites.filter((site) => typeof siteHasTeam === 'function' ? siteHasTeam(site, teamId) : site.worker === teamId);
+    const mine = db.sites.filter((site) => {
+      const assigned = typeof siteHasTeam === 'function' ? siteHasTeam(site, teamId) : site.worker === teamId;
+      return (isOffice() || assigned) && String(site.status || '').toLocaleLowerCase('it') !== 'completato';
+    });
+    if (!mine.length) {
+      return pageHead('Nuovo rapportino completo', 'Foto prima/dopo, ore, materiali e firma del cliente')
+        + '<div class="empty">Non ci sono cantieri attivi per un nuovo rapportino. Per un cantiere concluso inserisci soltanto le ore richieste.</div>';
+    }
     setTimeout(() => { reportSignature = canvasController('reportSignatureCanvas'); }, 20);
     return pageHead('Nuovo rapportino completo', 'Foto prima/dopo, ore, materiali e firma del cliente') +
       `<div class="card"><form onsubmit="saveReport(event)" class="formGrid">
         <div class="field full"><label>Cantiere</label><select name="site" required>${mine.map((site) => `<option value="${site.id}">${esc(site.title)} · ${esc(site.address)}</option>`).join('')}</select></div>
         ${field('Data intervento', 'workDate', 'date', localToday())}
         ${field('Operatori presenti', 'workersPresent', 'text', personName(role))}
-        ${field('Ora inizio', 'startTime', 'time', '08:00')}${field('Ora fine', 'endTime', 'time', '17:00')}
-        ${field('Ore totali', 'hours', 'number', '')}${field('Materiali acquistati €', 'material', 'number', '0')}
+        <div class="field"><label>Totale ore lavorate</label><input name="hours" type="number" min="0.5" max="24" step="0.5" inputmode="decimal" required></div>${field('Materiali acquistati €', 'material', 'number', '0')}
         <div class="field full"><label>Materiali utilizzati</label><textarea name="materialsDescription" placeholder="Prodotti, quantità e riferimenti"></textarea></div>
         <div class="field full"><label>Lavoro eseguito</label><textarea name="notes" required placeholder="Descrivi con precisione attività e zone interessate"></textarea></div>
         <div class="field full"><label>Problemi riscontrati</label><textarea name="issues" placeholder="Danni, impedimenti, lavorazioni aggiuntive..."></textarea></div>
@@ -144,6 +150,8 @@
       const after = await storeReportPhotos(reportId, event.target.photosAfter.files, 'Dopo', site);
       if (!before.length) throw new Error('Inserisci almeno una foto prima del lavoro.');
       const material = Number(form.get('material') || 0);
+      const hours = Number(form.get('hours') || 0);
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24) throw new Error('Inserisci un totale ore maggiore di zero e non superiore a 24.');
       const progress = form.get('progress') === '' ? Number(site.progress || 0) : Number(form.get('progress'));
       const item = {
         id: reportId,
@@ -156,10 +164,8 @@
         workerName: personName(role),
         workDate: form.get('workDate'),
         date: new Date().toISOString(),
-        startTime: form.get('startTime'),
-        endTime: form.get('endTime'),
         workersPresent: form.get('workersPresent'),
-        hours: Number(form.get('hours') || 0),
+        hours,
         material,
         materialsDescription: form.get('materialsDescription'),
         notes: form.get('notes'),
@@ -177,6 +183,7 @@
       site.progress = progress;
       site.cost = Number(site.cost || 0) + material;
       site.status = item.status === 'Completato' ? 'Completato' : item.status === 'In attesa' ? 'Pianificato' : 'In corso';
+      if (site.status === 'Completato') site.hoursCloseoutDate = String(item.workDate || '').slice(0, 10);
       db.audit = db.audit || [];
       db.audit.push({ id: uid('log'), date: item.date, actor: item.workerName, action: 'Creazione', entity: 'Rapportino', summary: `${item.code} · ${site.title}` });
       save();
@@ -218,7 +225,7 @@
     const site = siteFor(item);
     const popup = window.open('', '_blank');
     if (!popup) return alert('Consenti l’apertura della finestra per generare il PDF.');
-    popup.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${esc(item.code)}</title><style>body{font:14px Arial;color:#172419;padding:35px;line-height:1.5}h1{color:#315c3b;margin-bottom:3px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f1f4ef;padding:15px;margin:18px 0}.box{border:1px solid #cad2c9;padding:14px;margin:12px 0}.sign{margin-top:35px;border-top:1px solid #777;padding-top:12px}.sign img{max-width:290px;max-height:100px}small{color:#5c655e}</style></head><body><h1>${COMPANY.name}</h1><small>${COMPANY.address} · P.IVA ${COMPANY.vat} · ${COMPANY.phone} · ${COMPANY.email}</small><hr><h2>RAPPORTINO ${esc(item.code)}</h2><div class="meta"><b>Cliente</b><span>${esc(item.client || site.client)}</span><b>Cantiere</b><span>${esc(site.title || '')}</span><b>Indirizzo</b><span>${esc(item.address || site.address)}</span><b>Data</b><span>${esc(dateText(item.workDate))}</span><b>Operatori</b><span>${esc(item.workersPresent || item.workerName)}</span><b>Orario / ore</b><span>${esc(item.startTime)}–${esc(item.endTime)} · ${Number(item.hours || 0).toFixed(1)} ore</span></div><div class="box"><b>Lavoro eseguito</b><p>${esc(item.notes)}</p></div>${item.materialsDescription ? `<div class="box"><b>Materiali</b><p>${esc(item.materialsDescription)} · ${euro(item.material)}</p></div>` : ''}${item.issues ? `<div class="box"><b>Problemi riscontrati</b><p>${esc(item.issues)}</p></div>` : ''}${item.nextSteps ? `<div class="box"><b>Da completare</b><p>${esc(item.nextSteps)}</p></div>` : ''}<p><b>Avanzamento:</b> ${Number(item.progress || 0)}% · <b>Stato:</b> ${esc(item.status)}</p><p><b>Fotografie allegate:</b> ${item.photoCount || 0}</p><div class="sign"><b>Confermato e firmato da ${esc(item.signedBy)}</b><br><small>${esc(dateTimeText(item.signedAt))}</small><br><img src="${item.signature}" alt="Firma"></div></body></html>`);
+    popup.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${esc(item.code)}</title><style>body{font:14px Arial;color:#172419;padding:35px;line-height:1.5}h1{color:#315c3b;margin-bottom:3px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f1f4ef;padding:15px;margin:18px 0}.box{border:1px solid #cad2c9;padding:14px;margin:12px 0}.sign{margin-top:35px;border-top:1px solid #777;padding-top:12px}.sign img{max-width:290px;max-height:100px}small{color:#5c655e}</style></head><body><h1>${COMPANY.name}</h1><small>${COMPANY.address} · P.IVA ${COMPANY.vat} · ${COMPANY.phone} · ${COMPANY.email}</small><hr><h2>RAPPORTINO ${esc(item.code)}</h2><div class="meta"><b>Cliente</b><span>${esc(item.client || site.client)}</span><b>Cantiere</b><span>${esc(site.title || '')}</span><b>Indirizzo</b><span>${esc(item.address || site.address)}</span><b>Data</b><span>${esc(dateText(item.workDate))}</span><b>Operatori</b><span>${esc(item.workersPresent || item.workerName)}</span><b>Ore lavorate</b><span>${Number(item.hours || 0).toFixed(1)} ore</span></div><div class="box"><b>Lavoro eseguito</b><p>${esc(item.notes)}</p></div>${item.materialsDescription ? `<div class="box"><b>Materiali</b><p>${esc(item.materialsDescription)} · ${euro(item.material)}</p></div>` : ''}${item.issues ? `<div class="box"><b>Problemi riscontrati</b><p>${esc(item.issues)}</p></div>` : ''}${item.nextSteps ? `<div class="box"><b>Da completare</b><p>${esc(item.nextSteps)}</p></div>` : ''}<p><b>Avanzamento:</b> ${Number(item.progress || 0)}% · <b>Stato:</b> ${esc(item.status)}</p><p><b>Fotografie allegate:</b> ${item.photoCount || 0}</p><div class="sign"><b>Confermato e firmato da ${esc(item.signedBy)}</b><br><small>${esc(dateTimeText(item.signedAt))}</small><br><img src="${item.signature}" alt="Firma"></div></body></html>`);
     popup.document.close();
     setTimeout(() => popup.print(), 500);
   };

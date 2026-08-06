@@ -46,7 +46,14 @@
       case 'inspection': view = 'inspections'; render(); return window.openInspection(id);
       case 'quote': view = 'quotes'; render(); return window.openQuote(id);
       case 'document': view = 'documentsView'; render(); return window.openCompanyDocument?.(id);
-      case 'site': view = office ? 'sites' : 'worker'; render(); return office ? window.openSite(id) : window.openReport(id);
+      case 'site': {
+        const site = (db.sites || []).find((item) => String(item.id) === String(id));
+        view = office ? 'sites' : 'worker';
+        render();
+        if (office) return window.openSite(id);
+        if (String(site?.status || '').toLocaleLowerCase('it') === 'completato' && typeof window.openCloseoutHours === 'function') return window.openCloseoutHours(id);
+        return window.openReport(id);
+      }
       case 'team': view = 'teamsView'; render(); return window.openTeam(id);
       case 'drone': view = 'drone'; render(); return window.openDrone(id);
       case 'lifeline': view = 'lifeline'; render(); return window.openLifeline(id);
@@ -146,7 +153,9 @@
       case 'inspection': return actionButton('calendar', '📅 Calendario', 'green') + edit + remove;
       case 'quote': return actionButton('pdf', row.item.storagePath || row.item.pdfKey ? 'Apri PDF' : 'Genera PDF', 'green') + actionButton('photo', `📷 Foto/Video${row.mediaCount ? ` (${row.mediaCount})` : ''}`) + edit + remove;
       case 'document': return actionButton('file', 'Apri', 'green') + edit + remove;
-      case 'site': return actionButton('photo', `📷 Foto${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove;
+      case 'site': return isOffice()
+        ? actionButton('photo', `📷 Foto${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove
+        : actionButton('open', String(row.item.status || '').toLocaleLowerCase('it') === 'completato' ? 'Inserisci ore' : 'Apri', 'green') + actionButton('photo', `📷 Foto${row.mediaCount ? ` (${row.mediaCount})` : ''}`);
       case 'team': return edit + remove;
       case 'drone': return actionButton('photo', `🎬 Video/Foto${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove;
       case 'lifeline': return actionButton('photo', `📷 Foto/Documenti${row.mediaCount ? ` (${row.mediaCount})` : ''}`, 'green') + edit + remove;
@@ -197,7 +206,10 @@
       add((db.leads || []).filter((item) => item.source === 'Danea Interventi'), { type: 'Richiesta Danea', icon: '🔧', action: 'danea', title: (item) => item.title || 'Richiesta di intervento', meta: (item) => `${item.client || item.name || ''} · ${item.studio || ''} · ${item.status || ''}` });
     } else {
       const teamId = currentTeamId();
-      add((db.sites || []).filter((item) => typeof siteHasTeam === 'function' ? siteHasTeam(item, teamId) : item.worker === teamId), { type: 'Cantiere', icon: '🏗️', action: 'site', title: (item) => item.title, meta: (item) => `${item.client || ''} · ${item.address || ''}`, mediaCount: (item) => (db.reports || []).filter((report) => String(report.site || report.siteId) === String(item.id)).reduce((total, report) => total + Math.max(Number(report.photoCount || 0), Array.isArray(report.photos) ? report.photos.length : 0), 0) });
+      add((db.sites || []).filter((item) => {
+        const assigned = typeof siteHasTeam === 'function' ? siteHasTeam(item, teamId) : item.worker === teamId;
+        return assigned && (typeof window.workerCanSeeSite !== 'function' || window.workerCanSeeSite(item));
+      }), { type: 'Cantiere', icon: '🏗️', action: 'site', title: (item) => item.title, meta: (item) => `${item.client || ''} · ${item.address || ''}`, mediaCount: (item) => (db.reports || []).filter((report) => String(report.site || report.siteId) === String(item.id)).reduce((total, report) => total + Math.max(Number(report.photoCount || 0), Array.isArray(report.photos) ? report.photos.length : 0), 0) });
       add((db.roofs || []).filter((item) => item.worker === teamId), { type: 'Tetti e gronde', icon: '🏠', action: 'roof', title: (item) => item.type, meta: (item) => `${item.client || ''} · ${item.address || ''}` });
       add((db.drains || []).filter((item) => item.worker === teamId), { type: 'Pozzetti e tombini', icon: '🕳️', action: 'drain', title: (item) => item.type, meta: (item) => `${item.client || ''} · ${item.address || ''}` });
     }

@@ -189,7 +189,13 @@
   }
 
   function jobOptions(teamId, selectedSiteId = '', includeAll = false, selectedJob = '') {
-    const rows = (database().sites || []).filter((site) => includeAll || siteHasTeam(site, teamId) || String(site.id) === String(selectedSiteId));
+    const rows = (database().sites || []).filter((site) => {
+      const selected = Boolean(selectedSiteId) && String(site.id) === String(selectedSiteId);
+      const assigned = includeAll || siteHasTeam(site, teamId) || selected;
+      const completed = String(site.status || '').toLocaleLowerCase('it') === 'completato';
+      const visible = includeAll || isOffice() || selected || (!completed && (typeof window.workerCanSeeSite !== 'function' || window.workerCanSeeSite(site)));
+      return assigned && visible;
+    });
     const options = rows.map((site) => `<option value="site:${esc(site.id)}" ${String(site.id) === String(selectedSiteId) ? 'selected' : ''}>${esc(siteLabel(site))}</option>`);
     const auxiliary = [
       ...(database().roofs || []).filter((item) => includeAll || String(item.worker) === String(teamId)).map((item) => ({ kind: 'roof', item })),
@@ -227,7 +233,15 @@
   }
 
   function resolvedHourRows(month = reportMonth) {
-    return individualRows().filter((entry) => String(entry.date || '').startsWith(month)).map((entry) => {
+    const sourceRows = individualRows().filter((entry) => String(entry.date || '').startsWith(month));
+    const hourRows = typeof window.EdilKappaHours?.annotateHourRows === 'function'
+      ? window.EdilKappaHours.annotateHourRows(sourceRows)
+      : sourceRows.map((entry) => {
+          const hours = numberValue(entry.hours);
+          const ordinaryHours = entry.ordinaryHours == null ? Math.min(8, hours) : numberValue(entry.ordinaryHours);
+          return { ...entry, ordinaryHours, overtimeHours: entry.overtimeHours == null ? Math.max(0, hours - ordinaryHours) : numberValue(entry.overtimeHours) };
+        });
+    return hourRows.map((entry) => {
       let site = (database().sites || []).find((item) => String(item.id) === String(entry.siteId || '')) || null;
       if (!site && entry.workType !== 'outside') site = matchSiteFromJob(entry.job);
       const outside = entry.workType === 'outside'
@@ -239,6 +253,8 @@
         workerName: entry.workerName || entry.member1 || 'Operaio non indicato',
         teamName: entry.teamName || WORKERS.find((team) => String(team.id) === String(entry.team))?.name || 'Senza squadra',
         hours: numberValue(entry.hours),
+        ordinaryHours: numberValue(entry.ordinaryHours),
+        overtimeHours: numberValue(entry.overtimeHours),
         site,
         siteId: site?.id || '',
         linkState
@@ -256,14 +272,18 @@
     for (const row of rows) {
       const siteKey = row.siteId || (row.linkState === 'Fuori cantiere' ? 'outside' : 'unlinked');
       const matrixKey = `${row.workerKey}|${siteKey}`;
-      if (!matrix.has(matrixKey)) matrix.set(matrixKey, { workerKey: row.workerKey, workerName: row.workerName, teamName: row.teamName, siteKey, site: row.site, linkState: row.linkState, days: new Set(), hours: 0 });
+      if (!matrix.has(matrixKey)) matrix.set(matrixKey, { workerKey: row.workerKey, workerName: row.workerName, teamName: row.teamName, siteKey, site: row.site, linkState: row.linkState, days: new Set(), hours: 0, ordinaryHours: 0, overtimeHours: 0 });
       const matrixRow = matrix.get(matrixKey);
       matrixRow.hours += row.hours;
+      matrixRow.ordinaryHours += row.ordinaryHours;
+      matrixRow.overtimeHours += row.overtimeHours;
       if (row.hours > 0 && row.date) matrixRow.days.add(row.date);
 
-      if (!siteTotals.has(siteKey)) siteTotals.set(siteKey, { siteKey, site: row.site, linkState: row.linkState, workers: new Set(), days: new Set(), hours: 0 });
+      if (!siteTotals.has(siteKey)) siteTotals.set(siteKey, { siteKey, site: row.site, linkState: row.linkState, workers: new Set(), days: new Set(), hours: 0, ordinaryHours: 0, overtimeHours: 0 });
       const siteRow = siteTotals.get(siteKey);
       siteRow.hours += row.hours;
+      siteRow.ordinaryHours += row.ordinaryHours;
+      siteRow.overtimeHours += row.overtimeHours;
       siteRow.workers.add(row.workerKey);
       if (row.hours > 0 && row.date) siteRow.days.add(row.date);
 
@@ -278,6 +298,8 @@
       matrix: Array.from(matrix.values()).sort((left, right) => left.workerName.localeCompare(right.workerName, 'it') || String(left.site?.title || left.linkState).localeCompare(String(right.site?.title || right.linkState), 'it')),
       siteTotals: Array.from(siteTotals.values()).sort((left, right) => String(left.site?.title || left.linkState).localeCompare(String(right.site?.title || right.linkState), 'it')),
       totalHours: rows.reduce((sum, row) => sum + row.hours, 0),
+      ordinaryHours: rows.reduce((sum, row) => sum + row.ordinaryHours, 0),
+      overtimeHours: rows.reduce((sum, row) => sum + row.overtimeHours, 0),
       linkedHours: rows.filter((row) => row.site).reduce((sum, row) => sum + row.hours, 0),
       outsideHours: rows.filter((row) => row.linkState === 'Fuori cantiere').reduce((sum, row) => sum + row.hours, 0),
       unlinked: rows.filter((row) => row.linkState === 'Da collegare'),
@@ -464,7 +486,7 @@
       ${field('Data', 'date', 'date', item.date)}
       <div class="field full"><label>Cantiere / attività</label><select name="workRef" required>${jobOptions(item.team || currentTeamId(), item.siteId || '', isOffice(), item.job || '')}</select></div>
       <div class="field full"><label>Descrizione se non è un cantiere</label><input name="jobOther" value="${esc(currentOther)}" placeholder="Magazzino, trasferta o altro"></div>
-      ${field('Ore lavorate', 'hours', 'number', item.hours)}
+      <div class="field"><label>Totale ore lavorate</label><input name="hours" type="number" min="0.5" max="24" step="0.5" inputmode="decimal" value="${esc(item.hours)}" required></div>
       <div class="field full"><label>Note</label><textarea name="notes">${esc(item.notes || '')}</textarea></div>
     </div>`, (formData) => {
       const hours = numberValue(formData.get('hours'));
@@ -571,10 +593,10 @@
   }
 
   function csvContent(data) {
-    const headers = ['Mese', 'Data', 'Operaio', 'Squadra', 'Cantiere', 'Cliente', 'Codice cantiere', 'CUC', 'Ore', 'Collegamento', 'Note'];
+    const headers = ['Mese', 'Data', 'Operaio', 'Squadra', 'Cantiere', 'Cliente', 'Codice cantiere', 'CUC', 'Ore totali', 'Ore ordinarie', 'Ore straordinarie', 'Collegamento', 'Note'];
     const rows = data.rows.map((row) => {
       const compliance = row.site ? siteRecord(row.site) : {};
-      return [data.month, row.date, row.workerName, row.teamName, row.site?.title || row.job || '', row.site?.client || '', row.site?.code || '', compliance.cuc || '', decimalText(row.hours), row.linkState, row.notes || ''];
+      return [data.month, row.date, row.workerName, row.teamName, row.site?.title || row.job || '', row.site?.client || '', row.site?.code || '', compliance.cuc || '', decimalText(row.hours), decimalText(row.ordinaryHours), decimalText(row.overtimeHours), row.linkState, row.notes || ''];
     });
     return `\ufeff${[headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n')}`;
   }
@@ -598,13 +620,15 @@
       `Mese: ${data.month}`,
       `Stato: ${status.status}`,
       `Ore complessive: ${data.totalHours.toFixed(1)}`,
+      `Ore ordinarie: ${data.ordinaryHours.toFixed(1)}`,
+      `Ore straordinarie: ${data.overtimeHours.toFixed(1)}`,
       `Ore collegate ai cantieri: ${data.linkedHours.toFixed(1)}`,
       `Ore fuori cantiere: ${data.outsideHours.toFixed(1)}`,
       ''
     ];
     for (const row of data.siteTotals) {
       const compliance = row.site ? siteRecord(row.site) : {};
-      lines.push(`${row.site ? siteLabel(row.site) : row.linkState}: ${row.hours.toFixed(1)} ore · ${row.workers.size} operai${compliance.cuc ? ` · CUC ${compliance.cuc}` : ''}`);
+      lines.push(`${row.site ? siteLabel(row.site) : row.linkState}: ${row.hours.toFixed(1)} ore (${row.ordinaryHours.toFixed(1)} ord. + ${row.overtimeHours.toFixed(1)} straord.) · ${row.workers.size} operai${compliance.cuc ? ` · CUC ${compliance.cuc}` : ''}`);
     }
     if (data.unlinked.length) lines.push('', `ATTENZIONE: ${data.unlinked.length} registrazioni non sono collegate a un cantiere.`);
     if (data.anomalies.length) lines.push(`ATTENZIONE: ${data.anomalies.length} giornate superano 12 ore per operaio.`);
@@ -625,8 +649,8 @@
     const data = monthData();
     const popup = window.open('', '_blank');
     if (!popup) return alert('Consenti l’apertura della finestra per stampare il riepilogo.');
-    const matrixRows = data.matrix.map((row) => `<tr><td>${esc(row.workerName)}</td><td>${esc(row.teamName)}</td><td>${esc(row.site ? siteLabel(row.site) : row.linkState)}</td><td>${row.days.size}</td><td>${row.hours.toFixed(1)}</td></tr>`).join('');
-    popup.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>EdilConnect ${esc(data.month)}</title><style>body{font-family:Arial;padding:28px;color:#111}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{border:1px solid #bbb;padding:7px;font-size:11px;text-align:left}th{background:#eee}.warning{padding:10px;background:#fff4cf;border:1px solid #e4c75b}</style></head><body><h1>${esc(COMPANY.name || 'EDILKAPPA')}</h1><h2>Cassa Edile / EdilConnect · ${esc(data.month)}</h2><p>Ore complessive: <b>${data.totalHours.toFixed(1)}</b> · collegate: <b>${data.linkedHours.toFixed(1)}</b> · fuori cantiere: <b>${data.outsideHours.toFixed(1)}</b></p>${data.unlinked.length || data.anomalies.length ? `<p class="warning">Da controllare: ${data.unlinked.length} registrazioni non collegate e ${data.anomalies.length} giornate sopra 12 ore.</p>` : ''}<table><thead><tr><th>Operaio</th><th>Squadra</th><th>Cantiere</th><th>Giorni</th><th>Ore</th></tr></thead><tbody>${matrixRows || '<tr><td colspan="5">Nessuna ora registrata.</td></tr>'}</tbody></table><p>Stato invio: <b>${esc(monthRecord(data.month).status)}</b></p></body></html>`);
+    const matrixRows = data.matrix.map((row) => `<tr><td>${esc(row.workerName)}</td><td>${esc(row.teamName)}</td><td>${esc(row.site ? siteLabel(row.site) : row.linkState)}</td><td>${row.days.size}</td><td>${row.hours.toFixed(1)}</td><td>${row.ordinaryHours.toFixed(1)}</td><td>${row.overtimeHours.toFixed(1)}</td></tr>`).join('');
+    popup.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>EdilConnect ${esc(data.month)}</title><style>body{font-family:Arial;padding:28px;color:#111}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{border:1px solid #bbb;padding:7px;font-size:11px;text-align:left}th{background:#eee}.warning{padding:10px;background:#fff4cf;border:1px solid #e4c75b}.overtime{color:#a63129;font-weight:bold}</style></head><body><h1>${esc(COMPANY.name || 'EDILKAPPA')}</h1><h2>Cassa Edile / EdilConnect · ${esc(data.month)}</h2><p>Ore complessive: <b>${data.totalHours.toFixed(1)}</b> · ordinarie: <b>${data.ordinaryHours.toFixed(1)}</b> · straordinarie: <b class="overtime">${data.overtimeHours.toFixed(1)}</b></p>${data.unlinked.length || data.anomalies.length ? `<p class="warning">Da controllare: ${data.unlinked.length} registrazioni non collegate e ${data.anomalies.length} giornate sopra 12 ore.</p>` : ''}<table><thead><tr><th>Operaio</th><th>Squadra</th><th>Cantiere</th><th>Giorni</th><th>Totale</th><th>Ordinarie</th><th class="overtime">Straordinarie</th></tr></thead><tbody>${matrixRows || '<tr><td colspan="7">Nessuna ora registrata.</td></tr>'}</tbody></table><p>Stato invio: <b>${esc(monthRecord(data.month).status)}</b></p></body></html>`);
     popup.document.close();
     setTimeout(() => popup.print(), 400);
   };
@@ -641,15 +665,15 @@
     const subjectSites = sites.filter((site) => isSubject(siteRecord(site)));
     const readySites = subjectSites.filter((site) => !siteIssues(site).length);
     return `<div class="edilconnectHero"><h2>Cassa Edile / EdilConnect</h2><p>Inserisci i dati del cantiere una volta sola. Le ore comunicate dagli operai vengono collegate automaticamente e il consulente riceve un riepilogo già pronto.</p><div class="edilconnectActions" style="margin-top:14px"><a class="btn lime" href="https://www.congruitanazionale.it/" target="_blank" rel="noopener">Apri CNCE EdilConnect</a><a class="btn light" href="https://www.congruitanazionale.it/Home/Simulatore" target="_blank" rel="noopener">Simulatore ufficiale</a></div></div>
-      <div class="grid stats">${stat('Cantieri soggetti', subjectSites.length, 'CE')}${stat('Dati cantiere pronti', `${readySites.length}/${subjectSites.length}`, '✓')}${stat('Ore del mese', data.totalHours.toFixed(1), '⏱️')}${stat('Controlli aperti', alerts.length, '!')}</div>
+      <div class="grid stats">${stat('Cantieri soggetti', subjectSites.length, 'CE')}${stat('Dati cantiere pronti', `${readySites.length}/${subjectSites.length}`, '✓')}${stat('Ore del mese', data.totalHours.toFixed(1), '⏱️', `${data.ordinaryHours.toFixed(1)} ord. · ${data.overtimeHours.toFixed(1)} straord.`)}${stat('Controlli aperti', alerts.length, '!')}</div>
       ${alerts.length ? `<section class="card edilconnectWarning"><div class="cardHead"><h3>Da sistemare prima dell'invio</h3></div><div class="list">${alerts.map((item) => `<div class="row"><div class="rowIcon">!</div><div class="rowBody"><b>${esc(item.title)}</b><small>${esc(item.text)}</small></div><button class="btn sm green" onclick="${item.type === 'site' ? `openEdilConnectSite('${item.site.id}')` : ''}">${item.type === 'site' ? 'Sistema' : 'Vedi sotto'}</button></div>`).join('')}</div></section><div style="height:16px"></div>` : ''}
       ${pageHead('Dati dei cantieri', 'CUC, DNL e attestazione restano riservati a Titolare e Ufficio')}
       <section class="card"><div class="tableWrap"><table class="table edilconnectSiteTable"><thead><tr><th>Cantiere</th><th>Ruolo</th><th>Valore opera</th><th>Congruità</th><th>CUC</th><th>DNL</th><th>Attestazione</th><th></th></tr></thead><tbody>${sites.map((site) => { const record = siteRecord(site); return `<tr><td><b>${esc(site.title)}</b><br><small>${esc(site.client)} · ${esc(site.address)}</small></td><td>${esc(record.companyRole)}</td><td class="money">${euro(record.totalWorkValue)}</td><td>${complianceBadge(site)}</td><td>${esc(record.cuc || 'Da inserire')}</td><td>${esc(record.dnlStatus)}</td><td>${esc(record.certificateStatus)}</td><td><button class="btn sm green" onclick="openEdilConnectSite('${site.id}')">Apri</button></td></tr>`; }).join('') || '<tr><td colspan="8">Nessun cantiere presente.</td></tr>'}</tbody></table></div></section>
       <div style="height:22px"></div>${pageHead('Riepilogo mensile per il consulente', 'Ore già registrate dagli operai, senza ricopiarle', '<div class="edilconnectActions"><button class="btn light" onclick="copyEdilConnectSummary()">Copia riepilogo</button><button class="btn light" onclick="printEdilConnectReport()">Stampa / PDF</button><button class="btn lime" onclick="downloadEdilConnectCsv()">Scarica Excel CSV</button></div>')}
       <section class="card"><div class="edilconnectFilters"><input class="input" type="month" value="${esc(reportMonth)}" onchange="setEdilConnectMonth(this.value)"><select class="input" onchange="setEdilConnectSite(this.value)"><option value="">Tutti i cantieri</option>${sites.map((site) => `<option value="${esc(site.id)}" ${reportSite === site.id ? 'selected' : ''}>${esc(siteLabel(site))}</option>`).join('')}</select><select class="input" onchange="setEdilConnectWorker(this.value)"><option value="">Tutti gli operai</option>${workerOptions.map(([key, name]) => `<option value="${esc(key)}" ${reportWorker === key ? 'selected' : ''}>${esc(name)}</option>`).join('')}</select></div>
       <form class="edilconnectStatusForm" onsubmit="saveEdilConnectMonth(event)"><label>Stato del mese<select name="status">${MONTH_STATUSES.map((value) => `<option ${status.status === value ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label><label>Note per il consulente<textarea name="notes" placeholder="Eventuali chiarimenti">${esc(status.notes || '')}</textarea></label><button class="btn green" type="submit">Salva stato</button></form>${status.sentAt ? `<div class="sectionNote">Inviato il ${esc(new Date(status.sentAt).toLocaleString('it-IT'))}</div>` : ''}</section>
-      <div style="height:16px"></div><section class="card"><div class="cardHead"><h3>Ore per operaio e cantiere</h3></div><div class="tableWrap"><table class="table edilconnectMatrix"><thead><tr><th>Operaio</th><th>Squadra</th><th>Cantiere</th><th>CUC</th><th>Giorni</th><th>Ore</th><th>Controllo</th></tr></thead><tbody>${data.matrix.map((row) => { const compliance = row.site ? siteRecord(row.site) : {}; return `<tr><td><b>${esc(row.workerName)}</b></td><td>${esc(row.teamName)}</td><td>${esc(row.site ? siteLabel(row.site) : row.linkState)}</td><td>${esc(compliance.cuc || '—')}</td><td>${row.days.size}</td><td class="money">${row.hours.toFixed(1)}</td><td>${row.linkState === 'Da collegare' ? '<span class="pill orange">Da collegare</span>' : '<span class="pill">OK</span>'}</td></tr>`; }).join('') || '<tr><td colspan="7">Nessuna ora registrata nel mese.</td></tr>'}</tbody></table></div></section>
-      <div style="height:16px"></div><section class="card"><div class="cardHead"><h3>Totale per cantiere / CUC</h3></div><div class="tableWrap"><table class="table"><thead><tr><th>Cantiere</th><th>CUC</th><th>Operai</th><th>Giorni</th><th>Ore</th></tr></thead><tbody>${data.siteTotals.map((row) => { const compliance = row.site ? siteRecord(row.site) : {}; return `<tr><td><b>${esc(row.site ? siteLabel(row.site) : row.linkState)}</b></td><td>${esc(compliance.cuc || '—')}</td><td>${row.workers.size}</td><td>${row.days.size}</td><td class="money">${row.hours.toFixed(1)}</td></tr>`; }).join('') || '<tr><td colspan="5">Nessun totale disponibile.</td></tr>'}</tbody></table></div></section>`;
+      <div style="height:16px"></div><section class="card"><div class="cardHead"><h3>Ore per operaio e cantiere</h3></div><div class="tableWrap"><table class="table edilconnectMatrix"><thead><tr><th>Operaio</th><th>Squadra</th><th>Cantiere</th><th>CUC</th><th>Giorni</th><th>Totale</th><th>Ordinarie</th><th>Straordinarie</th><th>Controllo</th></tr></thead><tbody>${data.matrix.map((row) => { const compliance = row.site ? siteRecord(row.site) : {}; return `<tr><td><b>${esc(row.workerName)}</b></td><td>${esc(row.teamName)}</td><td>${esc(row.site ? siteLabel(row.site) : row.linkState)}</td><td>${esc(compliance.cuc || '—')}</td><td>${row.days.size}</td><td class="money">${row.hours.toFixed(1)}</td><td class="money">${row.ordinaryHours.toFixed(1)}</td><td class="money" style="color:#a63129">${row.overtimeHours.toFixed(1)}</td><td>${row.linkState === 'Da collegare' ? '<span class="pill orange">Da collegare</span>' : '<span class="pill">OK</span>'}</td></tr>`; }).join('') || '<tr><td colspan="9">Nessuna ora registrata nel mese.</td></tr>'}</tbody></table></div></section>
+      <div style="height:16px"></div><section class="card"><div class="cardHead"><h3>Totale per cantiere / CUC</h3></div><div class="tableWrap"><table class="table"><thead><tr><th>Cantiere</th><th>CUC</th><th>Operai</th><th>Giorni</th><th>Totale</th><th>Ordinarie</th><th>Straordinarie</th></tr></thead><tbody>${data.siteTotals.map((row) => { const compliance = row.site ? siteRecord(row.site) : {}; return `<tr><td><b>${esc(row.site ? siteLabel(row.site) : row.linkState)}</b></td><td>${esc(compliance.cuc || '—')}</td><td>${row.workers.size}</td><td>${row.days.size}</td><td class="money">${row.hours.toFixed(1)}</td><td class="money">${row.ordinaryHours.toFixed(1)}</td><td class="money" style="color:#a63129">${row.overtimeHours.toFixed(1)}</td></tr>`; }).join('') || '<tr><td colspan="7">Nessun totale disponibile.</td></tr>'}</tbody></table></div></section>`;
   }
 
   const baseRender = render;

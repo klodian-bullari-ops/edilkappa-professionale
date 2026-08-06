@@ -624,6 +624,7 @@ export class EdilKappaRepository {
     const currentProgress = Number(existingPayload.progress ?? existingData.progress ?? 0);
     const progress = mapDaneaSiteProgress(input.daneaStatus, currentProgress, currentStatus);
     const now = new Date().toISOString();
+    const becameCompleted = status === 'Completato' && currentStatus !== 'Completato';
     const title = input.interventionId?.trim()
       ? `Danea ${input.interventionId.trim()} · ${input.title}`
       : `Danea · ${input.title}`;
@@ -654,6 +655,9 @@ export class EdilKappaRepository {
       cost: recordedCost,
       status,
       progress,
+      completedAt: becameCompleted ? now : String(existingPayload.completedAt || ''),
+      hoursCloseoutDate: becameCompleted ? now.slice(0, 10) : String(existingPayload.hoursCloseoutDate || ''),
+      hoursCloseoutRequiredAt: becameCompleted ? now : String(existingPayload.hoursCloseoutRequiredAt || ''),
       source: 'Danea Interventi',
       daneaManaged: isDaneaManaged,
       daneaRequestId: requestId,
