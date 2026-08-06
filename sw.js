@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v37-share-on-demand`;
+const CACHE = `${CACHE_PREFIX}v38-firebase-proxy`;
 const APP_SHELL = [
   "./",
   "./index.html",
