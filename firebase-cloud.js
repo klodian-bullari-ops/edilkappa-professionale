@@ -132,7 +132,13 @@ const api = {
   deleteDocument,
   get ready() { return ready; },
   get currentUid() { return user?.uid || ''; },
-  get currentProfile() { return profile; }
+  get currentProfile() { return profile; },
+  get workerProfiles() {
+    if (profile?.role !== 'owner') return [];
+    return cloudUsers
+      .filter((item) => item.role === 'worker' && item.active && item.teamId)
+      .map((item) => ({ id: item.uid, name: item.displayName || item.email, team: item.teamId }));
+  }
 };
 window.EdilKappaCloud = api;
 
@@ -877,6 +883,7 @@ window.cloudSaveUser = async function (uid) {
 function startUsersListener() {
   unsubscribers.push(onSnapshot(query(collection(firestore, 'users'), where('orgId', '==', ORG_ID)), (snapshot) => {
     cloudUsers = snapshot.docs.map((entry) => ({ uid: entry.id, ...entry.data() })).sort((a, b) => String(a.displayName).localeCompare(String(b.displayName), 'it'));
+    window.dispatchEvent(new CustomEvent('edilkappa:cloud-users-synced'));
     if (local.getView() === 'portalView') local.render();
   }, (error) => setSyncState('Errore utenti', '#ad2a2a', errorText(error))));
 }

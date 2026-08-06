@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v38-firebase-proxy`;
+const CACHE = `${CACHE_PREFIX}v39-hours-closeout`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -17,6 +17,7 @@ const APP_SHELL = [
   "./completion-center.js",
   "./bulk-sharing.js",
   "./edilconnect.js",
+  "./hours-closeout.js",
   "./firebase-cloud.js",
   "./sharing-integration.js",
   "./quick-site-photos.js",
