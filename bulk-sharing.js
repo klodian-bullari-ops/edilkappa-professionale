@@ -409,11 +409,37 @@
 
   function setBusy(button, busy, text = 'Preparazione…') {
     if (!(button instanceof HTMLElement)) return;
-    if (busy) { button.dataset.oldLabel = button.textContent; button.disabled = true; button.textContent = text; }
-    else { button.disabled = false; button.textContent = button.dataset.oldLabel || button.textContent; delete button.dataset.oldLabel; }
+    if (busy) {
+      button.dataset.oldHtml = button.innerHTML;
+      button.disabled = true;
+      button.textContent = text;
+    } else {
+      button.disabled = false;
+      if (button.dataset.oldHtml) button.innerHTML = button.dataset.oldHtml;
+      delete button.dataset.oldHtml;
+    }
   }
 
-  async function packageFileForSelection(session, selected) {
+  function selectionKey(files) {
+    return files.map((file) => file.id).sort().join('|');
+  }
+
+  async function originalFilesForSelection(selected) {
+    const usedNames = new Set();
+    const files = [];
+    for (const entry of selected) {
+      const blob = await resolveBlob(entry);
+      const name = uniquePath(cleanName(entry.name || entry.path?.split('/').pop() || 'allegato'), usedNames);
+      const uploadedAt = Date.parse(entry.uploadedAt || '');
+      files.push(new File([blob], name, {
+        type: entry.type || blob.type || 'application/octet-stream',
+        lastModified: Number.isFinite(uploadedAt) ? uploadedAt : Date.now()
+      }));
+    }
+    return files;
+  }
+
+  async function packageFileForSelection(session, selected, originalFiles = null) {
     const fullSelection = selected.length === session.files.length;
     const current = session.info.item.completionPackage || {};
     const currentFingerprint = fingerprint(session.files);
@@ -423,7 +449,20 @@
         return new File([blob], current.fileName || 'Pacchetto-EdilKappa.zip', { type: 'application/zip' });
       } catch (_) { /* Su un altro dispositivo il pacchetto viene rigenerato dai file cloud. */ }
     }
-    return zipFile(session.info, selected);
+    const zipEntries = originalFiles?.length === selected.length
+      ? selected.map((entry, index) => ({ ...entry, source: { blob: originalFiles[index] } }))
+      : selected;
+    return zipFile(session.info, zipEntries);
+  }
+
+  function nativeShareFiles(session) {
+    if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return [];
+    const candidates = [session.preparedOriginalFiles || [], session.preparedFile ? [session.preparedFile] : []];
+    for (const files of candidates) {
+      if (!files.length) continue;
+      try { if (navigator.canShare({ files })) return files; } catch (_) {}
+    }
+    return [];
   }
 
   function daneaContext(info) {
@@ -446,13 +485,13 @@
     } catch (_) { return ''; }
   }
 
-  async function daneaTransfer(session, selected, button) {
+  async function daneaTransfer(session, selected, button, preparedFile = null) {
     const context = daneaContext(session.info);
     if (!context) throw new Error('Questo lavoro non è collegato a una pratica Danea precisa.');
     const targetWindow = window.open('', '_blank');
     if (targetWindow) { targetWindow.document.write('<p style="font:16px Arial;padding:24px">Preparazione del pacchetto EdilKappa…</p>'); targetWindow.document.close(); }
     try {
-      const file = await packageFileForSelection(session, selected);
+      const file = preparedFile || await packageFileForSelection(session, selected);
       downloadFile(file);
       const code = context.request.daneaId || context.requestId;
       const message = `Intervento Danea ${code} – pacchetto completo EdilKappa (${file.name})`;
@@ -474,52 +513,113 @@
     updateSelectionCount();
   };
 
+  function setPreparationStatus(message, state = '') {
+    const status = document.getElementById('sharePreparationStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.dataset.state = state;
+  }
+
+  function disableShareActions(disabled) {
+    document.querySelectorAll('[data-share-action]').forEach((button) => { button.disabled = Boolean(disabled); });
+  }
+
+  function queueSharePreparation(delay = 140) {
+    const session = activeSession;
+    if (!session) return;
+    clearTimeout(session.preparationTimer);
+    session.preparationRevision = Number(session.preparationRevision || 0) + 1;
+    const revision = session.preparationRevision;
+    session.preparedKey = '';
+    session.preparedFile = null;
+    session.preparedOriginalFiles = [];
+    disableShareActions(true);
+    const selected = selectedFiles();
+    if (!selected.length) {
+      setPreparationStatus('Seleziona almeno un file.', 'empty');
+      return;
+    }
+    setPreparationStatus('Preparazione degli allegati…', 'preparing');
+    session.preparationTimer = setTimeout(() => prepareActiveSelection(session, revision), delay);
+  }
+
+  async function prepareActiveSelection(session, revision) {
+    const selected = selectedFiles();
+    const key = selectionKey(selected);
+    try {
+      const originalFiles = await originalFilesForSelection(selected);
+      const zip = await packageFileForSelection(session, selected, originalFiles);
+      if (activeSession !== session || session.preparationRevision !== revision) return;
+      session.preparedKey = key;
+      session.preparedFile = zip;
+      session.preparedOriginalFiles = originalFiles;
+      disableShareActions(false);
+      setPreparationStatus(`Allegati pronti · ${selected.length} file · ZIP ${formatBytes(zip.size)}`, 'ready');
+    } catch (error) {
+      if (activeSession !== session || session.preparationRevision !== revision) return;
+      session.preparationError = error;
+      disableShareActions(true);
+      setPreparationStatus(error.message || 'Non riesco a preparare gli allegati.', 'error');
+    }
+  }
+
   function updateSelectionCount() {
     const count = document.querySelectorAll('[data-share-file]:checked').length;
     const label = document.getElementById('shareSelectionCount');
     if (label) label.textContent = `${count} file selezionati`;
-    document.querySelectorAll('[data-share-action]').forEach((button) => { button.disabled = count === 0; });
+    queueSharePreparation();
   }
 
   window.runShareAction = async function (mode, button) {
-    if (!activeSession) return;
+    const session = activeSession;
+    if (!session) return;
     const selected = selectedFiles();
     if (!selected.length) return alert('Seleziona almeno un file.');
-    const shareWindow = mode === 'whatsapp' ? window.open('', '_blank') : null;
-    setBusy(button, true);
+    if (!session.preparedFile || session.preparedKey !== selectionKey(selected)) {
+      queueSharePreparation(0);
+      return alert('Attendi che compaia “Allegati pronti”, poi premi di nuovo Condividi.');
+    }
+    const file = session.preparedFile;
+    const text = `File EdilKappa · ${session.info.client || 'Cliente'} · ${session.info.title}\nPacchetto: ${file.name}`;
     try {
-      if (mode === 'danea') return await daneaTransfer(activeSession, selected, button);
-      const file = await packageFileForSelection(activeSession, selected);
-      const text = `File EdilKappa · ${activeSession.info.client || 'Cliente'} · ${activeSession.info.title}\nPacchetto: ${file.name}`;
-      if (mode === 'native') {
-        if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-          try {
-            await navigator.share({ title: activeSession.info.title, text: `File EdilKappa · ${activeSession.info.client || 'Cliente'}`, files: [file] });
-            return;
-          } catch (error) {
-            if (error?.name === 'AbortError') return;
-          }
-        }
-        downloadFile(file);
-        alert('Il dispositivo non consente l’invio diretto: ho scaricato il pacchetto ZIP, pronto da allegare.');
-        return;
+      if (mode === 'danea') {
+        setBusy(button, true);
+        return await daneaTransfer(session, selected, button, file);
       }
       if (mode === 'download') {
         downloadFile(file);
-      } else if (mode === 'whatsapp') {
-        downloadFile(file);
-        const target = `https://wa.me/?text=${encodeURIComponent(text)}`;
-        if (shareWindow) shareWindow.location.replace(target); else window.open(target, '_blank', 'noopener');
-        alert('Ho scaricato il pacchetto ZIP: allegalo alla chat WhatsApp già preparata.');
-      } else if (mode === 'email') {
-        downloadFile(file);
-        window.location.href = `mailto:?subject=${encodeURIComponent(`EdilKappa · ${activeSession.info.title}`)}&body=${encodeURIComponent(text)}`;
-        alert('Ho scaricato il pacchetto ZIP: allegalo all’e-mail già preparata.');
-      } else if (mode === 'copy') {
+        return;
+      }
+      if (mode === 'copy') {
         if (await clipboard(text)) alert('Testo del pacchetto copiato.'); else prompt('Copia questo testo:', text);
+        return;
+      }
+      const shareFiles = nativeShareFiles(session);
+      if (shareFiles.length) {
+        const destination = mode === 'whatsapp' ? 'Scegli WhatsApp dal pannello che si apre.' : mode === 'email' ? 'Scegli Mail o la tua app e-mail dal pannello che si apre.' : 'Scegli l’app con cui inviare gli allegati.';
+        setBusy(button, true, 'Apro condivisione…');
+        try {
+          await navigator.share({ title: `EdilKappa · ${session.info.title}`, text: destination, files: shareFiles });
+          return;
+        } catch (error) {
+          if (error?.name === 'AbortError') return;
+          downloadFile(file);
+          alert('Il pannello di condivisione non ha accettato gli allegati. Ho scaricato lo ZIP, pronto da allegare.');
+          return;
+        }
+      }
+      downloadFile(file);
+      if (mode === 'whatsapp') {
+        const target = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        if (!window.open(target, '_blank', 'noopener')) window.location.href = target;
+        alert('Questo browser non permette di allegare file direttamente a WhatsApp. Ho scaricato lo ZIP: allegalo alla chat aperta.');
+      } else if (mode === 'email') {
+        window.location.href = `mailto:?subject=${encodeURIComponent(`EdilKappa · ${session.info.title}`)}&body=${encodeURIComponent(text)}`;
+        alert('Questo browser non permette di allegare file direttamente all’e-mail. Ho scaricato lo ZIP: allegalo al messaggio aperto.');
+      } else {
+        alert('Questo dispositivo non supporta la condivisione diretta dei file. Ho scaricato lo ZIP, pronto da allegare.');
       }
     } catch (error) {
-      shareWindow?.close();
       alert(error.message || 'Condivisione non riuscita.');
     } finally {
       if (mode !== 'danea') setBusy(button, false);
@@ -531,7 +631,7 @@
     let result;
     try { result = filesForScope(kind, id); } catch (error) { return alert(error.message); }
     if (!result.files.length) return alert('Non ci sono ancora foto, video o documenti disponibili per questo lavoro.');
-    activeSession = result;
+    activeSession = { ...result, preparedFile: null, preparedOriginalFiles: [], preparedKey: '', preparationRevision: 0, preparationTimer: null };
     const danea = daneaContext(result.info);
     const dialog = document.getElementById('modal');
     const content = document.getElementById('modalContent');
@@ -539,8 +639,10 @@
     const rows = result.files.map((file) => `<label class="shareFileRow"><input type="checkbox" value="${html(file.id)}" data-share-file checked onchange="updateShareSelection()"><span class="shareFileIcon">${file.type.startsWith('image/') ? '🖼️' : file.type.startsWith('video/') ? '🎬' : file.type.includes('pdf') ? '📄' : '📁'}</span><span><b>${html(file.name)}</b><small>${html(file.category)}${file.size ? ` · ${formatBytes(file.size)}` : ''}</small></span></label>`).join('');
     content.innerHTML = `<div class="modalHead"><div><h3>Condividi</h3><small>${html(result.info.client)} · ${html(result.info.title)}</small></div><button class="close" type="button" onclick="closeModal()">×</button></div>
       <div class="modalBody"><div class="shareSelectBar"><label><input type="checkbox" checked onchange="toggleAllShareFiles(this.checked)"> Seleziona tutto</label><b id="shareSelectionCount">${result.files.length} file selezionati</b></div><div class="shareFileList">${rows}</div>
-      <div class="shareMethods"><button class="shareMethod primary" data-share-action onclick="runShareAction('native',this)"><span>↗</span><b>Condividi</b><small>App del dispositivo</small></button><button class="shareMethod whatsapp" data-share-action onclick="runShareAction('whatsapp',this)"><span>💬</span><b>WhatsApp</b><small>Prepara messaggio</small></button><button class="shareMethod" data-share-action onclick="runShareAction('email',this)"><span>✉️</span><b>E-mail</b><small>Prepara messaggio</small></button><button class="shareMethod" data-share-action onclick="runShareAction('copy',this)"><span>📋</span><b>Copia testo</b><small>Nome e riepilogo</small></button><button class="shareMethod" data-share-action onclick="runShareAction('download',this)"><span>📦</span><b>Scarica ZIP</b><small>Un solo allegato</small></button>${danea ? `<button class="shareMethod danea" data-share-action onclick="runShareAction('danea',this)"><span>🔧</span><b>Danea</b><small>Apri pratica esatta</small></button>` : ''}</div></div><div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
+      <div id="sharePreparationStatus" class="sharePreparationStatus" data-state="preparing" aria-live="polite">Preparazione degli allegati…</div>
+      <div class="shareMethods"><button type="button" class="shareMethod primary" data-share-action disabled onclick="runShareAction('native',this)"><span>↗</span><b>Condividi</b><small>WhatsApp, Mail e altre app</small></button><button type="button" class="shareMethod whatsapp" data-share-action disabled onclick="runShareAction('whatsapp',this)"><span>💬</span><b>WhatsApp</b><small>Allegati già pronti</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('email',this)"><span>✉️</span><b>E-mail</b><small>Allegati già pronti</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('copy',this)"><span>📋</span><b>Copia testo</b><small>Nome e riepilogo</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('download',this)"><span>📦</span><b>Scarica ZIP</b><small>Un solo allegato</small></button>${danea ? `<button type="button" class="shareMethod danea" data-share-action disabled onclick="runShareAction('danea',this)"><span>🔧</span><b>Danea</b><small>Apri pratica esatta</small></button>` : ''}</div></div><div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
     dialog.showModal();
+    queueSharePreparation(0);
   };
 
   function formatBytes(value) {
@@ -598,7 +700,8 @@
     style.textContent = `
       .shareSelectBar{position:sticky;top:-20px;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;margin:-20px -20px 12px;background:#fff;border-bottom:1px solid var(--line)}.shareSelectBar label{display:flex;gap:8px;align-items:center;font-weight:850}.shareSelectBar input,.shareFileRow input{width:19px;height:19px;accent-color:var(--green)}.shareSelectBar b{font-size:12px;color:var(--muted)}
       .shareFileList{display:grid;gap:7px;max-height:42vh;overflow:auto;padding-right:4px}.shareFileRow{display:grid;grid-template-columns:auto 38px minmax(0,1fr);gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:13px;background:#fff;cursor:pointer}.shareFileRow:has(input:checked){border-color:#8fb69b;background:#f6fbf7}.shareFileIcon{width:38px;height:38px;border-radius:10px;background:#eef1ed;display:grid;place-items:center}.shareFileRow b,.shareFileRow small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shareFileRow small{margin-top:3px;color:var(--muted);font-size:11px}
-      .shareMethods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:16px}.shareMethod{border:1px solid var(--line);border-radius:15px;background:#fff;padding:13px 9px;color:var(--ink);text-align:left;min-height:92px}.shareMethod span,.shareMethod b,.shareMethod small{display:block}.shareMethod span{font-size:22px}.shareMethod b{margin-top:6px}.shareMethod small{margin-top:3px;color:var(--muted);font-size:10px}.shareMethod.primary{background:var(--ink);color:#fff;border-color:var(--ink)}.shareMethod.primary small{color:#d8dcdf}.shareMethod.whatsapp{border-color:#84c89d}.shareMethod.danea{background:#eaf7ef;border-color:#8fc5a1}.shareMethod:disabled{opacity:.45;cursor:not-allowed}
+      .sharePreparationStatus{margin-top:13px;padding:10px 12px;border-radius:12px;background:#f2f4f0;color:var(--muted);font-size:12px;font-weight:800}.sharePreparationStatus[data-state="ready"]{background:#eaf7ef;color:#245d36}.sharePreparationStatus[data-state="error"]{background:#feeceb;color:#a63129}
+      .shareMethods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}.shareMethod{border:1px solid var(--line);border-radius:15px;background:#fff;padding:13px 9px;color:var(--ink);text-align:left;min-height:92px}.shareMethod span,.shareMethod b,.shareMethod small{display:block}.shareMethod span{font-size:22px}.shareMethod b{margin-top:6px}.shareMethod small{margin-top:3px;color:var(--muted);font-size:10px}.shareMethod.primary{background:var(--ink);color:#fff;border-color:var(--ink)}.shareMethod.primary small{color:#d8dcdf}.shareMethod.whatsapp{border-color:#84c89d}.shareMethod.danea{background:#eaf7ef;border-color:#8fc5a1}.shareMethod:disabled{opacity:.45;cursor:not-allowed}
       @media(max-width:620px){.shareMethods{grid-template-columns:repeat(2,minmax(0,1fr))}.shareFileList{max-height:38vh}.shareSelectBar{align-items:flex-start;flex-direction:column;gap:5px}}
     `;
     document.head.appendChild(style);
@@ -651,6 +754,6 @@
   });
   window.addEventListener('online', queueAutomaticScan);
   new MutationObserver(() => requestAnimationFrame(enhanceShareButtons)).observe(document.body, { childList: true, subtree: true });
-  window.EdilKappaBulkSharing = { filesForScope, zipFile, storedPackage, open: window.openBulkShare };
+  window.EdilKappaBulkSharing = { filesForScope, zipFile, storedPackage, originalFilesForSelection, nativeShareFiles, open: window.openBulkShare };
   queueAutomaticScan();
 })();
