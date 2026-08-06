@@ -609,18 +609,18 @@
     if (!session) return;
     clearTimeout(session.preparationTimer);
     session.preparationRevision = Number(session.preparationRevision || 0) + 1;
-    const revision = session.preparationRevision;
     session.preparedKey = '';
     session.preparedFile = null;
     session.preparedOriginalFiles = [];
-    disableShareActions(true);
+    session.transfer = null;
     const selected = selectedFiles();
     if (!selected.length) {
+      disableShareActions(true);
       setPreparationStatus('Seleziona almeno un file.', 'empty');
       return;
     }
-    setPreparationStatus('Preparazione degli allegati…', 'preparing');
-    session.preparationTimer = setTimeout(() => prepareActiveSelection(session, revision), delay);
+    disableShareActions(false);
+    setPreparationStatus(`${selected.length} file selezionati · premi un metodo di condivisione per creare lo ZIP`, 'ready');
   }
 
   async function prepareActiveSelection(session, revision) {
@@ -655,15 +655,20 @@
     if (!session) return;
     const selected = selectedFiles();
     if (!selected.length) return alert('Seleziona almeno un file.');
-    if (!session.preparedFile || session.preparedKey !== selectionKey(selected)) {
-      queueSharePreparation(0);
-      return alert('Attendi che compaia “Allegati pronti”, poi premi di nuovo Condividi.');
-    }
-    const file = session.preparedFile;
-    const text = `File EdilKappa · ${session.info.client || 'Cliente'} · ${session.info.title}\nPacchetto: ${file.name}`;
+    let file = session.preparedFile;
     try {
+      if (!file || session.preparedKey !== selectionKey(selected)) {
+        setBusy(button, true, 'Preparo lo ZIP…');
+        setPreparationStatus(`Preparazione di ${selected.length} file… non chiudere la finestra`, 'preparing');
+        const originalFiles = await originalFilesForSelection(selected);
+        file = await packageFileForSelection(session, selected, originalFiles);
+        session.preparedKey = selectionKey(selected);
+        session.preparedFile = file;
+        session.preparedOriginalFiles = originalFiles;
+        setPreparationStatus(`ZIP pronto · ${selected.length} file · ${formatBytes(file.size)}`, 'ready');
+      }
+      const text = `File EdilKappa · ${session.info.client || 'Cliente'} · ${session.info.title}\nPacchetto: ${file.name}`;
       if (mode === 'danea') {
-        setBusy(button, true);
         return await daneaTransfer(session, selected, button, file);
       }
       if (mode === 'download') {
@@ -687,8 +692,7 @@
         if (targetWindow) targetWindow.location.replace(target); else window.location.href = target;
       } else {
         targetWindow?.close();
-        if (typeof navigator.share === 'function') await navigator.share({ title: `EdilKappa · ${session.info.title}`, text: shareText, url: link });
-        else if (await clipboard(shareText)) alert('Link temporaneo copiato: incollalo nell’app che vuoi usare.');
+        if (await clipboard(shareText)) alert('Link temporaneo copiato: incollalo in WhatsApp, e-mail o nell’app che vuoi usare.');
         else prompt('Copia e condividi questo link:', link);
       }
     } catch (error) {
@@ -711,7 +715,7 @@
     const rows = result.files.map((file) => `<label class="shareFileRow"><input type="checkbox" value="${html(file.id)}" data-share-file checked onchange="updateShareSelection()"><span class="shareFileIcon">${file.type.startsWith('image/') ? '🖼️' : file.type.startsWith('video/') ? '🎬' : file.type.includes('pdf') ? '📄' : '📁'}</span><span><b>${html(file.name)}</b><small>${html(file.category)}${file.size ? ` · ${formatBytes(file.size)}` : ''}</small></span></label>`).join('');
     content.innerHTML = `<div class="modalHead"><div><h3>Condividi</h3><small>${html(result.info.client)} · ${html(result.info.title)}</small></div><button class="close" type="button" onclick="closeModal()">×</button></div>
       <div class="modalBody"><div class="shareSelectBar"><label><input type="checkbox" checked onchange="toggleAllShareFiles(this.checked)"> Seleziona tutto</label><b id="shareSelectionCount">${result.files.length} file selezionati</b></div><div class="shareFileList">${rows}</div>
-      <div id="sharePreparationStatus" class="sharePreparationStatus" data-state="preparing" aria-live="polite">Preparazione degli allegati…</div>
+      <div id="sharePreparationStatus" class="sharePreparationStatus" data-state="ready" aria-live="polite">Seleziona i file e scegli come condividerli</div>
       <div class="shareMethods"><button type="button" class="shareMethod primary" data-share-action disabled onclick="runShareAction('native',this)"><span>↗</span><b>Condividi</b><small>Link temporaneo automatico</small></button><button type="button" class="shareMethod whatsapp" data-share-action disabled onclick="runShareAction('whatsapp',this)"><span>💬</span><b>WhatsApp</b><small>Invia link con tutti i file</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('email',this)"><span>✉️</span><b>E-mail</b><small>Invia link con tutti i file</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('copy',this)"><span>📋</span><b>Copia link</b><small>Link temporaneo protetto</small></button><button type="button" class="shareMethod" data-share-action disabled onclick="runShareAction('download',this)"><span>📦</span><b>Scarica ZIP</b><small>Un solo allegato</small></button>${danea ? `<button type="button" class="shareMethod danea" data-share-action disabled onclick="runShareAction('danea',this)"><span>🔧</span><b>Danea</b><small>Apri pratica con link</small></button>` : ''}</div></div><div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
     dialog.showModal();
     queueSharePreparation(0);
