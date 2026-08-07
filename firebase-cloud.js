@@ -57,6 +57,9 @@ const DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
   'image/jpeg',
   'image/png',
   'image/webp',
@@ -126,8 +129,10 @@ const api = {
   },
   uploadAttachment,
   openAttachment,
+  getAttachmentFile,
   uploadMedia,
   uploadDocument,
+  getDocumentUrl,
   openDocument,
   deleteDocument,
   get ready() { return ready; },
@@ -178,6 +183,9 @@ function inferredMimeType(file) {
     pdf: 'application/pdf',
     doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    csv: 'text/csv',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
     png: 'image/png',
@@ -204,7 +212,7 @@ async function uploadDocument(file, options = {}) {
   if (!file?.size) throw new Error('Il file selezionato è vuoto.');
   if (file.size > DOCUMENT_MAX_BYTES) throw new Error('Il file supera il limite di 25 MB.');
   const contentType = inferredMimeType(file);
-  if (!DOCUMENT_MIME_TYPES.has(contentType)) throw new Error('Sono ammessi PDF, Word e immagini JPG, PNG, WEBP o HEIC.');
+  if (!DOCUMENT_MIME_TYPES.has(contentType)) throw new Error('Sono ammessi PDF, Word, Excel, CSV e immagini JPG, PNG, WEBP o HEIC.');
 
   const documentId = uploadIdentifier(options.documentId);
   const path = `organisations/${ORG_ID}/documents/${user.uid}/${documentId}/${safeFileName(file.name)}`;
@@ -265,11 +273,20 @@ async function uploadMedia(file, options = {}) {
   };
 }
 
+async function getDocumentUrl(path) {
+  if (!path) throw new Error('Percorso del documento mancante.');
+  try {
+    return await getDownloadURL(storageRef(storage, path));
+  } catch (error) {
+    throw new Error(errorText(error));
+  }
+}
+
 async function openDocument(path) {
   if (!path) throw new Error('Percorso del documento mancante.');
   const popup = window.open('', '_blank');
   try {
-    const url = await getDownloadURL(storageRef(storage, path));
+    const url = await getDocumentUrl(path);
     if (popup) popup.location.replace(url);
     else window.open(url, '_blank', 'noopener');
   } catch (error) {
@@ -813,6 +830,15 @@ async function uploadAttachment({ file, reportId, phase = 'Documento', site = {}
     console.warn('Foto conservata localmente, sincronizzazione rinviata:', error);
     return null;
   }
+}
+
+async function getAttachmentFile(attachmentId) {
+  const snapshot = await getDoc(doc(firestore, 'attachments', attachmentId));
+  if (!snapshot.exists()) throw new Error('Fotografia cloud non trovata.');
+  const data = snapshot.data();
+  const response = await fetch(data.data);
+  const blob = await response.blob();
+  return new File([blob], String(data.name || 'fotografia.jpg'), { type: String(data.mimeType || blob.type || 'image/jpeg') });
 }
 
 async function openAttachment(attachmentId) {

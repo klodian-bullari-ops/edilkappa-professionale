@@ -653,7 +653,7 @@
 if (!document.querySelector('script[data-edilkappa-sharing]')) {
   const sharingScript = document.createElement('script');
   sharingScript.type = 'module';
-  sharingScript.src = './sharing-integration.js';
+  sharingScript.src = './sharing-integration.js?v=3';
   sharingScript.dataset.edilkappaSharing = 'true';
   document.head.appendChild(sharingScript);
 }

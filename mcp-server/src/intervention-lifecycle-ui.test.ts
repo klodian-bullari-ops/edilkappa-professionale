@@ -96,7 +96,7 @@ test('aprire una richiesta porta direttamente alla scheda del relativo intervent
 test('il ciclo intervento è caricato e disponibile anche offline', () => {
   assert.ok(indexHtml.includes('./intervention-lifecycle.js?v=2'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
-  assert.ok(indexHtml.includes('./sw.js?v=39'));
-  assert.ok(serviceWorker.includes('v39-hours-closeout'));
+  assert.ok(indexHtml.includes('./sw.js?v=40'));
+  assert.ok(serviceWorker.includes('v40-condivisione-file'));
   assert.ok(serviceWorker.includes('"./intervention-lifecycle.js"'));
 });

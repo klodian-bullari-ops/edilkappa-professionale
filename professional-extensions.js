@@ -89,7 +89,7 @@
       <div class="field"><label>Categoria</label><select name="category">${selectOptions(['Preventivo', 'Relazione tecnica', 'Foto e video', 'Videoispezione drone', 'Cantiere', 'Sicurezza', 'Personale', 'Mezzi', 'Fornitore', 'Amministrativo'], item.category)}</select></div>
       ${field('Titolo documento', 'title', 'text', item.title, true)}
       <div class="field"><label>Scadenza facoltativa</label><input name="expiry" type="date" value="${esc(item.expiry || '')}"></div>
-      <div class="field full"><label>File PDF, Word, foto o video</label><input name="file" type="file" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,.mp4,video/quicktime,.mov,video/x-m4v,.m4v,video/webm,.webm" ${id ? '' : 'required'}><small>PDF, Word, fotografie e video vengono conservati nell’archivio cloud protetto.</small></div>
+      <div class="field full"><label>File PDF, Word, Excel, foto o video</label><input name="file" type="file" accept="application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,text/csv,.csv,image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,.mp4,video/quicktime,.mov,video/x-m4v,.m4v,video/webm,.webm" ${id ? '' : 'required'}><small>PDF, Word, Excel, fotografie e video vengono conservati nell’archivio cloud protetto.</small></div>
       <div class="field full"><label>Note</label><textarea name="notes">${esc(item.notes || '')}</textarea></div>
     </div>`, async (form) => {
       const file = form.get('file');
@@ -134,7 +134,7 @@
 
   window.documentsView = function () {
     const expiring = db.documents.filter((x) => ['Scaduto', 'In scadenza'].includes(documentStatus(x)));
-    return pageHead('Documenti', 'PDF, Word, fotografie e video aziendali nel cloud', '<button class="btn lime" onclick="openCompanyDocument()">＋ Carica documento</button>') +
+    return pageHead('Documenti', 'PDF, Word, Excel, fotografie e video aziendali nel cloud', '<button class="btn lime" onclick="openCompanyDocument()">＋ Carica documento</button>') +
       `<div class="grid stats">${stat('Documenti', db.documents.length, '▣')}${stat('In scadenza', expiring.length, '!')}${stat('Categorie', new Set(db.documents.map((x) => x.category)).size, '▦')}${stat('Archivio', 'Cloud protetto', '☁')}</div>
       <div class="list">${db.documents.map((x) => `<section class="card"><div class="row" style="border:0;padding:0"><div class="rowIcon">${String(x.fileType || "").startsWith("video/") ? "🎬" : String(x.fileType || "").startsWith("image/") ? "🖼️" : "📄"}</div><div class="rowBody"><b>${esc(x.title)}</b><small>${esc(x.client)} · ${esc(x.category)} · ${esc(x.fileName || 'Nessun file')}<br>${x.expiry ? 'Scadenza ' + esc(x.expiry) : 'Nessuna scadenza'}</small></div>${badge(documentStatus(x))}</div><div class="actions" style="margin-top:12px"><button class="btn sm green" onclick="openBusinessDocument('${x.id}')">Apri</button><button class="btn sm light" onclick="openCompanyDocument('${x.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('documents','${x.id}','questo documento')">Elimina</button></div></section>`).join('') || '<div class="empty">Nessun documento archiviato.</div>'}</div>`;
   };

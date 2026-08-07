@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v39-hours-closeout`;
+const CACHE = `${CACHE_PREFIX}v40-condivisione-file`;
 const APP_SHELL = [
   "./",
   "./index.html",

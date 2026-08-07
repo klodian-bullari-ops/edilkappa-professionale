@@ -237,7 +237,7 @@
     const content = document.getElementById('modalContent');
     if (!dialog || !content) return;
     content.innerHTML = `<div class="modalHead"><div><h3>Foto ${esc(site?.title || 'cantieri')}</h3><small>${totalPhotos} fotografie · ${albums.length} album e rapportini</small></div><button class="close" type="button" onclick="closeModal()">×</button></div>
-      <div class="modalBody"><div class="actions" style="margin-bottom:14px"><button class="btn lime" type="button" onclick="closeModal();openQuickPhotoUpload('${esc(siteId)}')">＋ Carica foto</button></div>
+      <div class="modalBody"><div class="actions" style="margin-bottom:14px"><button class="btn lime" type="button" onclick="closeModal();openQuickPhotoUpload('${esc(siteId)}')">＋ Carica foto</button>${totalPhotos && typeof window.openSitePhotoShare === 'function' ? `<button class="btn green" type="button" onclick="openSitePhotoShare('${esc(siteId)}')">↗ Condividi foto</button>` : ''}</div>
       <div class="list">${albums.map(albumHtml).join('') || '<div class="empty">Nessuna fotografia caricata per questo cantiere.</div>'}</div></div>
       <div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;
     dialog.showModal();
