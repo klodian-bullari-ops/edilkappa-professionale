@@ -197,7 +197,12 @@
     const lines = (artifact.quote?.lines || []).map((line) => {
       if (line.priceSource !== "tariffario") return { ...line };
       const reference = String(line.priceReference || "");
-      const priceItem = priceList.find((item) => String(item.id) === reference || String(item.code) === reference);
+      const normalizedReference = reference.toLocaleLowerCase("it");
+      const priceItem = priceList.find((item) => {
+        const id = String(item.id || "");
+        const code = String(item.code || "");
+        return id === reference || code === reference || (code && normalizedReference.includes(code.toLocaleLowerCase("it")));
+      });
       const hasSalePrice = priceItem && priceItem.salePrice !== undefined && priceItem.salePrice !== null && priceItem.salePrice !== "" && Number.isFinite(Number(priceItem.salePrice));
       if (!hasSalePrice) {
         const warning = `Prezzo del listino da confermare per “${line.description || "voce senza descrizione"}”${reference ? ` (riferimento ${reference})` : ""}.`;
@@ -238,6 +243,47 @@
         missingInformation: Array.from(new Set([...(artifact.quote?.missingInformation || []), ...warnings]))
       }
     };
+  }
+
+  function quoteReleaseCheck(rawArtifact, destination = null) {
+    const artifact = verifiedArtifactPrices(rawArtifact);
+    if (artifact?.kind !== "quote") return { passed: true, issues: [], artifact };
+    const quote = artifact.quote || {};
+    const lines = Array.isArray(quote.lines) ? quote.lines : [];
+    const issues = [];
+    if (!lines.length) issues.push("Il preventivo non contiene lavorazioni.");
+    lines.forEach((line, index) => {
+      const label = `Riga ${index + 1} · ${line.description || "lavorazione"}`;
+      if (!(Number(line.quantity) > 0)) issues.push(`${label}: quantità mancante o pari a zero.`);
+      if (!(Number(line.unitPrice) > 0)) issues.push(`${label}: prezzo unitario mancante o pari a zero.`);
+      if (line.priceSource === "da_definire") issues.push(`${label}: prezzo ancora da definire.`);
+    });
+    const subtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const net = subtotal * (1 - Number(quote.discountPct || 0) / 100);
+    if (!(subtotal > 0)) issues.push("Il totale delle lavorazioni è pari a zero.");
+    const pricing = quote.pricingAnalysis || {};
+    const fullCost = [
+      pricing.estimatedDirectCost,
+      pricing.overheadAndRiskCost,
+      pricing.contingencyCost
+    ].reduce((sum, value) => sum + Number(value || 0), 0);
+    if (fullCost > 0 && net + 0.02 < fullCost) issues.push(`Il prezzo di vendita (${euro(net)}) è inferiore al costo complessivo stimato (${euro(fullCost)}).`);
+    const recommended = (quote.options || []).find((option) => option.recommended);
+    const economical = (quote.options || []).find((option) => /economic|risparm/i.test(`${option.label || ""} ${option.title || ""}`));
+    if (recommended && Math.abs(Number(recommended.total || 0) - net) > 0.02) issues.push("L’alternativa raccomandata non coincide con l’imponibile principale.");
+    if (recommended && economical && Number(economical.total || 0) >= Number(recommended.total || 0)) issues.push("L’alternativa economica non costa meno della soluzione raccomandata.");
+    const address = String(destination?.client?.address || artifact.address || "").trim();
+    if (!address || /da confermare|da definire/i.test(address)) issues.push("Manca l’indirizzo completo del cantiere.");
+    const paymentTerms = String(quote.paymentTerms || "").trim();
+    if (!paymentTerms || /da concordare|da confermare|da definire/i.test(paymentTerms)) issues.push("Mancano condizioni di pagamento definitive.");
+    if (Number(quote.vatRate || 0) === 0 && (quote.missingInformation || []).some((item) => /\biva\b|aliquota/i.test(item))) issues.push("L’aliquota IVA è ancora da confermare.");
+    return { passed: issues.length === 0, issues: Array.from(new Set(issues)), artifact, subtotal, net, fullCost };
+  }
+
+  function requireQuoteRelease(rawArtifact, destination = null) {
+    const check = quoteReleaseCheck(rawArtifact, destination);
+    if (!check.passed) throw new Error(`Preventivo bloccato: ${check.issues.join(" ")}`);
+    return check.artifact;
   }
 
   function quoteArtifactHtml(artifact) {
@@ -726,7 +772,7 @@
   }
 
   function saveQuoteArtifact(artifact, destination, media) {
-    artifact = verifiedArtifactPrices(artifact);
+    artifact = requireQuoteRelease(artifact, destination);
     const database = window.EdilKappaLocal.getDB();
     const existing = (database.quotes || []).find((item) => item.aiArtifactId === artifact.id);
     if (existing) return existing;
@@ -839,10 +885,10 @@
     const company = context.company;
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
     if (context.logo) doc.addImage(context.logo, "JPEG", 14, 9, 50, 10.3, undefined, "FAST");
-    doc.setFont(undefined, "bold");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8.4);
     doc.text(company.legalName, 196, 11, { align: "right" });
-    doc.setFont(undefined, "normal");
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(7.5);
     doc.text(company.activity, 196, 16, { align: "right" });
     doc.text(`${company.email} | ${company.phone}`, 196, 21, { align: "right" });
@@ -851,7 +897,7 @@
     doc.setFillColor(...EDILKAPPA_DOCUMENT.dark);
     doc.rect(14, 32, 182, 8, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFont(undefined, "bold");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(8.4);
     doc.text(context.label, 18, 37.4);
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
@@ -871,12 +917,12 @@
     if (!text) return y;
     const lines = doc.splitTextToSize(String(text), 180);
     y = ensureDocumentSpace(doc, context, y, 14);
-    doc.setFont(undefined, "bold");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
     doc.text(String(title).toUpperCase(), 14, y);
     y += 6;
-    doc.setFont(undefined, "normal");
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(9.2);
     lines.forEach((line) => {
       y = ensureDocumentSpace(doc, context, y, 5);
@@ -907,11 +953,11 @@
 
   function pdfSignatureBlock(doc, context, y) {
     y = ensureDocumentSpace(doc, context, y, 45);
-    doc.setFont(undefined, "bold");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(9.2);
     doc.text("ACCETTAZIONE E FIRME", 14, y);
     y += 9;
-    doc.setFont(undefined, "normal");
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.text("Per il Committente", 14, y);
     doc.text("Per EdilKappa", 112, y);
@@ -926,11 +972,11 @@
   }
 
   function addPhotoAppendix(doc, context, previews, artifact) {
-    const usable = (previews || []).filter((item) => /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl)).slice(0, 10);
+    const usable = (previews || []).filter((item) => /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl) && !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
     const findings = artifact.report?.evidenceFindings || [];
     for (let offset = 0; offset < usable.length; offset += 2) {
       newDocumentPage(doc, context);
-      doc.setFont(undefined, "bold");
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
       doc.text("ALLEGATO FOTOGRAFICO", 14, 49);
       usable.slice(offset, offset + 2).forEach((preview, localIndex) => {
@@ -944,17 +990,17 @@
           const height = properties.height * scale;
           doc.addImage(preview.dataUrl, properties.fileType || "JPEG", 14 + (180 - width) / 2, top, width, height, undefined, "FAST");
         } catch (_) {
-          doc.setFont(undefined, "normal");
+          doc.setFont("helvetica", "normal");
           doc.setFontSize(8.5);
           doc.text("Anteprima non inseribile; l’originale resta nell’archivio EdilKappa.", 14, top + 8);
         }
         const finding = findings[index];
         const caption = finding?.observation || artifact.evidence?.[index] || preview.sourceName || preview.name || `Immagine ${index + 1}`;
-        doc.setFont(undefined, "bold");
+        doc.setFont("helvetica", "bold");
         doc.setFontSize(8.2);
         doc.text(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${String(caption)}`, 14, top + 88, { maxWidth: 180 });
         if (finding?.assessment) {
-          doc.setFont(undefined, "normal");
+          doc.setFont("helvetica", "normal");
           doc.setFontSize(7.6);
           doc.text(finding.assessment, 14, top + 94, { maxWidth: 180 });
         }
@@ -964,16 +1010,17 @@
 
   async function artifactPdfBlob(rawArtifact, destination, previews) {
     if (!window.jspdf?.jsPDF) throw new Error("Il generatore PDF non è disponibile. Ricarica la pagina e riprova.");
-    const artifact = verifiedArtifactPrices(rawArtifact);
+    const artifact = rawArtifact?.kind === "quote" ? requireQuoteRelease(rawArtifact, destination) : rawArtifact;
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const doc = new jsPDF({ unit: "mm", format: "a4", putOnlyUsedFonts: true });
+    doc.setFont("helvetica", "normal");
     const context = { company: documentCompany(), logo: await loadDocumentLogo(), label: documentTypeLabel(artifact) };
     drawDocumentHeader(doc, context);
-    doc.setFont(undefined, "bold");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(15.5);
     doc.text(context.label, 105, 50, { align: "center" });
     const subtitle = artifact.documentSubtitle || artifact.title || artifact.subject || destination.title;
-    doc.setFont(undefined, "normal");
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(9.3);
     doc.setTextColor(95, 95, 95);
     doc.text(subtitle, 105, 56, { align: "center", maxWidth: 176 });
@@ -991,7 +1038,7 @@
       columnStyles: { 0: { cellWidth: 48, fillColor: EDILKAPPA_DOCUMENT.light, fontStyle: "bold" } }
     }) + 6;
     y = ensureDocumentSpace(doc, context, y, 18);
-    const callout = artifact.revisionReason || "BOZZA PROFESSIONALE DA VERIFICARE PRIMA DELL’INVIO, DELLA FIRMA O DELL’ESECUZIONE";
+    const callout = "PREVENTIVO PROFESSIONALE EDILKAPPA";
     doc.setFillColor(...EDILKAPPA_DOCUMENT.yellow);
     const calloutLines = doc.splitTextToSize(callout, 172);
     const calloutHeight = Math.max(13, 7 + calloutLines.length * 4);
@@ -1003,8 +1050,6 @@
     const report = artifact.report || {};
     const quote = artifact.quote || {};
     y = pdfTextSection(doc, context, "Sintesi", artifact.kind === "report" ? (report.executiveSummary || artifact.summary) : artifact.summary, y);
-    y = pdfListSection(doc, context, "Evidenze utilizzate", artifact.evidence, y);
-    y = pdfListSection(doc, context, "Incertezze e verifiche", artifact.uncertainties, y);
     y = pdfTextSection(doc, context, "Soluzione raccomandata", artifact.recommendedSolution, y);
     y = pdfTextSection(doc, context, "Motivazione tecnica", artifact.decisionRationale, y);
     y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
@@ -1017,7 +1062,7 @@
       y = runDocumentTable(doc, context, {
         startY: y,
         head: [["N.", "LAVORAZIONE", "Q.TÀ", "U.M.", "PREZZO UNIT.", "IMPORTO"]],
-        body: lines.map((line, index) => [String(index + 1), [line.description, line.notes].filter(Boolean).join("\n"), Number(line.quantity || 0).toLocaleString("it-IT"), line.unit || "a corpo", euro(line.unitPrice), euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))]),
+        body: lines.map((line, index) => [String(index + 1), line.description, Number(line.quantity || 0).toLocaleString("it-IT"), line.unit || "a corpo", euro(line.unitPrice), euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))]),
         columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 91 }, 2: { cellWidth: 16, halign: "right" }, 3: { cellWidth: 15 }, 4: { cellWidth: 25, halign: "right" }, 5: { cellWidth: 26, halign: "right", fontStyle: "bold" } }
       }) + 5;
       const subtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
@@ -1056,7 +1101,6 @@
         }) + 6;
       }
       y = pdfListSection(doc, context, "Ipotesi di calcolo", quote.assumptions, y);
-      y = pdfListSection(doc, context, "Informazioni da confermare", quote.missingInformation, y);
       y = pdfTextSection(doc, context, "Condizioni e note", [quote.paymentTerms ? `Pagamento: ${quote.paymentTerms}` : "", quote.notes].filter(Boolean).join("\n"), y);
     } else {
       y = pdfListSection(doc, context, "Osservazioni", report.observations, y);
@@ -1087,7 +1131,7 @@
       doc.setDrawColor(190, 190, 190);
       doc.setLineWidth(0.2);
       doc.line(14, 281.5, 196, 281.5);
-      doc.setFont(undefined, "normal");
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(7.1);
       doc.setTextColor(85, 85, 85);
       doc.text(`EdilKappa S.A.S. - ${context.company.address} - P. IVA ${context.company.vat}`, 14, 287);
@@ -1102,8 +1146,8 @@
 
   async function previewsForReport(message) {
     const previews = [...(message?.previews || [])];
-    const generated = (message?.media || []).filter((item) => item.generated && item.storagePath).slice(0, 3);
-    for (const item of generated) {
+    const cloudImages = (message?.media || []).filter((item) => item.kind === "image" && item.storagePath && !/screenshot|schermata|preventiv|tabella/i.test(item.fileName || "")).slice(0, 8);
+    for (const item of cloudImages) {
       try {
         const url = await window.EdilKappaCloud?.getDocumentUrl?.(item.storagePath);
         if (!url) continue;
@@ -1114,13 +1158,13 @@
           dataUrl: await fileDataUrl(blob),
           sourceName: item.title || item.fileName,
           name: item.fileName,
-          generated: true
+          generated: item.generated === true
         });
       } catch (_) {
         // Il PDF resta generabile anche se una singola anteprima cloud non è disponibile.
       }
     }
-    return previews.slice(0, 9);
+    return previews.filter((item) => !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 9);
   }
 
   async function saveReportArtifact(artifact, destination, media, previews) {
@@ -1183,17 +1227,17 @@
     const quoteSubtotal = (quote.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const quoteNet = quoteSubtotal * (1 - Number(quote.discountPct || 0) / 100);
     const quoteVat = quoteNet * Number(quote.vatRate || 0) / 100;
-    const quoteRows = (quote.lines || []).map((line, index) => `<tr><td class="center">${index + 1}</td><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td class="num">${escapeHtml(line.quantity)}</td><td>${escapeHtml(line.unit)}</td><td class="num">${escapeHtml(euro(line.unitPrice))}</td><td class="num"><b>${escapeHtml(euro(Number(line.quantity || 0) * Number(line.unitPrice || 0)))}</b></td></tr>`).join("");
+    const quoteRows = (quote.lines || []).map((line, index) => `<tr><td class="center">${index + 1}</td><td><b>${escapeHtml(line.description)}</b></td><td class="num">${escapeHtml(line.quantity)}</td><td>${escapeHtml(line.unit)}</td><td class="num">${escapeHtml(euro(line.unitPrice))}</td><td class="num"><b>${escapeHtml(euro(Number(line.quantity || 0) * Number(line.unitPrice || 0)))}</b></td></tr>`).join("");
     const options = (quote.options || []).length ? `<h2>Alternative e scenari</h2>${quote.options.map((option) => `<h3>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)} — ${escapeHtml(euro(option.total))} + IVA${option.recommended ? " (raccomandata)" : ""}</h3><p>${escapeHtml(option.description || "")}</p>${wordList("Opere comprese nello scenario", option.includedWorks)}${option.notes ? `<p>${escapeHtml(option.notes)}</p>` : ""}`).join("")}` : "";
     const evidenceRows = (report.evidenceFindings || []).map((item) => `<tr><td><b>${escapeHtml(item.reference)}</b></td><td>${escapeHtml(item.observation)}</td><td>${escapeHtml(item.assessment)}</td><td>${escapeHtml(item.verificationNeeded)}</td></tr>`).join("");
-    const common = `${wordList("Evidenze utilizzate", artifact.evidence)}${wordList("Incertezze e verifiche", artifact.uncertainties)}${artifact.recommendedSolution ? `<h2>Soluzione raccomandata</h2><p>${escapeHtml(artifact.recommendedSolution)}</p>` : ""}${artifact.decisionRationale ? `<h2>Motivazione tecnica</h2><p>${escapeHtml(artifact.decisionRationale)}</p>` : ""}${wordList("Valutazione tecnica", artifact.technicalAssessment)}${wordList("Fasi operative", artifact.workPhases)}${wordList("Materiali previsti", artifact.materials)}`;
+    const common = `${artifact.recommendedSolution ? `<h2>Soluzione raccomandata</h2><p>${escapeHtml(artifact.recommendedSolution)}</p>` : ""}${artifact.decisionRationale ? `<h2>Motivazione tecnica</h2><p>${escapeHtml(artifact.decisionRationale)}</p>` : ""}${wordList("Valutazione tecnica", artifact.technicalAssessment)}${wordList("Fasi operative", artifact.workPhases)}${wordList("Materiali previsti", artifact.materials)}`;
     const body = artifact.kind === "quote"
-      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>N.</th><th>Lavorazione</th><th>Q.tà</th><th>U.M.</th><th>Prezzo unit.</th><th>Importo</th></tr></thead><tbody>${quoteRows}</tbody></table><table class="totals"><tbody><tr><td>Subtotale</td><td>${escapeHtml(euro(quoteSubtotal))}</td></tr><tr><td>Imponibile</td><td>${escapeHtml(euro(quoteNet))}</td></tr><tr><td>IVA ${escapeHtml(quote.vatRate || 0)}%</td><td>${escapeHtml(euro(quoteVat))}</td></tr><tr class="grand"><td>TOTALE COMPLESSIVO</td><td>${escapeHtml(euro(quoteNet + quoteVat))}</td></tr></tbody></table>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(quote.estimatedDuration)}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi di calcolo", quote.assumptions)}${wordList("Informazioni da confermare", quote.missingInformation)}${quote.notes || quote.paymentTerms ? `<h2>Note e condizioni</h2><p>${quote.paymentTerms ? `<b>Pagamento:</b> ${escapeHtml(quote.paymentTerms)}<br>` : ""}${escapeHtml(quote.notes || "")}</p>` : ""}`
+      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>N.</th><th>Lavorazione</th><th>Q.tà</th><th>U.M.</th><th>Prezzo unit.</th><th>Importo</th></tr></thead><tbody>${quoteRows}</tbody></table><table class="totals"><tbody><tr><td>Subtotale</td><td>${escapeHtml(euro(quoteSubtotal))}</td></tr><tr><td>Imponibile</td><td>${escapeHtml(euro(quoteNet))}</td></tr><tr><td>IVA ${escapeHtml(quote.vatRate || 0)}%</td><td>${escapeHtml(euro(quoteVat))}</td></tr><tr class="grand"><td>TOTALE COMPLESSIVO</td><td>${escapeHtml(euro(quoteNet + quoteVat))}</td></tr></tbody></table>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(quote.estimatedDuration)}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi di calcolo", quote.assumptions)}${quote.notes || quote.paymentTerms ? `<h2>Note e condizioni</h2><p>${quote.paymentTerms ? `<b>Pagamento:</b> ${escapeHtml(quote.paymentTerms)}<br>` : ""}${escapeHtml(quote.notes || "")}</p>` : ""}`
       : `<h2>Sintesi</h2><p>${escapeHtml(report.executiveSummary || artifact.summary || "")}</p>${common}${wordList("Osservazioni", report.observations)}${wordList("Cause probabili", report.probableCauses)}${evidenceRows ? `<h2>Riscontro tra prove e valutazione</h2><table><thead><tr><th>Riferimento</th><th>Osservazione</th><th>Valutazione</th><th>Verifica</th></tr></thead><tbody>${evidenceRows}</tbody></table>` : ""}${wordList("Verifiche consigliate", report.recommendedVerifications)}${wordList("Interventi consigliati", report.recommendedWorks)}${wordList("Sicurezza", report.safetyNotes)}${wordList("Limiti dell’analisi", report.limitations)}<h2>Conclusioni</h2><p>${escapeHtml(report.conclusions || "")}</p>${wordList("Informazioni da confermare", report.missingInformation)}`;
     const documentLabel = documentTypeLabel(artifact);
     const metaRows = [["Destinatario", artifact.client || "Da assegnare"], ["Ubicazione intervento", artifact.address || "Da confermare"], ["Oggetto", artifact.subject || artifact.title || documentLabel], ["Data emissione", new Date().toLocaleDateString("it-IT")], ...(artifact.kind === "quote" ? [["IVA applicata", `${Number(quote.vatRate || 0)}%`], ["Validità", `${Number(quote.validityDays || 30)} giorni`]] : [["Priorità", report.interventionPriority || "Da definire"]])];
     const meta = `<table class="meta"><tbody>${metaRows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("")}</tbody></table>`;
-    const callout = artifact.revisionReason || "BOZZA PROFESSIONALE DA VERIFICARE PRIMA DELL’INVIO, DELLA FIRMA O DELL’ESECUZIONE";
+    const callout = artifact.kind === "quote" ? "PREVENTIVO PROFESSIONALE EDILKAPPA" : "DOCUMENTO TECNICO EDILKAPPA";
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm 14mm 19mm}body{font-family:Arial,sans-serif;line-height:1.42;color:#232323;font-size:10pt;margin:0}.header{width:100%;border:0;margin:0}.header td{border:0;padding:0}.header .logo{width:205px}.company{text-align:right;font-size:8.5pt;line-height:1.35}.company b{font-size:9pt}.yellowbar{height:13px;background:#ffd800;margin-top:10px}.blackbar{height:20px;background:#232323;color:#fff;font-weight:bold;padding:4px 10px;box-sizing:border-box}.docTitle{text-align:center;font-size:18pt;margin:15px 0 3px}.subtitle{text-align:center;color:#6c6c6c;margin:0 0 14px}.meta{margin-bottom:12px}.meta th{width:28%;background:#f2f3f5;color:#232323}.callout{background:#ffd800;padding:11px 13px;font-weight:bold;margin:13px 0 16px}h2{font-size:11.5pt;text-transform:uppercase;color:#232323;margin:17px 0 6px;page-break-after:avoid}h3{font-size:10.5pt;margin:12px 0 4px}p{margin:5px 0 9px}ul{margin:5px 0 9px;padding-left:20px}li{margin-bottom:3px}table{width:100%;border-collapse:collapse;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th,td{border:1px solid #d4d6d8;padding:6px;text-align:left;vertical-align:top}thead th{background:#232323;color:#fff;font-size:8.5pt}.num{text-align:right;white-space:nowrap}.center{text-align:center}.totals{width:48%;margin:10px 0 14px auto}.totals td:first-child{font-weight:bold}.totals td:last-child{text-align:right;font-weight:bold}.totals .grand td{background:#ffd800;color:#232323;font-size:11pt}.signatures{width:100%;margin-top:28px;border:0;page-break-inside:avoid}.signatures td{border:0;width:50%;padding:8px 18px 28px 0}.signatureLine{border-bottom:1px solid #555;height:28px}.footer{margin-top:24px;border-top:1px solid #bbb;padding-top:7px;font-size:7.5pt;color:#555;display:flex;justify-content:space-between}small{color:#666}</style></head><body><table class="header"><tr><td><img class="logo" src="${escapeHtml(logo)}" alt="EDILKAPPA"></td><td class="company"><b>${escapeHtml(company.legalName)}</b><br>${escapeHtml(company.activity)}<br>${escapeHtml(company.email)} | ${escapeHtml(company.phone)}</td></tr></table><div class="yellowbar"></div><div class="blackbar">${escapeHtml(documentLabel)}</div><h1 class="docTitle">${escapeHtml(documentLabel)}</h1><p class="subtitle">${escapeHtml(artifact.documentSubtitle || artifact.title || artifact.subject || "Documento EdilKappa")}</p>${meta}<div class="callout">${escapeHtml(callout)}</div>${body}<table class="signatures"><tr><td><b>Per il Committente</b><div class="signatureLine"></div>Data, timbro e firma</td><td><b>Per EdilKappa</b><div class="signatureLine"></div>Timbro e firma</td></tr></table><div class="footer"><span>EdilKappa S.A.S. - ${escapeHtml(company.address)} - P. IVA ${escapeHtml(company.vat)}</span><span>${escapeHtml(documentLabel)}</span></div></body></html>`;
     const blob = new Blob(["\ufeff", html], { type: "application/msword;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -1545,7 +1589,7 @@
     const artifact = artifactMessage(messageIndex)?.artifact;
     if (!["quote", "report"].includes(artifact?.kind)) return;
     try {
-      await downloadArtifactWord(artifact);
+      await downloadArtifactWord(artifact.kind === "quote" ? requireQuoteRelease(artifact) : artifact);
     } catch (error) {
       state.error = error?.message || "Non riesco a generare il documento Word.";
       rerender();
