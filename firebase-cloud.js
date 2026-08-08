@@ -53,7 +53,7 @@ const auth = getAuth(app);
 const firestore = getFirestore(app, 'edilkappa');
 const storage = getStorage(app);
 const functions = getFunctions(app, 'europe-west8');
-const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 300000 });
+const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 610000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 

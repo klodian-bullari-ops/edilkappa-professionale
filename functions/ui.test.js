@@ -55,6 +55,11 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /TOTALE COMPLESSIVO/);
   const cloudSource = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   assert.match(cloudSource, /'text\/plain'/);
+  assert.match(cloudSource, /timeout:\s*610000/);
+  const functionSource = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+  assert.match(functionSource, /OPENAI_REQUEST_TIMEOUT_MS\s*=\s*540000/);
+  assert.match(functionSource, /timeoutSeconds:\s*600/);
+  assert.match(functionSource, /deadline-exceeded/);
 });
 
 test("keeps EdilKappa AI available after professional extensions replace render", () => {

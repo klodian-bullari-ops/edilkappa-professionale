@@ -30,6 +30,7 @@ const ORG_ID = "edilkappa";
 const DAILY_REQUEST_LIMIT = 120;
 const MAX_TRANSCRIPTION_BYTES = 25 * 1024 * 1024;
 const MAX_VISUALS_PER_ARTIFACT = 3;
+const OPENAI_REQUEST_TIMEOUT_MS = 540000;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 async function authorizedUser(request, mode) {
@@ -165,7 +166,16 @@ function safetyIdentifier(uid) {
 
 async function openAiFailure(response, operation = "request") {
   const requestId = response.headers.get("x-request-id") || "sconosciuto";
-  console.error(`OpenAI ${operation} failed`, { status: response.status, requestId });
+  const payload = await response.clone().json().catch(() => ({}));
+  const apiError = payload?.error || {};
+  console.error(`OpenAI ${operation} failed`, {
+    status: response.status,
+    requestId,
+    code: cleanText(apiError.code, 120),
+    type: cleanText(apiError.type, 120),
+    param: cleanText(apiError.param, 120),
+    message: cleanText(apiError.message, 500)
+  });
   if (response.status === 429) throw new HttpsError("resource-exhausted", "Il credito o il limite OpenAI è terminato. Controlla la fatturazione API.");
   if (response.status === 401 || response.status === 403) {
     const message = operation === "image generation"
@@ -173,7 +183,22 @@ async function openAiFailure(response, operation = "request") {
       : "La chiave OpenAI del server non è valida oppure il progetto non è autorizzato a usare questo modello.";
     throw new HttpsError("failed-precondition", message);
   }
+  if (response.status === 400 || response.status === 404) {
+    throw new HttpsError("failed-precondition", "OpenAI ha rifiutato la configurazione della richiesta. La diagnostica è stata registrata per la correzione.");
+  }
   throw new HttpsError("unavailable", "Il servizio AI non è disponibile in questo momento. Riprova tra poco.");
+}
+
+function openAiTransportFailure(error, operation = "request") {
+  if (error instanceof HttpsError) return error;
+  const name = cleanText(error?.name, 120);
+  const code = cleanText(error?.code, 120);
+  const message = cleanText(error?.message, 500);
+  console.error(`OpenAI ${operation} transport failed`, { name, code, message });
+  if (["AbortError", "TimeoutError"].includes(name) || /timed?\s*out|timeout/i.test(message)) {
+    return new HttpsError("deadline-exceeded", "GPT‑5.6 Sol sta impiegando più tempo del previsto. Riprova: la richiesta può richiedere alcuni minuti.");
+  }
+  return new HttpsError("unavailable", "Non riesco a raggiungere OpenAI in questo momento. Riprova tra poco.");
 }
 
 async function callOpenAI({ instructions, input, useWeb, modelChoice, safetyId }) {
@@ -201,17 +226,21 @@ async function callOpenAI({ instructions, input, useWeb, modelChoice, safetyId }
       user_location: { type: "approximate", country: "IT", city: "Milano", region: "Lombardia" }
     }];
   }
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(240000)
-  });
-  if (!response.ok) await openAiFailure(response);
-  return response.json();
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) await openAiFailure(response);
+    return await response.json();
+  } catch (error) {
+    throw openAiTransportFailure(error);
+  }
 }
 
 function visualPrompt(artifact, brief) {
@@ -238,26 +267,30 @@ async function generateVisual({ artifact, brief, referenceImages, safetyId }) {
     content.push({ type: "input_text", text: `Fotografia di riferimento: ${item.sourceName || item.name}.` });
     content.push({ type: "input_image", image_url: item.dataUrl, detail: "auto" });
   });
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_SOL_MODEL || "gpt-5.6-sol",
-      input: [{ role: "user", content }],
-      tools: [{ type: "image_generation" }],
-      store: false,
-      safety_identifier: safetyId
-    }),
-    signal: AbortSignal.timeout(240000)
-  });
-  if (!response.ok) await openAiFailure(response, "image generation");
-  const data = await response.json();
-  const image = extractGeneratedImage(data);
-  if (!image) throw new HttpsError("unavailable", "L’AI non ha prodotto l’immagine. Riprova oppure scegli un’altra visualizzazione.");
-  return image;
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_SOL_MODEL || "gpt-5.6-sol",
+        input: [{ role: "user", content }],
+        tools: [{ type: "image_generation" }],
+        store: false,
+        safety_identifier: safetyId
+      }),
+      signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
+    });
+    if (!response.ok) await openAiFailure(response, "image generation");
+    const data = await response.json();
+    const image = extractGeneratedImage(data);
+    if (!image) throw new HttpsError("unavailable", "L’AI non ha prodotto l’immagine. Riprova oppure scegli un’altra visualizzazione.");
+    return image;
+  } catch (error) {
+    throw openAiTransportFailure(error, "image generation");
+  }
 }
 
 async function saveGeneratedVisual(uid, artifact, brief, briefIndex, image) {
@@ -302,7 +335,7 @@ async function saveGeneratedVisual(uid, artifact, brief, briefIndex, image) {
 exports.edilkappaAi = onCall({
   region: "europe-west8",
   secrets: [OPENAI_API_KEY],
-  timeoutSeconds: 300,
+  timeoutSeconds: 600,
   memory: "1GiB",
   maxInstances: 2,
   cors: true
