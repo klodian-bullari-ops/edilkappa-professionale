@@ -7,7 +7,7 @@
     "node": "22"
   },
   "scripts": {
-    "check": "node --check index.js && node --check ai-core.js && node --check ../edilkappa-ai.js",
+    "check": "node --check index.js && node --check ai-core.js && node --check ../edilkappa-ai.js && node --check ../edilkappa-ai-route.js",
     "test": "node --test"
   },
   "dependencies": {
