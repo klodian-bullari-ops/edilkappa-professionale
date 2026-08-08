@@ -2,6 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 test("registers the EdilKappa AI browser interface", () => {
   const previousWindow = global.window;
@@ -19,4 +21,10 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiReset, "function");
   global.window = previousWindow;
   global.document = previousDocument;
+});
+
+test("keeps EdilKappa AI available after professional extensions replace render", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "professional-extensions.js"), "utf8");
+  assert.match(source, /ai:\s*\(\)\s*=>\s*window\.edilkappaAiView/);
+  assert.match(source, /\['ai','✦','EdilKappa AI'\]/);
 });
