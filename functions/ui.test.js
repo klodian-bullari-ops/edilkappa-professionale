@@ -60,6 +60,16 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /OPENAI_REQUEST_TIMEOUT_MS\s*=\s*540000/);
   assert.match(functionSource, /timeoutSeconds:\s*600/);
   assert.match(functionSource, /deadline-exceeded/);
+  assert.match(functionSource, /background:\s*true/);
+  assert.match(functionSource, /action === "job_status"/);
+  assert.match(functionSource, /FASE 1 — ANALISI PRELIMINARE/);
+  assert.match(functionSource, /GPT‑5\.6 Terra · recupero automatico/);
+  assert.match(functionSource, /automatic retry/);
+  assert.match(source, /edilkappa-ai-pending-job-v1/);
+  assert.match(source, /edilkappaAiResumePending/);
+  assert.match(source, /1\/2 · Analisi tecnica/);
+  assert.match(source, /2\/2 · Compongo prezzi/);
+  assert.match(source, /edilkappaAiRetry/);
 });
 
 test("keeps EdilKappa AI available after professional extensions replace render", () => {
