@@ -21,6 +21,8 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiReset, "function");
   assert.equal(typeof global.window.edilkappaAiSaveArtifact, "function");
   assert.equal(typeof global.window.edilkappaAiDownloadWord, "function");
+  assert.equal(typeof global.window.edilkappaAiGenerateVisual, "function");
+  assert.equal(typeof global.window.edilkappaAiSetModel, "function");
   global.window = previousWindow;
   global.document = previousDocument;
 });
@@ -37,6 +39,10 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /priceItem\.salePrice/);
   assert.match(source, /priceSource:\s*"da_definire"/);
   assert.match(source, /archiveWarnings/);
+  assert.match(source, /GPT‑5\.6 Sol/);
+  assert.match(source, /generate_visual/);
+  assert.match(source, /visualBriefs/);
+  assert.match(source, /quote\.options/);
   const cloudSource = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   assert.match(cloudSource, /'text\/plain'/);
 });

@@ -7,6 +7,7 @@
   const VIDEO_MAX_BYTES = 500 * 1024 * 1024;
   const DOCUMENT_MAX_BYTES = 6 * 1024 * 1024;
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
+  const MODEL_MODES = new Set(["auto", "sol", "terra"]);
 
   const state = {
     mode: "work",
@@ -15,8 +16,10 @@
     loading: false,
     sending: false,
     resetting: false,
+    generatingVisual: "",
     attachments: [],
     taskType: "auto",
+    modelMode: "auto",
     draft: "",
     progress: "",
     useWeb: false,
@@ -29,14 +32,14 @@
     .ekAiPage{max-width:1180px;margin:0 auto}.ekAiHero{background:linear-gradient(135deg,#102c22,#1e4938);border-radius:22px;padding:22px;color:#fff;display:flex;justify-content:space-between;gap:18px;align-items:center;box-shadow:0 14px 40px rgba(11,43,31,.14)}
     .ekAiHero h2{margin:0 0 6px;font-size:25px}.ekAiHero p{margin:0;color:#d7e9df;max-width:720px}.ekAiHeroMark{width:58px;height:58px;border-radius:18px;background:#f4c400;color:#102c22;display:grid;place-items:center;font-size:30px;font-weight:900;flex:0 0 auto}
     .ekAiToolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:16px 0}.ekAiModes{display:flex;padding:4px;border:1px solid #d9e2dc;background:#fff;border-radius:13px}.ekAiModes button{border:0;background:transparent;border-radius:10px;padding:10px 15px;font-weight:800;color:#557064;cursor:pointer}.ekAiModes button.active{background:#173d2e;color:#fff}.ekAiStatus{display:flex;gap:8px;align-items:center;color:#577064;font-size:13px}.ekAiDot{width:9px;height:9px;border-radius:50%;background:#22a565;box-shadow:0 0 0 4px #dff4e8}
-    .ekAiWorkflow{display:flex;gap:8px;flex-wrap:wrap;margin:-3px 0 13px}.ekAiWorkflow button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:12px;padding:9px 12px;font-weight:800;cursor:pointer}.ekAiWorkflow button.active{background:#fff7cc;border-color:#e1bd20;color:#292300}.ekAiWorkflow small{display:flex;align-items:center;color:#65776f;margin-left:auto}
+    .ekAiWorkflow{display:flex;gap:8px;flex-wrap:wrap;margin:-3px 0 13px;align-items:center}.ekAiWorkflow button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:12px;padding:9px 12px;font-weight:800;cursor:pointer}.ekAiWorkflow button.active{background:#fff7cc;border-color:#e1bd20;color:#292300}.ekAiWorkflow small{display:flex;align-items:center;color:#65776f}.ekAiModel{display:flex;gap:7px;align-items:center;margin-left:auto;color:#536a60;font-size:12px;font-weight:800}.ekAiModel select{border:1px solid #d6e2da;background:#fff;border-radius:10px;padding:8px;color:#173d2e;font-weight:800}
     .ekAiChat{min-height:440px;max-height:60vh;overflow:auto;background:#f7faf8;border:1px solid #dce7e0;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:13px}.ekAiEmpty{margin:auto;text-align:center;max-width:650px;color:#52665d;padding:28px}.ekAiEmpty strong{display:block;color:#173d2e;font-size:20px;margin-bottom:7px}
-    .ekAiMessage{max-width:90%;border-radius:17px;padding:13px 15px;line-height:1.5;box-shadow:0 3px 12px rgba(20,53,40,.06)}.ekAiMessage.user{align-self:flex-end;background:#173d2e;color:#fff;border-bottom-right-radius:5px;max-width:84%}.ekAiMessage.assistant{align-self:flex-start;background:#fff;color:#1d3028;border:1px solid #dce7e0;border-bottom-left-radius:5px}.ekAiText{white-space:pre-wrap;overflow-wrap:anywhere}.ekAiSources{margin-top:11px;padding-top:9px;border-top:1px solid #e3ebe6;display:flex;gap:7px;flex-wrap:wrap}.ekAiSources a{font-size:12px;color:#176542;text-decoration:none;background:#e8f6ed;border-radius:999px;padding:5px 9px}.ekAiMessageMedia{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.ekAiMessageMedia button{border:1px solid #d6e2da;background:#f8faf9;border-radius:9px;padding:6px 9px;color:#284c3d;font-size:12px;font-weight:750}.ekAiMessage.user .ekAiMessageMedia button{background:#fff;color:#173d2e}
+    .ekAiMessage{max-width:90%;border-radius:17px;padding:13px 15px;line-height:1.5;box-shadow:0 3px 12px rgba(20,53,40,.06)}.ekAiMessage.user{align-self:flex-end;background:#173d2e;color:#fff;border-bottom-right-radius:5px;max-width:84%}.ekAiMessage.assistant{align-self:flex-start;background:#fff;color:#1d3028;border:1px solid #dce7e0;border-bottom-left-radius:5px}.ekAiText{white-space:pre-wrap;overflow-wrap:anywhere}.ekAiMessageMeta{font-size:10px;color:#71827a;margin-top:8px}.ekAiSources{margin-top:11px;padding-top:9px;border-top:1px solid #e3ebe6;display:flex;gap:7px;flex-wrap:wrap}.ekAiSources a{font-size:12px;color:#176542;text-decoration:none;background:#e8f6ed;border-radius:999px;padding:5px 9px}.ekAiMessageMedia{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.ekAiMessageMedia button{border:1px solid #d6e2da;background:#f8faf9;border-radius:9px;padding:6px 9px;color:#284c3d;font-size:12px;font-weight:750}.ekAiMessageMedia button.generated{background:#fff7cc;border-color:#dfc243}.ekAiMessage.user .ekAiMessageMedia button{background:#fff;color:#173d2e}
     .ekAiTyping{display:inline-flex;gap:5px}.ekAiTyping i{width:7px;height:7px;background:#668078;border-radius:50%;animation:ekAiPulse 1.1s infinite}.ekAiTyping i:nth-child(2){animation-delay:.15s}.ekAiTyping i:nth-child(3){animation-delay:.3s}@keyframes ekAiPulse{0%,70%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}
-    .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}
+    .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiOption{border:1px solid #d8e3dc;border-radius:11px;padding:10px;margin-top:8px}.ekAiOption.recommended{border-color:#d8b600;background:#fffbee}.ekAiOptionHead{display:flex;justify-content:space-between;gap:10px}.ekAiVisualBrief{border-left:4px solid #f4c400;background:#f8faf8;padding:9px 10px;margin-top:7px}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.visual{background:#f4c400;color:#173d2e}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}.ekAiArtifactActions button:disabled{opacity:.55;cursor:wait}
     .ekAiQuick{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.ekAiQuick button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}.ekAiQuick button:hover{border-color:#6da482}
     .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:6px;background:#edf4ef;color:#355246;border-radius:9px;padding:7px 9px;font-size:12px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:10px 12px;font-size:13px}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
-    @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiWorkflow small{width:100%;margin:2px 0}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
+    @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
   `;
   document.head.appendChild(css);
 
@@ -83,7 +86,7 @@
   function mediaHtml(message, messageIndex) {
     const media = Array.isArray(message?.media) ? message.media : [];
     if (!media.length) return "";
-    return `<div class="ekAiMessageMedia">${media.map((item, mediaIndex) => `<button type="button" onclick="edilkappaAiOpenMedia(${messageIndex},${mediaIndex})">${item.kind === "video" ? "🎬" : item.kind === "image" ? "📷" : "📄"} ${escapeHtml(item.fileName || "Originale")}</button>`).join("")}</div>`;
+    return `<div class="ekAiMessageMedia">${media.map((item, mediaIndex) => `<button type="button" class="${item.generated ? "generated" : ""}" onclick="edilkappaAiOpenMedia(${messageIndex},${mediaIndex})">${item.generated ? "🖼️" : item.kind === "video" ? "🎬" : item.kind === "image" ? "📷" : "📄"} ${escapeHtml(item.generated ? (item.title || "Immagine illustrativa AI") : (item.fileName || "Originale"))}</button>`).join("")}</div>`;
   }
 
   function artifactSavedItem(artifact) {
@@ -134,11 +137,14 @@
         priceReference: String(priceItem.code || priceItem.id || reference)
       };
     });
+    const mainSubtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const mainNet = mainSubtotal * (1 - Number(artifact.quote?.discountPct || 0) / 100);
     return {
       ...artifact,
       quote: {
         ...(artifact.quote || {}),
         lines,
+        options: (artifact.quote?.options || []).map((option) => option.recommended && lines.length ? { ...option, total: mainNet } : { ...option }),
         missingInformation: Array.from(new Set([...(artifact.quote?.missingInformation || []), ...warnings]))
       }
     };
@@ -151,14 +157,22 @@
     const discount = subtotal * Number(quote.discountPct || 0) / 100;
     const net = subtotal - discount;
     const vat = net * Number(quote.vatRate || 0) / 100;
-    return `<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th><th>Origine</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit)}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td><td>${priceSourceHtml(line)}<br><small>Affidabilità ${escapeHtml(line.confidence || "bassa")}</small></td></tr>`).join("") || `<tr><td colspan="6">Le voci devono ancora essere definite.</td></tr>`}</tbody></table></div>
+    const options = (quote.options || []).map((option) => `<div class="ekAiOption ${option.recommended ? "recommended" : ""}"><div class="ekAiOptionHead"><b>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)}</b><b>${euro(option.total)} + IVA</b></div>${option.description ? `<div>${escapeHtml(option.description)}</div>` : ""}${option.includedWorks?.length ? `<small>Comprende: ${escapeHtml(option.includedWorks.join(" · "))}</small>` : ""}${option.notes ? `<br><small>${escapeHtml(option.notes)}</small>` : ""}</div>`).join("");
+    return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th><th>Origine</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit)}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td><td>${priceSourceHtml(line)}<br><small>Affidabilità ${escapeHtml(line.confidence || "bassa")}</small></td></tr>`).join("") || `<tr><td colspan="6">Le voci devono ancora essere definite.</td></tr>`}</tbody></table></div>
       <div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b><span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b><span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>
-      ${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
+      ${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata stimata</h4><div>${escapeHtml(quote.estimatedDuration)}</div></div>` : ""}${artifactList("Opere comprese", quote.includedWorks)}${artifactList("Esclusioni", quote.exclusions)}${options ? `<div class="ekAiArtifactSection"><h4>Alternative e scenari</h4>${options}</div>` : ""}${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
   }
 
   function reportArtifactHtml(artifact) {
     const report = artifact.report || {};
-    return `${report.executiveSummary ? `<div class="ekAiArtifactSection"><h4>Sintesi</h4><div>${escapeHtml(report.executiveSummary)}</div></div>` : ""}${artifactList("Osservazioni", report.observations)}${artifactList("Cause probabili", report.probableCauses)}${artifactList("Interventi consigliati", report.recommendedWorks)}${artifactList("Sicurezza", report.safetyNotes)}${artifactList("Limiti dell’analisi", report.limitations)}${report.conclusions ? `<div class="ekAiArtifactSection"><h4>Conclusioni</h4><div>${escapeHtml(report.conclusions)}</div></div>` : ""}${artifactList("Informazioni da confermare", report.missingInformation)}`;
+    return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${report.executiveSummary ? `<div class="ekAiArtifactSection"><h4>Sintesi</h4><div>${escapeHtml(report.executiveSummary)}</div></div>` : ""}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Osservazioni", report.observations)}${artifactList("Cause probabili", report.probableCauses)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}${artifactList("Interventi consigliati", report.recommendedWorks)}${artifactList("Sicurezza", report.safetyNotes)}${artifactList("Limiti dell’analisi", report.limitations)}${report.conclusions ? `<div class="ekAiArtifactSection"><h4>Conclusioni</h4><div>${escapeHtml(report.conclusions)}</div></div>` : ""}${artifactList("Informazioni da confermare", report.missingInformation)}`;
+  }
+
+  function visualBriefsHtml(artifact) {
+    const briefs = Array.isArray(artifact?.visualBriefs) ? artifact.visualBriefs : [];
+    if (!briefs.length) return "";
+    const labels = { photomontage: "Fotomontaggio", materials_board: "Tavola materiali", technical_diagram: "Schema illustrativo" };
+    return `<div class="ekAiArtifactSection"><h4>Immagini proposte</h4>${briefs.map((brief) => `<div class="ekAiVisualBrief"><b>${escapeHtml(labels[brief.kind] || "Visualizzazione")} · ${escapeHtml(brief.title)}</b><br><small>${escapeHtml(brief.prompt)}</small></div>`).join("")}</div>`;
   }
 
   function artifactHtml(artifact, messageIndex) {
@@ -167,12 +181,17 @@
     const saved = artifactSavedItem(checkedArtifact);
     const detail = checkedArtifact.kind === "quote" ? quoteArtifactHtml(checkedArtifact) : reportArtifactHtml(checkedArtifact);
     const missing = checkedArtifact.kind === "quote" ? checkedArtifact.quote?.missingInformation : checkedArtifact.report?.missingInformation;
-    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><span class="ekAiPriceSource ${saved ? "" : "estimate"}">${saved ? "Salvato" : "Da controllare"}</span></div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}${checkedArtifact.kind === "report" ? `<button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>` : ""}</div></div></section>`;
+    const message = artifactMessage(messageIndex);
+    const generatedIndexes = new Set((message?.media || []).filter((item) => item.generated).map((item) => Number(item.briefIndex)));
+    const nextBrief = (checkedArtifact.visualBriefs || []).findIndex((_, index) => !generatedIndexes.has(index));
+    const visualButton = nextBrief >= 0 ? `<button class="visual" onclick="edilkappaAiGenerateVisual(${messageIndex},${nextBrief})" ${state.generatingVisual ? "disabled" : ""}>${state.generatingVisual === checkedArtifact.id ? "Creo l’immagine…" : `Crea ${nextBrief === 0 ? "fotomontaggio / immagine" : "altra immagine"}`}</button>` : "";
+    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><span class="ekAiPriceSource ${saved ? "" : "estimate"}">${saved ? "Salvato" : "Da controllare"}</span></div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
   }
 
   function messageHtml(message, index) {
     const sources = (message.sources || []).map(sourceHtml).join("");
-    return `<div class="ekAiMessage ${message.role === "user" ? "user" : "assistant"}"><div class="ekAiText">${escapeHtml(message.text)}</div>${mediaHtml(message, index)}${sources ? `<div class="ekAiSources">${sources}</div>` : ""}${message.role === "assistant" ? artifactHtml(message.artifact, index) : ""}</div>`;
+    const model = message.role === "assistant" && message.modelLabel ? `<div class="ekAiMessageMeta">Motore: ${escapeHtml(message.modelLabel)}${message.reasoningEffort ? ` · ragionamento ${escapeHtml(message.reasoningEffort)}` : ""}</div>` : "";
+    return `<div class="ekAiMessage ${message.role === "user" ? "user" : "assistant"}"><div class="ekAiText">${escapeHtml(message.text)}</div>${model}${mediaHtml(message, index)}${sources ? `<div class="ekAiSources">${sources}</div>` : ""}${message.role === "assistant" ? artifactHtml(message.artifact, index) : ""}</div>`;
   }
 
   function quickPrompts() {
@@ -195,6 +214,10 @@
     return ({ auto: "Chat libera", quote: "Preventivo", report: "Relazione", inspection: "Analisi sopralluogo" })[task] || "Chat libera";
   }
 
+  function modelSelectHtml() {
+    return `<label class="ekAiModel">Motore<select onchange="edilkappaAiSetModel(this.value)"><option value="auto" ${state.modelMode === "auto" ? "selected" : ""}>Automatico · Sol sui lavori complessi</option><option value="sol" ${state.modelMode === "sol" ? "selected" : ""}>GPT‑5.6 Sol · massima qualità</option><option value="terra" ${state.modelMode === "terra" ? "selected" : ""}>GPT‑5.6 Terra · più economico</option></select></label>`;
+  }
+
   function renderAttachments() {
     return state.attachments.map((item, index) => {
       const icon = item.kind === "video" ? "🎬" : item.kind === "image" ? "📷" : "📄";
@@ -204,9 +227,9 @@
   }
 
   function workflowHtml() {
-    if (state.mode !== "work") return "";
+    if (state.mode !== "work") return `<div class="ekAiWorkflow">${modelSelectHtml()}</div>`;
     const buttons = [["auto", "💬 Chat"], ["quote", "📋 Preventivo"], ["report", "📝 Relazione"], ["inspection", "🔎 Analisi"]];
-    return `<div class="ekAiWorkflow">${buttons.map(([task, label]) => `<button class="${state.taskType === task ? "active" : ""}" onclick="edilkappaAiSetTask('${task}')">${label}</button>`).join("")}<small>Modalità: ${taskLabel(state.taskType)}</small></div>`;
+    return `<div class="ekAiWorkflow">${buttons.map(([task, label]) => `<button class="${state.taskType === task ? "active" : ""}" onclick="edilkappaAiSetTask('${task}')">${label}</button>`).join("")}<small>Modalità: ${taskLabel(state.taskType)}</small>${modelSelectHtml()}</div>`;
   }
 
   function view() {
@@ -215,7 +238,7 @@
     if (!state.loaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadHistory, 0);
     const modeLabel = state.mode === "work" ? "Lavoro" : "Personale";
     return `<div class="ekAiPage">
-      <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>Analizza foto, video, audio del video, PDF e documenti. Prepara preventivi con il listino EdilKappa e relazioni salvabili nel cliente corretto.</p></div><div class="ekAiHeroMark">✦</div></section>
+      <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>GPT‑5.6 Sol analizza foto, video, audio, PDF e documenti; ragiona sulle alternative, revisiona i preventivi e può creare immagini illustrative della soluzione.</p></div><div class="ekAiHeroMark">✦</div></section>
       <div class="ekAiToolbar"><div class="ekAiModes"><button class="${state.mode === "work" ? "active" : ""}" onclick="edilkappaAiSetMode('work')">🏗️ Lavoro</button>${isOwner() ? `<button class="${state.mode === "personal" ? "active" : ""}" onclick="edilkappaAiSetMode('personal')">👤 Personale</button>` : ""}</div><div class="ekAiStatus"><i class="ekAiDot"></i> Protetta dal login EdilKappa · ${modeLabel}</div></div>
       ${workflowHtml()}
       <div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la memoria ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
@@ -223,7 +246,7 @@
       ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}</div>` : ""}
       ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}</div>` : ""}
       <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button></div></div>
-      <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Cancella questa memoria</button></div>
+      <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Cancella questa memoria</button></div>
     </div>`;
   }
 
@@ -481,7 +504,15 @@
 
   function notesForQuote(artifact) {
     const quote = artifact.quote || {};
-    const blocks = [quote.notes];
+    const blocks = [artifact.revisionReason ? `Motivo revisione: ${artifact.revisionReason}` : ""];
+    if (artifact.technicalAssessment?.length) blocks.push(`Valutazione tecnica:\n- ${artifact.technicalAssessment.join("\n- ")}`);
+    if (artifact.workPhases?.length) blocks.push(`Fasi operative:\n- ${artifact.workPhases.join("\n- ")}`);
+    if (artifact.materials?.length) blocks.push(`Materiali previsti:\n- ${artifact.materials.join("\n- ")}`);
+    if (quote.estimatedDuration) blocks.push(`Durata stimata: ${quote.estimatedDuration}`);
+    if (quote.includedWorks?.length) blocks.push(`Opere comprese:\n- ${quote.includedWorks.join("\n- ")}`);
+    if (quote.exclusions?.length) blocks.push(`Esclusioni:\n- ${quote.exclusions.join("\n- ")}`);
+    if (quote.options?.length) blocks.push(`Alternative/scenari:\n${quote.options.map((option) => `- ${option.label ? `${option.label} · ` : ""}${option.title}: ${euro(option.total)} + IVA${option.recommended ? " (raccomandata)" : ""}${option.notes ? ` · ${option.notes}` : ""}`).join("\n")}`);
+    if (quote.notes) blocks.push(quote.notes);
     if (quote.assumptions?.length) blocks.push(`Ipotesi della bozza AI:\n- ${quote.assumptions.join("\n- ")}`);
     if (quote.missingInformation?.length) blocks.push(`Dati da confermare:\n- ${quote.missingInformation.join("\n- ")}`);
     blocks.push("Bozza generata con EdilKappa AI: misure, lavorazioni, prezzi e condizioni devono essere verificati dal titolare prima dell’invio.");
@@ -502,7 +533,10 @@
       fileType: item.fileType,
       fileSize: item.fileSize,
       uploadedAt: item.uploadedAt || new Date().toISOString(),
-      source: "EdilKappa AI"
+      source: item.generated ? "EdilKappa AI · visualizzazione illustrativa" : "EdilKappa AI",
+      generated: item.generated === true,
+      illustrative: item.illustrative === true,
+      title: item.title || ""
     }));
   }
 
@@ -516,9 +550,9 @@
         client: destination.client.name,
         clientId: destination.client.id,
         interventionId: destination.interventionId,
-        category: item.kind === "document" ? "Documento sorgente AI" : "Foto e video sopralluogo",
-        title: item.fileName || "Allegato analizzato da EdilKappa AI",
-        notes: "Originale analizzato da EdilKappa AI e collegato alla relativa bozza.",
+        category: item.generated ? "Visualizzazione illustrativa AI" : item.kind === "document" ? "Documento sorgente AI" : "Foto e video sopralluogo",
+        title: item.generated ? (item.title || item.fileName || "Visualizzazione AI") : (item.fileName || "Allegato analizzato da EdilKappa AI"),
+        notes: item.generated ? (item.disclaimer || "Immagine illustrativa generata con AI; non è un progetto esecutivo.") : "Originale analizzato da EdilKappa AI e collegato alla relativa bozza.",
         storagePath: item.storagePath,
         fileName: item.fileName,
         fileType: item.fileType,
@@ -650,8 +684,12 @@
     let y = 94;
     const report = artifact.report || {};
     y = pdfTextSection(doc, "Sintesi", report.executiveSummary || artifact.summary, y);
+    y = pdfTextSection(doc, "Motivo della revisione", artifact.revisionReason, y);
+    y = pdfListSection(doc, "Valutazione tecnica", artifact.technicalAssessment, y);
     y = pdfListSection(doc, "Osservazioni", report.observations, y);
     y = pdfListSection(doc, "Cause probabili", report.probableCauses, y);
+    y = pdfListSection(doc, "Fasi operative", artifact.workPhases, y);
+    y = pdfListSection(doc, "Materiali previsti", artifact.materials, y);
     y = pdfListSection(doc, "Interventi consigliati", report.recommendedWorks, y);
     y = pdfListSection(doc, "Indicazioni di sicurezza", report.safetyNotes, y);
     y = pdfListSection(doc, "Limiti dell’analisi", report.limitations, y);
@@ -662,7 +700,7 @@
       doc.addPage();
       doc.setFont(undefined, "bold");
       doc.setFontSize(12);
-      doc.text(`Immagine analizzata ${index + 1}`, 14, 18);
+      doc.text(`${preview.generated ? "Visualizzazione illustrativa AI" : "Immagine analizzata"} ${index + 1}`, 14, 18);
       doc.setFont(undefined, "normal");
       doc.setFontSize(8.5);
       doc.text(preview.sourceName || preview.name || "Allegato", 14, 24, { maxWidth: 180 });
@@ -685,6 +723,29 @@
       doc.text(`EdilKappa · bozza generata con AI · pagina ${page}/${pages}`, 14, 291);
     }
     return doc.output("blob");
+  }
+
+  async function previewsForReport(message) {
+    const previews = [...(message?.previews || [])];
+    const generated = (message?.media || []).filter((item) => item.generated && item.storagePath).slice(0, 3);
+    for (const item of generated) {
+      try {
+        const url = await window.EdilKappaCloud?.getDocumentUrl?.(item.storagePath);
+        if (!url) continue;
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        previews.push({
+          dataUrl: await fileDataUrl(blob),
+          sourceName: item.title || item.fileName,
+          name: item.fileName,
+          generated: true
+        });
+      } catch (_) {
+        // Il PDF resta generabile anche se una singola anteprima cloud non è disponibile.
+      }
+    }
+    return previews.slice(0, 9);
   }
 
   async function saveReportArtifact(artifact, destination, media, previews) {
@@ -732,15 +793,26 @@
     return rows.length ? `<h2>${escapeHtml(title)}</h2><ul>${rows.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "";
   }
 
-  function downloadReportWord(artifact) {
+  function downloadArtifactWord(artifact) {
+    artifact = verifiedArtifactPrices(artifact);
     const report = artifact.report || {};
+    const quote = artifact.quote || {};
     const company = (window.EdilKappaLocal?.getDB?.().companySettings || [])[0] || {};
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.5;margin:40px;color:#111}h1{color:#173d2e;border-bottom:4px solid #f4c400;padding-bottom:8px}h2{color:#284c3d;margin-top:24px}.warning{background:#fff7cc;border:1px solid #e2c33b;padding:12px}</style></head><body><h1>${escapeHtml(company.name || "EDILKAPPA")} · Relazione tecnica</h1><p>${escapeHtml([company.address, company.vat ? `P.IVA ${company.vat}` : "", company.phone, company.email].filter(Boolean).join(" · "))}</p><h2>${escapeHtml(artifact.title || artifact.subject || "Relazione tecnica")}</h2><p><b>Cliente:</b> ${escapeHtml(artifact.client || "Da assegnare")}<br><b>Indirizzo:</b> ${escapeHtml(artifact.address || "Da confermare")}<br><b>Data:</b> ${escapeHtml(new Date().toLocaleDateString("it-IT"))}</p><p class="warning"><b>Bozza generata con EdilKappa AI.</b> Verificare sul posto osservazioni, misure, conclusioni e indicazioni di sicurezza prima dell’uso.</p><h2>Sintesi</h2><p>${escapeHtml(report.executiveSummary || artifact.summary || "")}</p>${wordList("Osservazioni", report.observations)}${wordList("Cause probabili", report.probableCauses)}${wordList("Interventi consigliati", report.recommendedWorks)}${wordList("Sicurezza", report.safetyNotes)}${wordList("Limiti dell’analisi", report.limitations)}<h2>Conclusioni</h2><p>${escapeHtml(report.conclusions || "")}</p>${wordList("Informazioni da confermare", report.missingInformation)}</body></html>`;
+    const quoteSubtotal = (quote.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+    const quoteNet = quoteSubtotal * (1 - Number(quote.discountPct || 0) / 100);
+    const quoteRows = (quote.lines || []).map((line) => `<tr><td>${escapeHtml(line.description)}</td><td>${escapeHtml(line.quantity)}</td><td>${escapeHtml(line.unit)}</td><td class="num">${escapeHtml(euro(line.unitPrice))}</td><td class="num">${escapeHtml(euro(Number(line.quantity || 0) * Number(line.unitPrice || 0)))}</td></tr>`).join("");
+    const options = (quote.options || []).length ? `<h2>Alternative e scenari</h2>${quote.options.map((option) => `<h3>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)} — ${escapeHtml(euro(option.total))} + IVA${option.recommended ? " (raccomandata)" : ""}</h3><p>${escapeHtml(option.description || "")}</p>${wordList("Opere comprese nello scenario", option.includedWorks)}${option.notes ? `<p>${escapeHtml(option.notes)}</p>` : ""}`).join("")}` : "";
+    const common = `${artifact.revisionReason ? `<h2>Motivo della revisione</h2><p>${escapeHtml(artifact.revisionReason)}</p>` : ""}${wordList("Valutazione tecnica", artifact.technicalAssessment)}${wordList("Fasi operative", artifact.workPhases)}${wordList("Materiali previsti", artifact.materials)}`;
+    const body = artifact.kind === "quote"
+      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th>Prezzo</th><th>Totale</th></tr></thead><tbody>${quoteRows}</tbody></table><p class="total"><b>Imponibile:</b> ${escapeHtml(euro(quoteNet))}<br><b>IVA ${escapeHtml(quote.vatRate || 0)}%:</b> ${escapeHtml(euro(quoteNet * Number(quote.vatRate || 0) / 100))}<br><b>Totale IVA inclusa:</b> ${escapeHtml(euro(quoteNet * (1 + Number(quote.vatRate || 0) / 100)))}</p>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(quote.estimatedDuration)}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi", quote.assumptions)}${wordList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<h2>Note e condizioni</h2><p>${escapeHtml(quote.notes)}</p>` : ""}`
+      : `<h2>Sintesi</h2><p>${escapeHtml(report.executiveSummary || artifact.summary || "")}</p>${common}${wordList("Osservazioni", report.observations)}${wordList("Cause probabili", report.probableCauses)}${wordList("Interventi consigliati", report.recommendedWorks)}${wordList("Sicurezza", report.safetyNotes)}${wordList("Limiti dell’analisi", report.limitations)}<h2>Conclusioni</h2><p>${escapeHtml(report.conclusions || "")}</p>${wordList("Informazioni da confermare", report.missingInformation)}`;
+    const documentLabel = artifact.kind === "quote" ? "Preventivo" : "Relazione tecnica";
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.5;margin:40px;color:#111}h1{color:#173d2e;border-bottom:4px solid #f4c400;padding-bottom:8px}h2{color:#284c3d;margin-top:24px}h3{color:#173d2e}.warning{background:#fff7cc;border:1px solid #e2c33b;padding:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dfda;padding:7px;text-align:left}.num{text-align:right}.total{text-align:right;font-size:1.08em}</style></head><body><h1>${escapeHtml(company.name || "EDILKAPPA")} · ${documentLabel}</h1><p>${escapeHtml([company.address, company.vat ? `P.IVA ${company.vat}` : "", company.phone, company.email].filter(Boolean).join(" · "))}</p><h2>${escapeHtml(artifact.title || artifact.subject || documentLabel)}</h2><p><b>Cliente:</b> ${escapeHtml(artifact.client || "Da assegnare")}<br><b>Indirizzo:</b> ${escapeHtml(artifact.address || "Da confermare")}<br><b>Data:</b> ${escapeHtml(new Date().toLocaleDateString("it-IT"))}</p><p class="warning"><b>Bozza generata con EdilKappa AI.</b> Verificare misure, lavorazioni, prezzi, conclusioni e sicurezza prima dell’uso o dell’invio.</p>${body}</body></html>`;
     const blob = new Blob(["\ufeff", html], { type: "application/msword;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${safeName(artifact.title || artifact.subject, "Relazione-tecnica")}.doc`;
+    link.download = `${safeName(artifact.title || artifact.subject, documentLabel)}.doc`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
@@ -759,6 +831,12 @@
   window.edilkappaAiSetTask = (task) => {
     if (!TASKS.has(task) || state.mode !== "work" || state.sending) return;
     state.taskType = task;
+    state.error = "";
+    rerender();
+  };
+  window.edilkappaAiSetModel = (modelMode) => {
+    if (!MODEL_MODES.has(modelMode) || state.sending) return;
+    state.modelMode = modelMode;
     state.error = "";
     rerender();
   };
@@ -831,6 +909,39 @@
     try { await window.EdilKappaCloud?.openDocument?.(item.storagePath); }
     catch (error) { alert(error?.message || "Allegato originale non disponibile."); }
   };
+  window.edilkappaAiGenerateVisual = async (messageIndex, briefIndex) => {
+    if (state.sending || state.generatingVisual) return;
+    const message = artifactMessage(messageIndex);
+    const artifact = message?.artifact;
+    if (!artifact?.id || !artifact.visualBriefs?.[briefIndex]) return;
+    if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.aiRequest) {
+      state.error = "Il collegamento cloud non è ancora pronto.";
+      rerender();
+      return;
+    }
+    state.generatingVisual = artifact.id;
+    state.error = "";
+    state.progress = `Creo “${artifact.visualBriefs[briefIndex].title}” con GPT‑5.6 Sol…`;
+    rerender();
+    try {
+      const referenceImages = (message.previews || []).filter((item) => /^image\//i.test(item.mimeType || "")).slice(0, 2);
+      const result = await window.EdilKappaCloud.aiRequest({
+        action: "generate_visual",
+        mode: "work",
+        artifactId: artifact.id,
+        briefIndex,
+        referenceImages
+      });
+      if (!result.visual) throw new Error("L’immagine non è stata restituita.");
+      message.media = [...(message.media || []), result.visual];
+    } catch (error) {
+      state.error = error?.message || "Non riesco a creare l’immagine illustrativa.";
+    } finally {
+      state.generatingVisual = "";
+      state.progress = "";
+      rerender();
+    }
+  };
   window.edilkappaAiSend = async () => {
     if (state.sending) return;
     const message = String(document.getElementById("ekAiInput")?.value || state.draft || "").trim();
@@ -866,6 +977,7 @@
         action: "ask",
         mode: requestedMode,
         taskType: requestedMode === "work" ? state.taskType : "auto",
+        modelMode: state.modelMode,
         message,
         attachments: requestAttachments,
         mediaReferences,
@@ -878,6 +990,9 @@
         sources: result.sources || [],
         artifact: result.artifact || null,
         media: result.media || mediaReferences,
+        model: result.model || "",
+        modelLabel: result.modelLabel || "",
+        reasoningEffort: result.reasoningEffort || "",
         previews: requestAttachments.filter((item) => item.mimeType.startsWith("image/")).slice(0, 6),
         at: Date.now()
       });
@@ -914,7 +1029,7 @@
       const destination = { client, interventionId, title: String(form.get("title") || "").trim() };
       const saved = artifact.kind === "quote"
         ? saveQuoteArtifact(artifact, destination, message.media || [])
-        : await saveReportArtifact(artifact, destination, message.media || [], message.previews || []);
+        : await saveReportArtifact(artifact, destination, message.media || [], await previewsForReport(message));
       state.progress = "";
       setTimeout(() => {
         if (artifact.kind === "quote") {
@@ -940,7 +1055,7 @@
   };
   window.edilkappaAiDownloadWord = (messageIndex) => {
     const artifact = artifactMessage(messageIndex)?.artifact;
-    if (artifact?.kind === "report") downloadReportWord(artifact);
+    if (["quote", "report"].includes(artifact?.kind)) downloadArtifactWord(artifact);
   };
   window.edilkappaAiReset = async () => {
     if (state.resetting || !confirm(`Cancellare tutta la memoria ${state.mode === "work" ? "di lavoro" : "personale"} di EdilKappa AI?`)) return;
