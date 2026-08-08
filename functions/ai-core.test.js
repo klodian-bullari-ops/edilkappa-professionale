@@ -215,3 +215,32 @@ test("quality audit catches incomplete or inconsistent quotes", () => {
   assert.match(audit.issues.join("\n"), /IVA richiesta da definire/);
   assert.match(audit.issues.join("\n"), /Pagamento richiesto/);
 });
+
+test("quality audit blocks a zero-price labor regression", () => {
+  const artifact = {
+    kind: "quote", documentType: "preventivo", title: "Lavoro dimostrativo", documentSubtitle: "Caso sintetico",
+    client: "Cliente di prova", clientId: "", interventionId: "", address: "Indirizzo di prova", subject: "Lavoro dimostrativo",
+    summary: "Caso sintetico per il controllo aritmetico", currency: "EUR", revisionOf: "", revisionReason: "",
+    evidence: ["Quantità di prova"], uncertainties: ["Prezzo da verificare"], decisionRationale: "Soluzione dimostrativa",
+    recommendedSolution: "Eseguire il lavoro dimostrativo", technicalAssessment: ["Supporto di prova"],
+    workPhases: ["Preparazione", "Esecuzione"], materials: ["Materiale di prova"], visualBriefs: [],
+    quote: {
+      lines: [
+        { description: "Manodopera di prova", quantity: 2, unit: "ora", unitPrice: 0, priceSource: "da_definire", priceReference: "TEST-01", confidence: "bassa", notes: "Valore da completare" },
+        { description: "Materiale di prova", quantity: 1, unit: "a corpo", unitPrice: 100, priceSource: "stima_ai", priceReference: "", confidence: "media", notes: "" }
+      ],
+      discountPct: 0, vatRate: 10, validityDays: 30, paymentTerms: "50% acconto e saldo a fine lavori", notes: "",
+      estimatedDuration: "3-4 giorni", includedWorks: ["Preparazione"], exclusions: ["Tinteggiatura"],
+      options: [{ label: "A", title: "Raccomandata", description: "Soluzione di prova", total: 300, recommended: true, includedWorks: [], notes: "" }],
+      pricingAnalysis: { laborCost: 100, materialCost: 100, equipmentCost: 0, transportAndDisposalCost: 0, subcontractCost: 0, overheadAndRiskCost: 50, contingencyCost: 25, estimatedDirectCost: 200, targetMarginPct: 10, proposedNetPrice: 300, rationale: [], verificationChecks: [] },
+      assumptions: [], missingInformation: ["Prezzo manodopera da confermare"], readyToSave: true
+    },
+    report: { executiveSummary: "", observations: [], probableCauses: [], evidenceFindings: [], recommendedVerifications: [], interventionPriority: "media", recommendedWorks: [], safetyNotes: [], limitations: [], conclusions: "", missingInformation: [], readyToSave: false }
+  };
+  const audit = auditArtifact(artifact, "Prepara il preventivo");
+  assert.equal(audit.passed, false);
+  assert.match(audit.issues.join("\n"), /Prezzi esportabili/);
+  assert.match(audit.issues.join("\n"), /Controllo imponibile/);
+  assert.match(audit.issues.join("\n"), /Copertura dei costi/);
+  assert.match(audit.issues.join("\n"), /Alternative coerenti/);
+});
