@@ -24,6 +24,10 @@ import {
   where
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 import {
+  getFunctions,
+  httpsCallable
+} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
+import {
   deleteObject,
   getDownloadURL,
   getStorage,
@@ -48,6 +52,8 @@ const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
 const firestore = getFirestore(app, 'edilkappa');
 const storage = getStorage(app);
+const functions = getFunctions(app, 'europe-west8');
+const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 120000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -134,6 +140,10 @@ let initialHydrationRegistrationComplete = false;
 const api = {
   scheduleSync,
   syncNow,
+  async aiRequest(payload) {
+    const response = await callEdilKappaAi(payload);
+    return response.data;
+  },
   restrictView(next) {
     return profile?.role === 'administrator' ? 'portalPreview' : next;
   },
