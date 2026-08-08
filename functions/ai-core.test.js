@@ -6,6 +6,8 @@ const {
   AI_RESPONSE_SCHEMA,
   buildInput,
   buildInstructions,
+  chooseModel,
+  extractGeneratedImage,
   extractAnswer,
   parseAttachments,
   parseMediaReferences
@@ -45,6 +47,44 @@ test("adds video transcripts to the request", () => {
   const input = buildInput([], "Analizza", [], [{ name: "sopralluogo.mp4", text: "La perdita è vicino al pluviale." }]);
   assert.match(input[0].content[1].text, /TRASCRIZIONE AUDIO/);
   assert.match(input[0].content[1].text, /pluviale/);
+});
+
+test("routes complex construction work to GPT-5.6 Sol and simple chat to Terra", () => {
+  const quote = chooseModel({ requestedModelMode: "auto", mode: "work", taskType: "quote", message: "Prepara il preventivo" });
+  const simple = chooseModel({ requestedModelMode: "auto", mode: "work", taskType: "auto", message: "Ciao" });
+  const forced = chooseModel({ requestedModelMode: "sol", mode: "personal", message: "Aiutami" });
+  assert.equal(quote.model, "gpt-5.6-sol");
+  assert.equal(quote.reasoningEffort, "high");
+  assert.equal(simple.model, "gpt-5.6-terra");
+  assert.equal(forced.model, "gpt-5.6-sol");
+});
+
+test("replays the previous structured quote when the user asks for a cheaper revision", () => {
+  const previous = {
+    role: "assistant",
+    text: "Preventivo Condominio Tucidide 17.",
+    artifact: {
+      id: "ai-tucidide-rev01",
+      kind: "quote",
+      title: "Condominio Tucidide 17",
+      quote: {
+        lines: [{ description: "Struttura zincata modulare", quantity: 1, unit: "a corpo", unitPrice: 8200, priceSource: "stima_ai", priceReference: "", confidence: "media", notes: "" }],
+        vatRate: 22
+      }
+    }
+  };
+  const input = buildInput([previous], "È troppo caro: trovami una soluzione più economica", []);
+  assert.match(input[0].content, /DOCUMENTO_STRUTTURATO_PRECEDENTE/);
+  assert.match(input[0].content, /Struttura zincata modulare/);
+  assert.match(input[0].content, /8200/);
+  assert.match(input.at(-1).content[0].text, /RICHIESTA DI REVISIONE/);
+});
+
+test("extracts a generated image safely", () => {
+  const base64 = Buffer.alloc(256, 7).toString("base64");
+  const image = extractGeneratedImage({ output: [{ type: "image_generation_call", result: base64 }] });
+  assert.equal(image.length, 256);
+  assert.equal(extractGeneratedImage({ output: [{ type: "image_generation_call", result: "not base64" }] }), null);
 });
 
 test("extracts answer and unique web citations", () => {
@@ -115,6 +155,8 @@ test("structured response schema requires safe complete objects", () => {
   assert.deepEqual(AI_RESPONSE_SCHEMA.required, ["answer", "artifact"]);
   assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("quote"));
   assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("report"));
+  assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("visualBriefs"));
+  assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.properties.quote.required.includes("options"));
 });
 
 test("rejects unsupported attachments", () => {
