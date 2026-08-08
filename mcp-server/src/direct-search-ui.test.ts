@@ -101,7 +101,7 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./direct-search.js?v=6'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
-  assert.ok(indexHtml.includes('./sw.js?v=40'));
-  assert.ok(serviceWorker.includes('v40-condivisione-file'));
+  assert.ok(indexHtml.includes('./sw.js?v=45'));
+  assert.ok(serviceWorker.includes('v45-ai-multimediale-preventivi-relazioni'));
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });
