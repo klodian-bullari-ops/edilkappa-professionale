@@ -218,12 +218,21 @@ function auditArtifact(value, requestMessage = "") {
       + quote.pricingAnalysis.equipmentCost
       + quote.pricingAnalysis.transportAndDisposalCost
       + quote.pricingAnalysis.subcontractCost;
+    const fullCost = quote.pricingAnalysis.estimatedDirectCost
+      + quote.pricingAnalysis.overheadAndRiskCost
+      + quote.pricingAnalysis.contingencyCost;
+    const invalidLines = quote.lines.filter((line) => !(line.quantity > 0) || !(line.unitPrice > 0) || line.priceSource === "da_definire");
     addCheck("Voci economiche", quote.lines.length >= 2 && quote.lines.every((line) => line.description && line.unit), "servono voci, quantità e unità leggibili");
+    addCheck("Prezzi esportabili", invalidLines.length === 0, `${invalidLines.length} righe hanno quantità/prezzo zero o prezzo da definire`);
     addCheck("Controllo imponibile", net > 0 && Math.abs(net - proposed) <= Math.max(1, net * 0.005), `imponibile righe ${net.toFixed(2)}; imponibile proposto ${proposed.toFixed(2)}`);
     addCheck("Composizione dei costi", quote.pricingAnalysis.estimatedDirectCost > 0 && quote.pricingAnalysis.estimatedDirectCost + 0.01 >= directParts, "costo diretto, manodopera, materiali, mezzi e trasporti devono essere coerenti");
+    addCheck("Copertura dei costi", fullCost <= 0 || net + 0.02 >= fullCost, `prezzo netto ${net.toFixed(2)}; costo complessivo ${fullCost.toFixed(2)}`);
     addCheck("Perimetro contrattuale", quote.includedWorks.length > 0 && quote.exclusions.length > 0, "indicare opere comprese ed escluse");
     addCheck("Condizioni commerciali", Boolean(quote.paymentTerms && quote.estimatedDuration), "indicare pagamento e durata stimata");
     addCheck("Dati da confermare", quote.missingInformation.length > 0 || quote.lines.every((line) => line.confidence !== "bassa"), "le stime a bassa affidabilità richiedono verifiche esplicite");
+    const recommended = quote.options.find((option) => option.recommended);
+    const economical = quote.options.find((option) => /economic|risparm/i.test(`${option.label} ${option.title}`));
+    addCheck("Alternative coerenti", (!recommended || Math.abs(recommended.total - net) <= Math.max(1, net * 0.005)) && (!recommended || !economical || economical.total < recommended.total), "la raccomandata deve coincidere con l'imponibile e l'economica deve costare meno");
     if (/iva.{0,30}da\s+definire/i.test(cleanText(requestMessage, 8000))) {
       addCheck("IVA richiesta da definire", quote.vatRate === 0 && /iva.{0,40}(definire|fattur)/i.test(quote.notes), "non applicare un'aliquota provvisoria quando il titolare chiede IVA da definire");
     }
