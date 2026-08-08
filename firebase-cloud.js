@@ -110,6 +110,11 @@ const remoteMaps = new Map();
 const listenerMaps = new Map();
 const remoteIds = new Map();
 const loadedCollections = new Set();
+const pendingCollectionEvents = new Map();
+const initialHydrationSources = new Set();
+const CLOUD_RENDER_DEBOUNCE_MS = 120;
+const CLOUD_RENDER_MAX_WAIT_MS = 500;
+const INITIAL_HYDRATION_TIMEOUT_MS = 1800;
 let user = null;
 let profile = null;
 let cloudUsers = [];
@@ -120,6 +125,11 @@ let syncTimer = null;
 let syncPromise = Promise.resolve();
 let syncing = false;
 let ready = false;
+let cloudRenderTimer = null;
+let cloudRenderMaxTimer = null;
+let initialHydrationTimer = null;
+let initialHydrationActive = false;
+let initialHydrationRegistrationComplete = false;
 
 const api = {
   scheduleSync,
@@ -427,6 +437,16 @@ function stopDataListeners() {
   listenerMaps.clear();
   remoteIds.clear();
   loadedCollections.clear();
+  pendingCollectionEvents.clear();
+  initialHydrationSources.clear();
+  clearTimeout(cloudRenderTimer);
+  clearTimeout(cloudRenderMaxTimer);
+  clearTimeout(initialHydrationTimer);
+  cloudRenderTimer = null;
+  cloudRenderMaxTimer = null;
+  initialHydrationTimer = null;
+  initialHydrationActive = false;
+  initialHydrationRegistrationComplete = false;
   ready = false;
 }
 
@@ -610,6 +630,66 @@ function parseEnvelope(snapshot) {
   return item;
 }
 
+function flushCloudUi() {
+  clearTimeout(cloudRenderTimer);
+  clearTimeout(cloudRenderMaxTimer);
+  cloudRenderTimer = null;
+  cloudRenderMaxTimer = null;
+  if (!pendingCollectionEvents.size) return;
+  const events = Array.from(pendingCollectionEvents.values());
+  pendingCollectionEvents.clear();
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+  local.persist();
+  updateAdministratorPortal();
+  local.render();
+  if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+    requestAnimationFrame(() => window.scrollTo({ left: scrollX, top: scrollY, behavior: 'auto' }));
+  }
+  events.forEach((detail) => window.dispatchEvent(new CustomEvent('edilkappa:cloud-collection-synced', { detail })));
+}
+
+function scheduleCloudUi(detail) {
+  if (detail) pendingCollectionEvents.set(detail.remoteName, detail);
+  if (initialHydrationActive || !pendingCollectionEvents.size) return;
+  clearTimeout(cloudRenderTimer);
+  cloudRenderTimer = setTimeout(flushCloudUi, CLOUD_RENDER_DEBOUNCE_MS);
+  if (!cloudRenderMaxTimer) cloudRenderMaxTimer = setTimeout(flushCloudUi, CLOUD_RENDER_MAX_WAIT_MS);
+}
+
+function completeInitialHydration() {
+  if (!initialHydrationActive) return;
+  initialHydrationActive = false;
+  initialHydrationSources.clear();
+  clearTimeout(initialHydrationTimer);
+  initialHydrationTimer = null;
+  scheduleCloudUi();
+}
+
+function beginInitialHydration() {
+  clearTimeout(initialHydrationTimer);
+  initialHydrationSources.clear();
+  initialHydrationActive = true;
+  initialHydrationRegistrationComplete = false;
+  initialHydrationTimer = null;
+}
+
+function registerInitialHydrationSource(sourceKey) {
+  if (initialHydrationActive) initialHydrationSources.add(sourceKey);
+}
+
+function settleInitialHydrationSource(sourceKey) {
+  if (!initialHydrationActive) return;
+  initialHydrationSources.delete(sourceKey);
+  if (initialHydrationRegistrationComplete && !initialHydrationSources.size) completeInitialHydration();
+}
+
+function finishInitialHydrationRegistration() {
+  initialHydrationRegistrationComplete = true;
+  if (!initialHydrationSources.size) return completeInitialHydration();
+  initialHydrationTimer = setTimeout(completeInitialHydration, INITIAL_HYDRATION_TIMEOUT_MS);
+}
+
 function mergeSnapshot(remoteName, snapshot, sourceKey = `${remoteName}:default`) {
   const localName = mappingByRemote.get(remoteName);
   if (!localName) return;
@@ -637,27 +717,35 @@ function mergeSnapshot(remoteName, snapshot, sourceKey = `${remoteName}:default`
     local.getDB()[localName] = values;
   }
   if (localName === 'teams' && profile?.role === 'worker') local.setWorkerRole(profile, user.uid);
-  local.persist();
-  updateAdministratorPortal();
-  local.render();
-  window.dispatchEvent(new CustomEvent('edilkappa:cloud-collection-synced', {
-    detail: { remoteName, localName, count: values.length }
-  }));
+  scheduleCloudUi({ remoteName, localName, count: values.length });
   setSyncState(snapshot.metadata.fromCache && !navigator.onLine ? 'Offline' : 'Sincronizzato', snapshot.metadata.fromCache && !navigator.onLine ? '#d69b18' : '#167448');
 }
 
 function listenTo(remoteName, constraints = [], listenerId = 'default') {
   const target = query(collection(firestore, remoteName), ...constraints);
   const sourceKey = `${remoteName}:${listenerId}`;
-  unsubscribers.push(onSnapshot(target, (snapshot) => mergeSnapshot(remoteName, snapshot, sourceKey), (error) => {
+  let initialSnapshotPending = true;
+  const settleInitialSnapshot = () => {
+    if (!initialSnapshotPending) return;
+    initialSnapshotPending = false;
+    settleInitialHydrationSource(sourceKey);
+  };
+  registerInitialHydrationSource(sourceKey);
+  unsubscribers.push(onSnapshot(target, (snapshot) => {
+    try { mergeSnapshot(remoteName, snapshot, sourceKey); }
+    finally { settleInitialSnapshot(); }
+  }, (error) => {
+    settleInitialSnapshot();
     console.error(`Sincronizzazione ${remoteName}:`, error);
     setSyncState('Errore sync', '#ad2a2a', errorText(error));
   }));
 }
 
 function startDataListeners() {
+  beginInitialHydration();
   if (profile.role === 'owner' || profile.role === 'office') {
     mappings.forEach(([, remoteName]) => listenTo(remoteName, [where('orgId', '==', ORG_ID)]));
+    finishInitialHydrationRegistration();
     return;
   }
   listenTo('settings', [where('orgId', '==', ORG_ID)]);
@@ -667,18 +755,38 @@ function startDataListeners() {
     ['roofs', 'drains'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)]));
     ['reports', 'timesheets'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('workerUid', '==', user.uid), where('ownerUid', '==', user.uid)]));
     const teamRef = doc(firestore, 'teams', profile.teamId);
+    const teamSourceKey = 'teams:profile-team';
+    let initialTeamSnapshotPending = true;
+    const settleInitialTeamSnapshot = () => {
+      if (!initialTeamSnapshotPending) return;
+      initialTeamSnapshotPending = false;
+      settleInitialHydrationSource(teamSourceKey);
+    };
+    registerInitialHydrationSource(teamSourceKey);
     unsubscribers.push(onSnapshot(teamRef, (snapshot) => {
-      const database = local.getDB();
-      database.teams = snapshot.exists() ? [parseEnvelope(snapshot)] : [];
-      local.setWorkerRole(profile, user.uid); local.persist(); local.render();
+      try {
+        const database = local.getDB();
+        database.teams = snapshot.exists() ? [parseEnvelope(snapshot)] : [];
+        local.setWorkerRole(profile, user.uid);
+        scheduleCloudUi({ remoteName: 'teams', localName: 'teams', count: database.teams.length });
+      } finally { settleInitialTeamSnapshot(); }
+    }, (error) => {
+      settleInitialTeamSnapshot();
+      console.error('Sincronizzazione squadra:', error);
+      setSyncState('Errore sync', '#ad2a2a', errorText(error));
     }));
+    finishInitialHydrationRegistration();
     return;
   }
   const clientIds = Array.from(new Set(profile.clientIds || [])).slice(0, 10);
-  if (!clientIds.length) return;
+  if (!clientIds.length) {
+    finishInitialHydrationRegistration();
+    return;
+  }
   const chunks = [];
   for (let index = 0; index < clientIds.length; index += 10) chunks.push(clientIds.slice(index, index + 10));
   clientCollections.forEach((remoteName) => chunks.forEach((ids) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('clientId', 'in', ids)])));
+  finishInitialHydrationRegistration();
 }
 
 function canPush(remoteName) {
