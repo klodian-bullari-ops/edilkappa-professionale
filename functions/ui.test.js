@@ -19,8 +19,26 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiView, "function");
   assert.equal(typeof global.window.edilkappaAiSend, "function");
   assert.equal(typeof global.window.edilkappaAiReset, "function");
+  assert.equal(typeof global.window.edilkappaAiSaveArtifact, "function");
+  assert.equal(typeof global.window.edilkappaAiDownloadWord, "function");
   global.window = previousWindow;
   global.document = previousDocument;
+});
+
+test("supports construction photos, video workflows and managed artifacts", () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
+  assert.match(source, /video\/mp4/);
+  assert.match(source, /extractVideoFrames/);
+  assert.match(source, /uploadMedia/);
+  assert.match(source, /listinoEdilKappa/);
+  assert.match(source, /Salva e modifica preventivo/);
+  assert.match(source, /Salva relazione PDF/);
+  assert.match(source, /Scarica Word/);
+  assert.match(source, /priceItem\.salePrice/);
+  assert.match(source, /priceSource:\s*"da_definire"/);
+  assert.match(source, /archiveWarnings/);
+  const cloudSource = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
+  assert.match(cloudSource, /'text\/plain'/);
 });
 
 test("keeps EdilKappa AI available after professional extensions replace render", () => {

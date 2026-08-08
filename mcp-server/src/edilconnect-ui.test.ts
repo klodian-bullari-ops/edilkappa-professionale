@@ -151,11 +151,11 @@ test('i dati amministrativi EdilConnect restano separati e riservati', () => {
 });
 
 test('la nuova funzione è disponibile offline', () => {
-  assert.match(serviceWorker, /v40-condivisione-file/);
+  assert.match(serviceWorker, /v45-ai-multimediale-preventivi-relazioni/);
   assert.match(serviceWorker, /"\.\/edilconnect\.js"/);
   assert.match(serviceWorker, /caches\.match\(event\.request, \{ ignoreSearch: true \}\)/);
   assert.match(moduleSource, /https:\/\/www\.congruitanazionale\.it\/Home\/Simulatore/);
   assert.match(moduleSource, /#modalForm>\.modalBody\{[^}]*overflow-y:auto/);
   assert.match(moduleSource, /\.edilconnectWarning \.row\{display:grid/);
-  assert.match(indexHtml, /\.\/sw\.js\?v=40/);
+  assert.match(indexHtml, /\.\/sw\.js\?v=45/);
 });

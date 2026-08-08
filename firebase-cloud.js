@@ -53,7 +53,7 @@ const auth = getAuth(app);
 const firestore = getFirestore(app, 'edilkappa');
 const storage = getStorage(app);
 const functions = getFunctions(app, 'europe-west8');
-const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 120000 });
+const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 300000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -63,8 +63,11 @@ const DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
   'text/csv',
   'image/jpeg',
   'image/png',
@@ -203,8 +206,11 @@ function inferredMimeType(file) {
     pdf: 'application/pdf',
     doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     xls: 'application/vnd.ms-excel',
     xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    txt: 'text/plain',
     csv: 'text/csv',
     jpg: 'image/jpeg',
     jpeg: 'image/jpeg',
@@ -232,7 +238,7 @@ async function uploadDocument(file, options = {}) {
   if (!file?.size) throw new Error('Il file selezionato è vuoto.');
   if (file.size > DOCUMENT_MAX_BYTES) throw new Error('Il file supera il limite di 25 MB.');
   const contentType = inferredMimeType(file);
-  if (!DOCUMENT_MIME_TYPES.has(contentType)) throw new Error('Sono ammessi PDF, Word, Excel, CSV e immagini JPG, PNG, WEBP o HEIC.');
+  if (!DOCUMENT_MIME_TYPES.has(contentType)) throw new Error('Sono ammessi PDF, Word, PowerPoint, Excel, CSV e immagini JPG, PNG, WEBP o HEIC.');
 
   const documentId = uploadIdentifier(options.documentId);
   const path = `organisations/${ORG_ID}/documents/${user.uid}/${documentId}/${safeFileName(file.name)}`;
