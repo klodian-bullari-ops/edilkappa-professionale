@@ -151,7 +151,7 @@ test('i dati amministrativi EdilConnect restano separati e riservati', () => {
 });
 
 test('la nuova funzione è disponibile offline', () => {
-  assert.match(serviceWorker, /v48-ai-sol-timeout-diagnostics/);
+  assert.match(serviceWorker, /v50-ai-quality-memory/);
   assert.match(serviceWorker, /"\.\/edilconnect\.js"/);
   assert.match(serviceWorker, /caches\.match\(event\.request, \{ ignoreSearch: true \}\)/);
   assert.match(moduleSource, /https:\/\/www\.congruitanazionale\.it\/Home\/Simulatore/);

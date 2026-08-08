@@ -8,6 +8,7 @@
   const DOCUMENT_MAX_BYTES = 6 * 1024 * 1024;
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
   const MODEL_MODES = new Set(["auto", "sol", "terra"]);
+  const PENDING_JOB_KEY = "edilkappa-ai-pending-job-v1";
   const EDILKAPPA_DOCUMENT = Object.freeze({
     legalName: "EDILKAPPA S.A.S. DI BULLARI KLODIAN & C.",
     activity: "Lavori di completamento e finitura degli edifici",
@@ -35,6 +36,8 @@
     progress: "",
     useWeb: false,
     error: "",
+    pendingJob: null,
+    retryAvailable: false,
     nextHistoryAttempt: 0
   };
 
@@ -49,10 +52,49 @@
     .ekAiTyping{display:inline-flex;gap:5px}.ekAiTyping i{width:7px;height:7px;background:#668078;border-radius:50%;animation:ekAiPulse 1.1s infinite}.ekAiTyping i:nth-child(2){animation-delay:.15s}.ekAiTyping i:nth-child(3){animation-delay:.3s}@keyframes ekAiPulse{0%,70%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}
     .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiMethod{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-top:13px}.ekAiMethod>div{border:1px solid #dce4df;border-radius:11px;padding:10px;background:#fff}.ekAiMethod b{display:block;color:#284c3d;margin-bottom:5px}.ekAiPricingCheck{margin-top:13px;border:1px solid #d8b600;background:#fffbee;border-radius:12px;padding:11px}.ekAiPricingGrid{display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin-top:8px;font-size:12px}.ekAiPricingGrid b{text-align:right}.ekAiEvidenceTable{min-width:720px}.ekAiPriority{display:inline-flex;padding:4px 8px;border-radius:999px;background:#fff2c7;color:#775a00;font-size:11px;font-weight:850}.ekAiOption{border:1px solid #d8e3dc;border-radius:11px;padding:10px;margin-top:8px}.ekAiOption.recommended{border-color:#d8b600;background:#fffbee}.ekAiOptionHead{display:flex;justify-content:space-between;gap:10px}.ekAiVisualBrief{border-left:4px solid #f4c400;background:#f8faf8;padding:9px 10px;margin-top:7px}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.visual{background:#f4c400;color:#173d2e}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}.ekAiArtifactActions button:disabled{opacity:.55;cursor:wait}
     .ekAiQuick{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.ekAiQuick button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}.ekAiQuick button:hover{border-color:#6da482}
-    .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:6px;background:#edf4ef;color:#355246;border-radius:9px;padding:7px 9px;font-size:12px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:10px 12px;font-size:13px}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
+    .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:6px;background:#edf4ef;color:#355246;border-radius:9px;padding:7px 9px;font-size:12px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:12px;font-size:13px}.ekAiSteps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:9px}.ekAiStep{padding:7px 5px;border-radius:8px;background:#dce9e1;color:#61736a;text-align:center;font-size:10px;font-weight:800}.ekAiStep.done{background:#bfe3ca;color:#175c35}.ekAiStep.active{background:#f4c400;color:#292300}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiRetry{margin-left:9px;border:1px solid #c65d57;background:#fff;color:#8f2929;border-radius:8px;padding:6px 9px;font-weight:800}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
     @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
   `;
   document.head.appendChild(css);
+
+  function loadPendingJob() {
+    try {
+      const value = JSON.parse(globalThis.localStorage?.getItem(PENDING_JOB_KEY) || "null");
+      return value?.jobId ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function rememberPendingJob(value) {
+    state.pendingJob = value || null;
+    try {
+      if (value?.jobId) globalThis.localStorage?.setItem(PENDING_JOB_KEY, JSON.stringify(value));
+      else globalThis.localStorage?.removeItem(PENDING_JOB_KEY);
+    } catch (_) {}
+  }
+
+  function stageLabel(stage) {
+    return ({
+      archive: "Archivio gli allegati originali…",
+      analysis: "1/2 · Analisi tecnica, evidenze e incertezze…",
+      compose: "2/2 · Compongo prezzi e documento EdilKappa…",
+      retry: "La risposta si è interrotta: nuovo tentativo automatico con Sol…",
+      fallback: "Sol non ha completato: continuo automaticamente con Terra…",
+      check: "Controllo somme, margine, IVA e dati mancanti…",
+      completed: "Controllo finale completato."
+    })[stage] || "EdilKappa AI sta elaborando…";
+  }
+
+  function progressStepsHtml(stage) {
+    const stages = ["archive", "analysis", "compose", "check", "completed"];
+    const labels = ["Allegati", "Analisi", "Documento", "Controllo", "Pronto"];
+    const normalized = stage === "retry" || stage === "fallback" ? "compose" : stage;
+    const active = Math.max(0, stages.indexOf(normalized));
+    return `<div class="ekAiSteps">${labels.map((label, index) => `<span class="ekAiStep ${index < active ? "done" : index === active ? "active" : ""}">${label}</span>`).join("")}</div>`;
+  }
+
+  state.pendingJob = loadPendingJob();
 
   function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -230,10 +272,17 @@
     const detail = checkedArtifact.kind === "quote" ? quoteArtifactHtml(checkedArtifact) : reportArtifactHtml(checkedArtifact);
     const missing = checkedArtifact.kind === "quote" ? checkedArtifact.quote?.missingInformation : checkedArtifact.report?.missingInformation;
     const message = artifactMessage(messageIndex);
+    const quality = message?.qualityAudit;
+    const qualityBadge = quality
+      ? `<span class="ekAiPriceSource ${quality.passed ? "" : "estimate"}">Controllo qualità ${Number(quality.score || 0)}/100</span>`
+      : `<span class="ekAiPriceSource estimate">Da controllare</span>`;
+    const qualityWarnings = quality && !quality.passed && quality.issues?.length
+      ? `<div class="ekAiArtifactNotice"><b>Controlli ancora necessari:</b><br>${quality.issues.slice(0, 5).map(escapeHtml).join("<br>")}</div>`
+      : "";
     const generatedIndexes = new Set((message?.media || []).filter((item) => item.generated).map((item) => Number(item.briefIndex)));
     const nextBrief = (checkedArtifact.visualBriefs || []).findIndex((_, index) => !generatedIndexes.has(index));
     const visualButton = nextBrief >= 0 ? `<button class="visual" onclick="edilkappaAiGenerateVisual(${messageIndex},${nextBrief})" ${state.generatingVisual ? "disabled" : ""}>${state.generatingVisual === checkedArtifact.id ? "Creo l’immagine…" : `Crea ${nextBrief === 0 ? "fotomontaggio / immagine" : "altra immagine"}`}</button>` : "";
-    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><span class="ekAiPriceSource ${saved ? "" : "estimate"}">${saved ? "Salvato" : "Da controllare"}</span></div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})">Scarica PDF EdilKappa</button><button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
+    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div>${saved ? `<span class="ekAiPriceSource">Salvato</span>` : qualityBadge}</div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${qualityWarnings}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})">Scarica PDF EdilKappa</button><button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
   }
 
   function messageHtml(message, index) {
@@ -284,6 +333,7 @@
     if (state.mode === "personal" && !isOwner()) state.mode = "work";
     const messages = currentMessages();
     if (!state.loaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadHistory, 0);
+    if (state.pendingJob?.jobId && state.pendingJob.mode === state.mode && !state.sending) setTimeout(() => window.edilkappaAiResumePending?.(), 0);
     const modeLabel = state.mode === "work" ? "Lavoro" : "Personale";
     return `<div class="ekAiPage">
       <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>GPT‑5.6 Sol applica il Metodo EdilKappa: analizza prove e incertezze, confronta soluzioni, compone i prezzi e genera preventivi o relazioni nel modello aziendale.</p></div><div class="ekAiHeroMark">✦</div></section>
@@ -291,8 +341,8 @@
       ${workflowHtml()}
       <div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la memoria ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
       <div class="ekAiQuick">${quickPrompts().map((item, index) => `<button onclick="edilkappaAiUsePrompt(${index})">${escapeHtml(item.label)}</button>`).join("")}</div>
-      ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}</div>` : ""}
-      ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}</div>` : ""}
+      ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}${progressStepsHtml(state.pendingJob?.stage || "archive")}</div>` : ""}
+      ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}${state.retryAvailable ? `<button class="ekAiRetry" onclick="edilkappaAiRetry()">Riprova</button>` : ""}</div>` : ""}
       <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button></div></div>
       <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Cancella questa memoria</button></div>
     </div>`;
@@ -336,20 +386,43 @@
     }
   }
 
-  function businessContext() {
+  function relevanceTokens(value) {
+    const ignored = new Set(["della", "delle", "degli", "nella", "nelle", "questo", "questa", "prepara", "preventivo", "relazione", "lavoro", "intervento", "completo", "edilkappa"]);
+    return new Set(String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{4,}/g)?.filter((token) => !ignored.has(token)) || []);
+  }
+
+  function quoteRelevance(item, requestTokens) {
+    const searchable = [item.subject, item.client, ...(item.lines || []).map((line) => line.description), item.aiRecommendedSolution].filter(Boolean).join(" ");
+    const quoteTokens = relevanceTokens(searchable);
+    let score = 0;
+    requestTokens.forEach((token) => { if (quoteTokens.has(token)) score += 1; });
+    return score;
+  }
+
+  function businessContext(message = "") {
     const database = window.EdilKappaLocal?.getDB?.() || {};
     const compact = (items, fields, limit = 20) => (items || []).slice(0, limit).map((item) => Object.fromEntries(fields.map((field) => [field, item?.[field]]).filter(([, value]) => value !== undefined && value !== "")));
-    const recentQuotes = (database.quotes || []).slice(-10).reverse().map((item) => ({
-      code: item.code,
-      client: item.client,
-      subject: item.subject,
-      date: item.date,
-      status: item.status,
-      net: item.net,
-      lines: (item.lines || []).slice(0, 12).map((line) => ({ description: line.description, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice }))
-    }));
+    const requestTokens = relevanceTokens(message);
+    const recentQuotes = (database.quotes || [])
+      .map((item, index) => ({ item, index, score: quoteRelevance(item, requestTokens) }))
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+      .slice(0, 6)
+      .map(({ item }) => ({
+        code: item.code,
+        client: item.client,
+        subject: item.subject,
+        date: item.date,
+        status: item.status,
+        net: item.net,
+        lines: (item.lines || []).slice(0, 12).map((line) => ({ description: line.description, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice }))
+      }));
     const validatedStatuses = new Set(["Accettato", "Approvato", "Completato", "Fatturato"]);
-    const validatedQuotes = (database.quotes || []).filter((item) => validatedStatuses.has(item.status)).slice(-16).reverse();
+    const validatedQuotes = (database.quotes || [])
+      .filter((item) => validatedStatuses.has(item.status))
+      .map((item, index) => ({ item, index, score: quoteRelevance(item, requestTokens) }))
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+      .slice(0, 6)
+      .map((entry) => entry.item);
     const validatedMargins = validatedQuotes.map((item) => Number(item.marginPercent)).filter(Number.isFinite);
     const correctionMemory = (database.quotes || []).slice(-20).reverse().flatMap((item) => (item.revisions || []).slice(-4).map((revision) => ({
       quote: item.code,
@@ -388,6 +461,17 @@
       controlloEconomico: {
         margineMedioPreventiviValidatiPct: validatedMargins.length ? Math.round(validatedMargins.reduce((sum, value) => sum + value, 0) / validatedMargins.length * 10) / 10 : null,
         usaSoloStoricoConStato: Array.from(validatedStatuses)
+      },
+      standardDocumentaleApprovato: {
+        intestazione: "Logo e dati EDILKAPPA in alto, riferimento documento a destra, linea divisoria, titolo centrato, tabelle pulite, piè di pagina con nome documento e numero pagina.",
+        regole: [
+          "Non cambiare intestazione o stile tra una revisione e la successiva.",
+          "Il controllo economico interno e il margine non devono essere esportati nel documento destinato al cliente.",
+          "IVA, sconti, commissioni, tempi e pagamento seguono la richiesta specifica; non applicare valori abituali se il titolare li ha lasciati da definire.",
+          "Non inventare misure, caratteristiche della copertura, certificazioni o cause definitive non dimostrate.",
+          "Quando il prezzo può risultare elevato, proporre una vera alternativa economica indicando chiaramente differenze e limiti.",
+          "Le correzioni del titolare prevalgono sugli esempi storici e devono essere conservate nelle revisioni successive."
+        ]
       },
       squadre: compact(database.teams, ["id", "name", "member1", "member2"], 12)
     };
@@ -1245,6 +1329,91 @@
       rerender();
     }
   };
+
+  function addCompletedAiResult(result, requestedMode, mediaReferences, requestAttachments) {
+    const artifactId = result.artifact?.id;
+    if (artifactId && state.messages[requestedMode].some((item) => item.artifact?.id === artifactId)) return;
+    state.messages[requestedMode].push({
+      role: "assistant",
+      text: result.answer,
+      sources: result.sources || [],
+      artifact: result.artifact || null,
+      media: result.media || mediaReferences || [],
+      model: result.model || "",
+      modelLabel: result.modelLabel || "",
+      reasoningEffort: result.reasoningEffort || "",
+      fallbackUsed: result.fallbackUsed === true,
+      qualityAudit: result.qualityAudit || null,
+      previews: (requestAttachments || []).filter((item) => item.mimeType?.startsWith("image/")).slice(0, 6),
+      at: Date.now()
+    });
+    state.loaded[requestedMode] = true;
+  }
+
+  async function pollPendingJob(requestAttachments = [], mediaReferences = []) {
+    const pending = state.pendingJob;
+    if (!pending?.jobId || !window.EdilKappaCloud?.aiRequest) return;
+    state.sending = true;
+    state.retryAvailable = false;
+    while (state.pendingJob?.jobId === pending.jobId) {
+      const status = await window.EdilKappaCloud.aiRequest({ action: "job_status", mode: pending.mode, jobId: pending.jobId });
+      if (status.status === "completed") {
+        state.pendingJob.stage = "completed";
+        state.progress = stageLabel("completed");
+        rerender();
+        addCompletedAiResult(status.result, pending.mode, mediaReferences, requestAttachments);
+        rememberPendingJob(null);
+        state.attachments = [];
+        state.draft = "";
+        state.sending = false;
+        state.progress = "";
+        rerender();
+        return;
+      }
+      if (status.status === "failed") {
+        state.error = status.error || "La generazione non è riuscita. La richiesta resta pronta per essere riprovata.";
+        state.retryAvailable = status.canRetry === true;
+        state.draft ||= pending.message || "";
+        state.sending = false;
+        state.progress = "";
+        rerender();
+        return;
+      }
+      state.pendingJob.stage = status.stage || state.pendingJob.stage || "analysis";
+      rememberPendingJob(state.pendingJob);
+      state.progress = stageLabel(state.pendingJob.stage);
+      rerender();
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+    }
+  }
+
+  window.edilkappaAiResumePending = async () => {
+    if (state.sending || !state.pendingJob?.jobId || !window.EdilKappaCloud?.ready) return;
+    state.progress = stageLabel(state.pendingJob.stage || "analysis");
+    state.error = "";
+    rerender();
+    try {
+      await pollPendingJob();
+    } catch (error) {
+      state.sending = false;
+      state.error = error?.message || "Non riesco a controllare la generazione. Premi Riprova tra poco.";
+      state.retryAvailable = true;
+      state.progress = "";
+      rerender();
+    }
+  };
+
+  window.edilkappaAiRetry = () => {
+    const message = state.pendingJob?.message || state.draft;
+    rememberPendingJob(null);
+    state.sending = false;
+    state.error = "";
+    state.retryAvailable = false;
+    state.draft = message || state.draft;
+    rerender();
+    setTimeout(() => window.edilkappaAiSend(), 0);
+  };
+
   window.edilkappaAiSend = async () => {
     if (state.sending) return;
     const message = String(document.getElementById("ekAiInput")?.value || state.draft || "").trim();
@@ -1285,29 +1454,20 @@
         attachments: requestAttachments,
         mediaReferences,
         useWeb: state.useWeb,
-        businessContext: requestedMode === "work" ? businessContext() : null
+        businessContext: requestedMode === "work" ? businessContext(message) : null
       });
-      state.messages[requestedMode].push({
-        role: "assistant",
-        text: result.answer,
-        sources: result.sources || [],
-        artifact: result.artifact || null,
-        media: result.media || mediaReferences,
-        model: result.model || "",
-        modelLabel: result.modelLabel || "",
-        reasoningEffort: result.reasoningEffort || "",
-        previews: requestAttachments.filter((item) => item.mimeType.startsWith("image/")).slice(0, 6),
-        at: Date.now()
-      });
-      state.loaded[requestedMode] = true;
-      state.attachments = [];
-      state.draft = "";
+      if (!result.jobId) throw new Error("EdilKappa AI non ha restituito l’identificativo della generazione.");
+      rememberPendingJob({ jobId: result.jobId, mode: requestedMode, stage: result.stage || "analysis", message, startedAt: Date.now() });
+      state.progress = stageLabel(state.pendingJob.stage);
+      rerender();
+      await pollPendingJob(requestAttachments, mediaReferences);
       if (archiveWarnings.length) state.error = `Analisi completata, ma questi originali non sono stati archiviati: ${archiveWarnings.join(", ")}. Riprova il caricamento prima di usare il documento definitivo.`;
     } catch (error) {
       state.error = error?.message || "La richiesta non è riuscita. Riprova.";
+      state.retryAvailable = true;
     } finally {
-      state.sending = false;
-      state.progress = "";
+      if (!state.pendingJob?.jobId || state.error) state.sending = false;
+      if (!state.sending) state.progress = "";
       rerender();
     }
   };

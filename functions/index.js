@@ -9,6 +9,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const {
   AI_RESPONSE_SCHEMA,
   ALLOWED_VIDEO_TYPES,
+  auditArtifact,
   buildInput,
   buildInstructions,
   chooseModel,
@@ -31,6 +32,8 @@ const DAILY_REQUEST_LIMIT = 120;
 const MAX_TRANSCRIPTION_BYTES = 25 * 1024 * 1024;
 const MAX_VISUALS_PER_ARTIFACT = 3;
 const OPENAI_REQUEST_TIMEOUT_MS = 540000;
+const OPENAI_BACKGROUND_TIMEOUT_MS = 45000;
+const AI_JOB_TTL_MS = 24 * 60 * 60 * 1000;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 async function authorizedUser(request, mode) {
@@ -57,6 +60,10 @@ async function authorizedUser(request, mode) {
 
 function conversationRef(uid, mode) {
   return firestore.collection("aiConversations").doc(`${uid}--${mode}`);
+}
+
+function aiJobRef(uid, jobId) {
+  return firestore.collection("aiJobs").doc(`${uid}--${cleanText(jobId, 120)}`);
 }
 
 async function useDailyAllowance(uid) {
@@ -243,6 +250,114 @@ async function callOpenAI({ instructions, input, useWeb, modelChoice, safetyId }
   }
 }
 
+function backgroundHeaders() {
+  return {
+    "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
+    "Content-Type": "application/json"
+  };
+}
+
+async function createBackgroundResponse(body, operation = "background request") {
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: backgroundHeaders(),
+      body: JSON.stringify({ ...body, background: true, store: true }),
+      signal: AbortSignal.timeout(OPENAI_BACKGROUND_TIMEOUT_MS)
+    });
+    if (!response.ok) await openAiFailure(response, operation);
+    return await response.json();
+  } catch (error) {
+    throw openAiTransportFailure(error, operation);
+  }
+}
+
+async function retrieveBackgroundResponse(responseId) {
+  try {
+    const response = await fetch(`https://api.openai.com/v1/responses/${encodeURIComponent(responseId)}`, {
+      headers: backgroundHeaders(),
+      signal: AbortSignal.timeout(OPENAI_BACKGROUND_TIMEOUT_MS)
+    });
+    if (!response.ok) await openAiFailure(response, "background status");
+    return await response.json();
+  } catch (error) {
+    throw openAiTransportFailure(error, "background status");
+  }
+}
+
+function finalResponseBody({ instructions, previousResponseId, modelChoice, useWeb, safetyId }) {
+  const body = {
+    model: modelChoice.model,
+    previous_response_id: previousResponseId,
+    instructions,
+    input: [{
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "Ora usa l’analisi preliminare e tutto il materiale precedente per comporre il risultato definitivo. Esegui il controllo tecnico, economico e aritmetico finale e restituisci esclusivamente il formato strutturato richiesto."
+      }]
+    }],
+    reasoning: { effort: modelChoice.reasoningEffort },
+    text: {
+      verbosity: modelChoice.verbosity,
+      format: { type: "json_schema", name: "edilkappa_ai_response", strict: true, schema: AI_RESPONSE_SCHEMA }
+    },
+    max_output_tokens: modelChoice.maxOutputTokens || 12000,
+    safety_identifier: safetyId
+  };
+  if (useWeb) body.tools = [{ type: "web_search", user_location: { type: "approximate", country: "IT", city: "Milano", region: "Lombardia" } }];
+  return body;
+}
+
+function repairResponseBody({ instructions, previousResponseId, modelChoice, qualityAudit, safetyId }) {
+  return {
+    model: modelChoice.model,
+    previous_response_id: previousResponseId,
+    instructions,
+    input: [{
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "CONTROLLO QUALITÀ EDILKAPPA. Correggi il documento appena composto senza cambiare i dati certi e senza inventare informazioni.",
+          "Risolvi tutte le anomalie elencate, ricontrolla somme, IVA, costi, margine, dati del cliente, ipotesi, inclusioni ed esclusioni.",
+          `ANOMALIE DA CORREGGERE:\n- ${(qualityAudit.issues || []).join("\n- ")}`,
+          "Restituisci nuovamente ed esclusivamente il formato strutturato completo richiesto."
+        ].join("\n\n")
+      }]
+    }],
+    reasoning: { effort: modelChoice.reasoningEffort },
+    text: {
+      verbosity: modelChoice.verbosity,
+      format: { type: "json_schema", name: "edilkappa_ai_response", strict: true, schema: AI_RESPONSE_SCHEMA }
+    },
+    max_output_tokens: modelChoice.maxOutputTokens || 12000,
+    safety_identifier: safetyId
+  };
+}
+
+function preliminaryResponseBody({ instructions, input, safetyId }) {
+  return {
+    model: process.env.OPENAI_TERRA_MODEL || "gpt-5.6-terra",
+    instructions: `${instructions}\n\nFASE 1 — ANALISI PRELIMINARE. Non preparare ancora il documento finale. Produci una sintesi operativa concisa con: evidenze, dati certi, incertezze, soluzione raccomandata, alternativa, voci di costo necessarie e controlli da eseguire.`,
+    input,
+    reasoning: { effort: "medium" },
+    text: { verbosity: "medium" },
+    max_output_tokens: 3500,
+    safety_identifier: safetyId
+  };
+}
+
+function terraFallbackChoice(modelChoice) {
+  return {
+    ...modelChoice,
+    model: process.env.OPENAI_TERRA_MODEL || "gpt-5.6-terra",
+    modelLabel: "GPT‑5.6 Terra · recupero automatico",
+    reasoningEffort: "medium",
+    verbosity: "high"
+  };
+}
+
 function visualPrompt(artifact, brief) {
   const kindInstructions = {
     photomontage: "Crea un fotomontaggio realistico dell'intervento proposto, rispettando geometrie, proporzioni e condizioni visibili nelle fotografie di riferimento.",
@@ -404,6 +519,129 @@ exports.edilkappaAi = onCall({
     }, { merge: true });
     return { mode, visual };
   }
+  if (action === "job_status") {
+    const jobId = cleanText(request.data?.jobId, 120);
+    if (!jobId) throw new HttpsError("invalid-argument", "Identificativo del lavoro AI mancante.");
+    const jobReference = aiJobRef(account.uid, jobId);
+    const jobSnapshot = await jobReference.get();
+    if (!jobSnapshot.exists) throw new HttpsError("not-found", "Non trovo più questa elaborazione. Puoi avviarne una nuova.");
+    const job = jobSnapshot.data() || {};
+    if (job.mode !== mode) throw new HttpsError("permission-denied", "Questa elaborazione appartiene a un’altra area.");
+    if (job.status === "completed") return { jobId, status: "completed", stage: "completed", result: job.result };
+    if (job.status === "failed") return { jobId, status: "failed", stage: job.stage || "failed", error: job.error || "La generazione non è riuscita.", canRetry: true };
+    if (Date.now() - Number(job.createdAtMs || 0) > AI_JOB_TTL_MS) {
+      await jobReference.set({ status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { jobId, status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", canRetry: true };
+    }
+
+    let openAiResponse = await retrieveBackgroundResponse(cleanText(job.responseId, 200));
+    if (["queued", "in_progress"].includes(openAiResponse.status)) {
+      return { jobId, status: "working", stage: job.stage, openAiStatus: openAiResponse.status, fallbackUsed: job.fallbackUsed === true };
+    }
+
+    if (openAiResponse.status !== "completed" && job.stage === "check" && job.draftResponseId) {
+      const draftResponse = await retrieveBackgroundResponse(cleanText(job.draftResponseId, 200));
+      if (draftResponse.status === "completed") openAiResponse = draftResponse;
+    }
+
+    if (openAiResponse.status !== "completed") {
+      const attempts = Number(job.attempts || 1);
+      if (job.stage === "compose" && attempts < 2) {
+        const retry = await createBackgroundResponse(finalResponseBody({
+          instructions: job.instructions,
+          previousResponseId: job.analysisResponseId,
+          modelChoice: job.modelChoice,
+          useWeb: job.useWeb === true,
+          safetyId: safetyIdentifier(account.uid)
+        }), "automatic retry");
+        await jobReference.set({ responseId: retry.id, attempts: attempts + 1, stage: "retry", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return { jobId, status: "working", stage: "retry", openAiStatus: retry.status || "queued", fallbackUsed: false };
+      }
+      if (["compose", "retry"].includes(job.stage) && job.fallbackUsed !== true) {
+        const fallbackChoice = terraFallbackChoice(job.modelChoice || {});
+        const fallback = await createBackgroundResponse(finalResponseBody({
+          instructions: job.instructions,
+          previousResponseId: job.analysisResponseId,
+          modelChoice: fallbackChoice,
+          useWeb: job.useWeb === true,
+          safetyId: safetyIdentifier(account.uid)
+        }), "Terra fallback");
+        await jobReference.set({ responseId: fallback.id, modelChoice: fallbackChoice, fallbackUsed: true, stage: "fallback", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return { jobId, status: "working", stage: "fallback", openAiStatus: fallback.status || "queued", fallbackUsed: true };
+      }
+      const failureMessage = cleanText(openAiResponse?.error?.message, 500) || "OpenAI non ha completato l’elaborazione. La bozza resta disponibile per riprovare.";
+      await jobReference.set({ status: "failed", stage: "failed", error: failureMessage, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { jobId, status: "failed", stage: "failed", error: failureMessage, canRetry: true };
+    }
+
+    if (job.stage === "analysis") {
+      const finalResponse = await createBackgroundResponse(finalResponseBody({
+        instructions: job.instructions,
+        previousResponseId: openAiResponse.id,
+        modelChoice: job.modelChoice,
+        useWeb: job.useWeb === true,
+        safetyId: safetyIdentifier(account.uid)
+      }), "final composition");
+      await jobReference.set({
+        responseId: finalResponse.id,
+        analysisResponseId: openAiResponse.id,
+        stage: "compose",
+        attempts: 1,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return { jobId, status: "working", stage: "compose", openAiStatus: finalResponse.status || "queued", fallbackUsed: false };
+    }
+
+    const result = extractAnswer(openAiResponse);
+    if (!result.answer) {
+      await jobReference.set({ status: "failed", stage: "failed", error: "L’AI non ha prodotto una risposta completa. Puoi riprendere la bozza e riprovare.", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { jobId, status: "failed", stage: "failed", error: "L’AI non ha prodotto una risposta completa. Puoi riprendere la bozza e riprovare.", canRetry: true };
+    }
+    const qualityAudit = auditArtifact(result.artifact, job.message);
+    if (mode === "work" && result.artifact && !qualityAudit.passed && job.repairAttempt !== true) {
+      const repair = await createBackgroundResponse(repairResponseBody({
+        instructions: job.instructions,
+        previousResponseId: openAiResponse.id,
+        modelChoice: job.modelChoice,
+        qualityAudit,
+        safetyId: safetyIdentifier(account.uid)
+      }), "quality repair");
+      await jobReference.set({
+        responseId: repair.id,
+        draftResponseId: openAiResponse.id,
+        repairAttempt: true,
+        stage: "check",
+        qualityAudit,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return { jobId, status: "working", stage: "check", openAiStatus: repair.status || "queued", fallbackUsed: job.fallbackUsed === true };
+    }
+    const conversationSnapshot = await ref.get();
+    const history = Array.isArray(conversationSnapshot.data()?.messages) ? conversationSnapshot.data().messages : [];
+    if (result.artifact) {
+      const previousMessage = [...history].reverse().find((item) => normalizeArtifact(item?.artifact));
+      if (previousMessage && isRevisionRequest(job.message)) {
+        result.artifact.revisionOf ||= cleanText(previousMessage.artifact?.id || previousMessage.artifact?.title, 300);
+        result.artifact.revisionReason ||= cleanText(job.message, 1200);
+      }
+      result.artifact.id = `ai-${randomUUID()}`;
+    }
+    const userMessage = { role: "user", text: job.userText, media: job.mediaReferences || [], at: Number(job.createdAtMs || Date.now()) };
+    const assistantMessage = {
+      role: "assistant", text: result.answer, sources: result.sources, artifact: result.artifact,
+      media: job.mediaReferences || [], model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
+      reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, at: Date.now()
+    };
+    const messages = history.concat([userMessage, assistantMessage]).slice(-30);
+    await ref.set({ uid: account.uid, orgId: ORG_ID, mode, messages, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const completedResult = {
+      mode, answer: result.answer, sources: result.sources, artifact: result.artifact,
+      media: job.mediaReferences || [], model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
+      reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, usage: openAiResponse.usage || null
+    };
+    await jobReference.set({ status: "completed", stage: "completed", result: completedResult, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { jobId, status: "completed", stage: "completed", result: completedResult };
+  }
   if (action !== "ask") throw new HttpsError("invalid-argument", "Operazione AI non valida.");
 
   const message = cleanText(request.data?.message, 8000);
@@ -435,49 +673,37 @@ exports.edilkappaAi = onCall({
     businessContext: mode === "work" ? request.data?.businessContext : null,
     taskType
   });
-  const response = await callOpenAI({
-    instructions,
-    input: buildInput(history, message, attachments, videoTranscripts),
-    useWeb: request.data?.useWeb === true,
-    modelChoice,
-    safetyId: safetyIdentifier(account.uid)
-  });
-  const result = extractAnswer(response);
-  if (!result.answer) throw new HttpsError("unavailable", "L’AI non ha prodotto una risposta. Riprova con una richiesta più precisa.");
-  if (result.artifact) {
-    const previousMessage = [...history].reverse().find((item) => normalizeArtifact(item?.artifact));
-    if (previousMessage && isRevisionRequest(message)) {
-      result.artifact.revisionOf ||= cleanText(previousMessage.artifact?.id || previousMessage.artifact?.title, 300);
-      result.artifact.revisionReason ||= cleanText(message, 1200);
-    }
-    result.artifact.id = `ai-${randomUUID()}`;
-  }
-
   const originalNames = mediaReferences.length
     ? mediaReferences.map((item) => item.fileName)
     : Array.from(new Set(attachments.map((item) => item.sourceName || item.name)));
   const attachmentNote = originalNames.length ? `\n[Allegati: ${originalNames.join(", ")}]` : "";
-  const messages = history.concat([
-    { role: "user", text: cleanText((message || "Analizza gli allegati.") + attachmentNote, 6000), media: mediaReferences, at: Date.now() },
-    { role: "assistant", text: result.answer, sources: result.sources, artifact: result.artifact, media: mediaReferences, model: modelChoice.model, modelLabel: modelChoice.modelLabel, reasoningEffort: modelChoice.reasoningEffort, at: Date.now() }
-  ]).slice(-30);
-  await ref.set({
+  const jobId = randomUUID();
+  const input = buildInput(history, message, attachments, videoTranscripts);
+  const preliminary = await createBackgroundResponse(preliminaryResponseBody({
+    instructions,
+    input,
+    safetyId: safetyIdentifier(account.uid)
+  }), "preliminary analysis");
+  const userText = cleanText((message || "Analizza gli allegati.") + attachmentNote, 6000);
+  await aiJobRef(account.uid, jobId).set({
     uid: account.uid,
     orgId: ORG_ID,
     mode,
-    messages,
+    taskType,
+    status: "working",
+    stage: "analysis",
+    responseId: preliminary.id,
+    message,
+    userText,
+    mediaReferences,
+    instructions,
+    modelChoice,
+    useWeb: request.data?.useWeb === true,
+    attempts: 0,
+    fallbackUsed: false,
+    createdAtMs: Date.now(),
+    createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-
-  return {
-    mode,
-    answer: result.answer,
-    sources: result.sources,
-    artifact: result.artifact,
-    media: mediaReferences,
-    model: modelChoice.model,
-    modelLabel: modelChoice.modelLabel,
-    reasoningEffort: modelChoice.reasoningEffort,
-    usage: response.usage || null
-  };
+  });
+  return { jobId, status: "working", stage: "analysis", openAiStatus: preliminary.status || "queued", modelLabel: modelChoice.modelLabel };
 });

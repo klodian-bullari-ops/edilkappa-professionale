@@ -191,6 +191,58 @@ function safeNumber(value, maximum = 100000000) {
   return Math.max(0, Math.min(maximum, number));
 }
 
+function auditArtifact(value, requestMessage = "") {
+  const artifact = normalizeArtifact(value);
+  const checks = [];
+  const issues = [];
+  const addCheck = (label, passed, detail) => {
+    checks.push({ label, passed, detail: cleanText(detail, 500) });
+    if (!passed) issues.push(`${label}: ${cleanText(detail, 500)}`);
+  };
+  if (!artifact || !["quote", "report"].includes(artifact.kind)) {
+    return { score: 100, passed: true, blocking: false, checks, issues };
+  }
+
+  addCheck("Identificazione del lavoro", Boolean(artifact.subject && artifact.summary), "oggetto e sintesi devono essere presenti");
+  addCheck("Evidenze e incertezze", artifact.evidence.length > 0 && artifact.uncertainties.length > 0, "separare dati certi e aspetti da verificare");
+  addCheck("Soluzione motivata", Boolean(artifact.recommendedSolution && artifact.decisionRationale), "indicare soluzione raccomandata e motivazione verificabile");
+  addCheck("Fasi operative", artifact.workPhases.length > 0, "scomporre l'intervento in fasi concrete");
+
+  if (artifact.kind === "quote") {
+    const quote = artifact.quote;
+    const subtotal = quote.lines.reduce((sum, line) => sum + safeNumber(line.quantity) * safeNumber(line.unitPrice), 0);
+    const net = subtotal * (1 - safeNumber(quote.discountPct, 100) / 100);
+    const proposed = safeNumber(quote.pricingAnalysis.proposedNetPrice);
+    const directParts = quote.pricingAnalysis.laborCost
+      + quote.pricingAnalysis.materialCost
+      + quote.pricingAnalysis.equipmentCost
+      + quote.pricingAnalysis.transportAndDisposalCost
+      + quote.pricingAnalysis.subcontractCost;
+    addCheck("Voci economiche", quote.lines.length >= 2 && quote.lines.every((line) => line.description && line.unit), "servono voci, quantità e unità leggibili");
+    addCheck("Controllo imponibile", net > 0 && Math.abs(net - proposed) <= Math.max(1, net * 0.005), `imponibile righe ${net.toFixed(2)}; imponibile proposto ${proposed.toFixed(2)}`);
+    addCheck("Composizione dei costi", quote.pricingAnalysis.estimatedDirectCost > 0 && quote.pricingAnalysis.estimatedDirectCost + 0.01 >= directParts, "costo diretto, manodopera, materiali, mezzi e trasporti devono essere coerenti");
+    addCheck("Perimetro contrattuale", quote.includedWorks.length > 0 && quote.exclusions.length > 0, "indicare opere comprese ed escluse");
+    addCheck("Condizioni commerciali", Boolean(quote.paymentTerms && quote.estimatedDuration), "indicare pagamento e durata stimata");
+    addCheck("Dati da confermare", quote.missingInformation.length > 0 || quote.lines.every((line) => line.confidence !== "bassa"), "le stime a bassa affidabilità richiedono verifiche esplicite");
+    if (/iva.{0,30}da\s+definire/i.test(cleanText(requestMessage, 8000))) {
+      addCheck("IVA richiesta da definire", quote.vatRate === 0 && /iva.{0,40}(definire|fattur)/i.test(quote.notes), "non applicare un'aliquota provvisoria quando il titolare chiede IVA da definire");
+    }
+    if (/50\s*%.{0,40}(accett|acconto)/i.test(cleanText(requestMessage, 8000))) {
+      addCheck("Pagamento richiesto", /50\s*%/.test(quote.paymentTerms), "riportare il pagamento 50% richiesto dal titolare");
+    }
+  } else {
+    const report = artifact.report;
+    addCheck("Riscontri fotografici", report.evidenceFindings.length > 0, "collegare osservazioni, valutazioni prudenti e verifiche alle prove");
+    addCheck("Diagnosi prudente", report.probableCauses.length > 0 && report.limitations.length > 0, "distinguere cause probabili e limiti dell'analisi");
+    addCheck("Conclusione operativa", Boolean(report.conclusions && report.recommendedWorks.length), "indicare conclusioni e interventi consigliati");
+    addCheck("Sicurezza", report.safetyNotes.length > 0, "riportare accessi, rischi o verifiche di sicurezza pertinenti");
+  }
+
+  const failed = checks.filter((check) => !check.passed).length;
+  const score = Math.max(0, Math.round((checks.length - failed) / Math.max(1, checks.length) * 100));
+  return { score, passed: score >= 90, blocking: score < 75, checks, issues };
+}
+
 function parseAttachments(value) {
   if (!Array.isArray(value)) return [];
   if (value.length > MAX_ATTACHMENTS) throw new Error(`Puoi inviare al massimo ${MAX_ATTACHMENTS} elementi elaborati per messaggio.`);
@@ -270,7 +322,7 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
   }
 
   const normalizedTask = ["quote", "report", "inspection"].includes(taskType) ? taskType : "auto";
-  const context = cleanText(typeof businessContext === "string" ? businessContext : JSON.stringify(businessContext || {}), 30000);
+  const context = cleanText(typeof businessContext === "string" ? businessContext : JSON.stringify(businessContext || {}), 60000);
   return shared.concat([
     "Sei in modalità LAVORO per EdilKappa, impresa edile e di manutenzioni.",
     `TIPO DI LAVORO RICHIESTO: ${normalizedTask}. Se è auto, deducilo dalla richiesta; se è quote crea un preventivo, se è report crea una relazione tecnica, se è inspection svolgi l'analisi senza creare automaticamente un documento salvo richiesta esplicita.`,
@@ -546,6 +598,7 @@ function extractAnswer(response) {
 module.exports = {
   AI_RESPONSE_SCHEMA,
   ALLOWED_VIDEO_TYPES,
+  auditArtifact,
   buildInput,
   buildInstructions,
   chooseModel,
