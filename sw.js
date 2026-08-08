@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v47-ai-metodo-edilkappa-documenti`;
+const CACHE = `${CACHE_PREFIX}v48-ai-sol-timeout-diagnostics`;
 const APP_SHELL = [
   "./",
   "./index.html",
