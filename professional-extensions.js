@@ -204,7 +204,7 @@
   dashboard = function () { return baseDashboard() + todayPanel(); };
 
   more = function () {
-    const links = [['agenda','📅','Agenda'],['condomini','🏢','Condomìni'],['quotes','📄','Preventivi'],['workMap','🗺️','Mappa lavori'],['hours','⏱️','Ore operai'],['payments','€','Pagamenti'],['documentsView','📁','Documenti'],['auditView','↺','Registro modifiche'],['teamsView','👥','Squadre'],['drone','🚁','Drone'],['lifeline','⚓','Linea vita'],['roofs','🏠','Tetti e gronde'],['drains','🕳️','Pozzetti e tombini'],['finance','📈','Costi e margini']];
+    const links = [['ai','✦','EdilKappa AI'],['agenda','📅','Agenda'],['condomini','🏢','Condomìni'],['quotes','📄','Preventivi'],['workMap','🗺️','Mappa lavori'],['hours','⏱️','Ore operai'],['payments','€','Pagamenti'],['documentsView','📁','Documenti'],['auditView','↺','Registro modifiche'],['teamsView','👥','Squadre'],['drone','🚁','Drone'],['lifeline','⚓','Linea vita'],['roofs','🏠','Tetti e gronde'],['drains','🕳️','Pozzetti e tombini'],['finance','📈','Costi e margini']];
     return pageHead('Tutti gli strumenti', 'Scegli il modulo da aprire') + `<div class="grid quick">${links.map((x) => `<button onclick="go('${x[0]}')"><span>${x[1]}</span>${x[2]}</button>`).join('')}</div>`;
   };
 
@@ -213,7 +213,7 @@
     renderNav(); document.getElementById('avatar').textContent = roleName().charAt(0);
     const labels = Object.fromEntries(nav().map((x) => [x[0], x[2]])); labels.more = 'Altro'; labels.search = 'Ricerca';
     document.getElementById('pageTitle').textContent = labels[view] || 'EDILKAPPA';
-    const pages = { dashboard, agenda, condomini, inspections, quotes, sites, workMap, hours: hoursView, payments, documentsView, auditView, teamsView, drone, lifeline, roofs, drains, finance, more, worker, report, search: searchResults };
+    const pages = { dashboard, ai: () => window.edilkappaAiView?.() || '<div class="empty">Caricamento EdilKappa AI…</div>', agenda, condomini, inspections, quotes, sites, workMap, hours: hoursView, payments, documentsView, auditView, teamsView, drone, lifeline, roofs, drains, finance, more, worker, report, search: searchResults };
     document.getElementById('app').innerHTML = (pages[view] || dashboard)();
   };
 
