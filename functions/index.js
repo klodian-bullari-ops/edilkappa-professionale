@@ -9,6 +9,7 @@ const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const {
   AI_RESPONSE_SCHEMA,
   ALLOWED_VIDEO_TYPES,
+  auditArtifact,
   buildInput,
   buildInstructions,
   chooseModel,
@@ -308,6 +309,33 @@ function finalResponseBody({ instructions, previousResponseId, modelChoice, useW
   return body;
 }
 
+function repairResponseBody({ instructions, previousResponseId, modelChoice, qualityAudit, safetyId }) {
+  return {
+    model: modelChoice.model,
+    previous_response_id: previousResponseId,
+    instructions,
+    input: [{
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: [
+          "CONTROLLO QUALITÀ EDILKAPPA. Correggi il documento appena composto senza cambiare i dati certi e senza inventare informazioni.",
+          "Risolvi tutte le anomalie elencate, ricontrolla somme, IVA, costi, margine, dati del cliente, ipotesi, inclusioni ed esclusioni.",
+          `ANOMALIE DA CORREGGERE:\n- ${(qualityAudit.issues || []).join("\n- ")}`,
+          "Restituisci nuovamente ed esclusivamente il formato strutturato completo richiesto."
+        ].join("\n\n")
+      }]
+    }],
+    reasoning: { effort: modelChoice.reasoningEffort },
+    text: {
+      verbosity: modelChoice.verbosity,
+      format: { type: "json_schema", name: "edilkappa_ai_response", strict: true, schema: AI_RESPONSE_SCHEMA }
+    },
+    max_output_tokens: modelChoice.maxOutputTokens || 12000,
+    safety_identifier: safetyId
+  };
+}
+
 function preliminaryResponseBody({ instructions, input, safetyId }) {
   return {
     model: process.env.OPENAI_TERRA_MODEL || "gpt-5.6-terra",
@@ -506,9 +534,14 @@ exports.edilkappaAi = onCall({
       return { jobId, status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", canRetry: true };
     }
 
-    const openAiResponse = await retrieveBackgroundResponse(cleanText(job.responseId, 200));
+    let openAiResponse = await retrieveBackgroundResponse(cleanText(job.responseId, 200));
     if (["queued", "in_progress"].includes(openAiResponse.status)) {
       return { jobId, status: "working", stage: job.stage, openAiStatus: openAiResponse.status, fallbackUsed: job.fallbackUsed === true };
+    }
+
+    if (openAiResponse.status !== "completed" && job.stage === "check" && job.draftResponseId) {
+      const draftResponse = await retrieveBackgroundResponse(cleanText(job.draftResponseId, 200));
+      if (draftResponse.status === "completed") openAiResponse = draftResponse;
     }
 
     if (openAiResponse.status !== "completed") {
@@ -564,6 +597,25 @@ exports.edilkappaAi = onCall({
       await jobReference.set({ status: "failed", stage: "failed", error: "L’AI non ha prodotto una risposta completa. Puoi riprendere la bozza e riprovare.", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return { jobId, status: "failed", stage: "failed", error: "L’AI non ha prodotto una risposta completa. Puoi riprendere la bozza e riprovare.", canRetry: true };
     }
+    const qualityAudit = auditArtifact(result.artifact, job.message);
+    if (mode === "work" && result.artifact && !qualityAudit.passed && job.repairAttempt !== true) {
+      const repair = await createBackgroundResponse(repairResponseBody({
+        instructions: job.instructions,
+        previousResponseId: openAiResponse.id,
+        modelChoice: job.modelChoice,
+        qualityAudit,
+        safetyId: safetyIdentifier(account.uid)
+      }), "quality repair");
+      await jobReference.set({
+        responseId: repair.id,
+        draftResponseId: openAiResponse.id,
+        repairAttempt: true,
+        stage: "check",
+        qualityAudit,
+        updatedAt: FieldValue.serverTimestamp()
+      }, { merge: true });
+      return { jobId, status: "working", stage: "check", openAiStatus: repair.status || "queued", fallbackUsed: job.fallbackUsed === true };
+    }
     const conversationSnapshot = await ref.get();
     const history = Array.isArray(conversationSnapshot.data()?.messages) ? conversationSnapshot.data().messages : [];
     if (result.artifact) {
@@ -578,14 +630,14 @@ exports.edilkappaAi = onCall({
     const assistantMessage = {
       role: "assistant", text: result.answer, sources: result.sources, artifact: result.artifact,
       media: job.mediaReferences || [], model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
-      reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, at: Date.now()
+      reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, at: Date.now()
     };
     const messages = history.concat([userMessage, assistantMessage]).slice(-30);
     await ref.set({ uid: account.uid, orgId: ORG_ID, mode, messages, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const completedResult = {
       mode, answer: result.answer, sources: result.sources, artifact: result.artifact,
       media: job.mediaReferences || [], model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
-      reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, usage: openAiResponse.usage || null
+      reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, usage: openAiResponse.usage || null
     };
     await jobReference.set({ status: "completed", stage: "completed", result: completedResult, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { jobId, status: "completed", stage: "completed", result: completedResult };
