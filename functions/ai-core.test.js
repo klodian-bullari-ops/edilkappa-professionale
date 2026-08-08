@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   AI_RESPONSE_SCHEMA,
+  auditArtifact,
   buildInput,
   buildInstructions,
   chooseModel,
@@ -188,4 +189,29 @@ test("structured response schema requires safe complete objects", () => {
 
 test("rejects unsupported attachments", () => {
   assert.throws(() => parseAttachments([{ name: "video.mp4", dataUrl: "data:video/mp4;base64,AAAA" }]), /Formato non supportato/);
+});
+
+test("quality audit catches incomplete or inconsistent quotes", () => {
+  const artifact = {
+    kind: "quote", documentType: "preventivo", title: "Dissuasori", documentSubtitle: "Copertura",
+    client: "Condominio Giglio 4", clientId: "", interventionId: "", address: "Via Molgora 17",
+    subject: "Dissuasori antipiccione", summary: "Installazione su 96 metri lineari", currency: "EUR",
+    revisionOf: "", revisionReason: "", evidence: ["Quantità dichiarata: 96 m"], uncertainties: ["Accesso da verificare"],
+    decisionRationale: "Sistema durevole", recommendedSolution: "Dissuasori inox", technicalAssessment: ["Supporto da verificare"],
+    workPhases: ["Posa"], materials: ["Acciaio inox"], visualBriefs: [],
+    quote: {
+      lines: [{ description: "Posa dissuasori", quantity: 96, unit: "m", unitPrice: 40, priceSource: "stima_ai", priceReference: "", confidence: "bassa", notes: "" }],
+      discountPct: 0, vatRate: 10, validityDays: 30, paymentTerms: "", notes: "", estimatedDuration: "",
+      includedWorks: [], exclusions: [], options: [],
+      pricingAnalysis: { laborCost: 1000, materialCost: 900, equipmentCost: 0, transportAndDisposalCost: 0, subcontractCost: 0, overheadAndRiskCost: 0, contingencyCost: 0, estimatedDirectCost: 1900, targetMarginPct: 20, proposedNetPrice: 3000, rationale: [], verificationChecks: [] },
+      assumptions: [], missingInformation: [], readyToSave: true
+    },
+    report: { executiveSummary: "", observations: [], probableCauses: [], evidenceFindings: [], recommendedVerifications: [], interventionPriority: "media", recommendedWorks: [], safetyNotes: [], limitations: [], conclusions: "", missingInformation: [], readyToSave: false }
+  };
+  const audit = auditArtifact(artifact, "IVA da definire. Pagamento 50% all'accettazione.");
+  assert.equal(audit.passed, false);
+  assert.ok(audit.score < 90);
+  assert.match(audit.issues.join("\n"), /Controllo imponibile/);
+  assert.match(audit.issues.join("\n"), /IVA richiesta da definire/);
+  assert.match(audit.issues.join("\n"), /Pagamento richiesto/);
 });

@@ -65,11 +65,15 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /FASE 1 — ANALISI PRELIMINARE/);
   assert.match(functionSource, /GPT‑5\.6 Terra · recupero automatico/);
   assert.match(functionSource, /automatic retry/);
+  assert.match(functionSource, /quality repair/);
+  assert.match(functionSource, /auditArtifact/);
   assert.match(source, /edilkappa-ai-pending-job-v1/);
   assert.match(source, /edilkappaAiResumePending/);
   assert.match(source, /1\/2 · Analisi tecnica/);
   assert.match(source, /2\/2 · Compongo prezzi/);
   assert.match(source, /edilkappaAiRetry/);
+  assert.match(source, /standardDocumentaleApprovato/);
+  assert.match(source, /Controllo qualità/);
 });
 
 test("keeps EdilKappa AI available after professional extensions replace render", () => {
