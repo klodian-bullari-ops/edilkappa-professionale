@@ -28,3 +28,11 @@ test("keeps EdilKappa AI available after professional extensions replace render"
   assert.match(source, /ai:\s*\(\)\s*=>\s*window\.edilkappaAiView/);
   assert.match(source, /\['ai','✦','EdilKappa AI'\]/);
 });
+
+test("loads the final AI route guard after the AI interface", () => {
+  const indexSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const routeSource = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai-route.js"), "utf8");
+  assert.ok(indexSource.indexOf("edilkappa-ai-route.js") > indexSource.indexOf("edilkappa-ai.js"));
+  assert.match(routeSource, /view === "ai"/);
+  assert.match(routeSource, /window\.edilkappaAiView/);
+});
