@@ -272,10 +272,17 @@
     const detail = checkedArtifact.kind === "quote" ? quoteArtifactHtml(checkedArtifact) : reportArtifactHtml(checkedArtifact);
     const missing = checkedArtifact.kind === "quote" ? checkedArtifact.quote?.missingInformation : checkedArtifact.report?.missingInformation;
     const message = artifactMessage(messageIndex);
+    const quality = message?.qualityAudit;
+    const qualityBadge = quality
+      ? `<span class="ekAiPriceSource ${quality.passed ? "" : "estimate"}">Controllo qualità ${Number(quality.score || 0)}/100</span>`
+      : `<span class="ekAiPriceSource estimate">Da controllare</span>`;
+    const qualityWarnings = quality && !quality.passed && quality.issues?.length
+      ? `<div class="ekAiArtifactNotice"><b>Controlli ancora necessari:</b><br>${quality.issues.slice(0, 5).map(escapeHtml).join("<br>")}</div>`
+      : "";
     const generatedIndexes = new Set((message?.media || []).filter((item) => item.generated).map((item) => Number(item.briefIndex)));
     const nextBrief = (checkedArtifact.visualBriefs || []).findIndex((_, index) => !generatedIndexes.has(index));
     const visualButton = nextBrief >= 0 ? `<button class="visual" onclick="edilkappaAiGenerateVisual(${messageIndex},${nextBrief})" ${state.generatingVisual ? "disabled" : ""}>${state.generatingVisual === checkedArtifact.id ? "Creo l’immagine…" : `Crea ${nextBrief === 0 ? "fotomontaggio / immagine" : "altra immagine"}`}</button>` : "";
-    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><span class="ekAiPriceSource ${saved ? "" : "estimate"}">${saved ? "Salvato" : "Da controllare"}</span></div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})">Scarica PDF EdilKappa</button><button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
+    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div>${saved ? `<span class="ekAiPriceSource">Salvato</span>` : qualityBadge}</div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${qualityWarnings}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})">Scarica PDF EdilKappa</button><button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
   }
 
   function messageHtml(message, index) {
@@ -379,20 +386,43 @@
     }
   }
 
-  function businessContext() {
+  function relevanceTokens(value) {
+    const ignored = new Set(["della", "delle", "degli", "nella", "nelle", "questo", "questa", "prepara", "preventivo", "relazione", "lavoro", "intervento", "completo", "edilkappa"]);
+    return new Set(String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").match(/[a-z0-9]{4,}/g)?.filter((token) => !ignored.has(token)) || []);
+  }
+
+  function quoteRelevance(item, requestTokens) {
+    const searchable = [item.subject, item.client, ...(item.lines || []).map((line) => line.description), item.aiRecommendedSolution].filter(Boolean).join(" ");
+    const quoteTokens = relevanceTokens(searchable);
+    let score = 0;
+    requestTokens.forEach((token) => { if (quoteTokens.has(token)) score += 1; });
+    return score;
+  }
+
+  function businessContext(message = "") {
     const database = window.EdilKappaLocal?.getDB?.() || {};
     const compact = (items, fields, limit = 20) => (items || []).slice(0, limit).map((item) => Object.fromEntries(fields.map((field) => [field, item?.[field]]).filter(([, value]) => value !== undefined && value !== "")));
-    const recentQuotes = (database.quotes || []).slice(-10).reverse().map((item) => ({
-      code: item.code,
-      client: item.client,
-      subject: item.subject,
-      date: item.date,
-      status: item.status,
-      net: item.net,
-      lines: (item.lines || []).slice(0, 12).map((line) => ({ description: line.description, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice }))
-    }));
+    const requestTokens = relevanceTokens(message);
+    const recentQuotes = (database.quotes || [])
+      .map((item, index) => ({ item, index, score: quoteRelevance(item, requestTokens) }))
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+      .slice(0, 6)
+      .map(({ item }) => ({
+        code: item.code,
+        client: item.client,
+        subject: item.subject,
+        date: item.date,
+        status: item.status,
+        net: item.net,
+        lines: (item.lines || []).slice(0, 12).map((line) => ({ description: line.description, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice }))
+      }));
     const validatedStatuses = new Set(["Accettato", "Approvato", "Completato", "Fatturato"]);
-    const validatedQuotes = (database.quotes || []).filter((item) => validatedStatuses.has(item.status)).slice(-16).reverse();
+    const validatedQuotes = (database.quotes || [])
+      .filter((item) => validatedStatuses.has(item.status))
+      .map((item, index) => ({ item, index, score: quoteRelevance(item, requestTokens) }))
+      .sort((a, b) => b.score - a.score || b.index - a.index)
+      .slice(0, 6)
+      .map((entry) => entry.item);
     const validatedMargins = validatedQuotes.map((item) => Number(item.marginPercent)).filter(Number.isFinite);
     const correctionMemory = (database.quotes || []).slice(-20).reverse().flatMap((item) => (item.revisions || []).slice(-4).map((revision) => ({
       quote: item.code,
@@ -431,6 +461,17 @@
       controlloEconomico: {
         margineMedioPreventiviValidatiPct: validatedMargins.length ? Math.round(validatedMargins.reduce((sum, value) => sum + value, 0) / validatedMargins.length * 10) / 10 : null,
         usaSoloStoricoConStato: Array.from(validatedStatuses)
+      },
+      standardDocumentaleApprovato: {
+        intestazione: "Logo e dati EDILKAPPA in alto, riferimento documento a destra, linea divisoria, titolo centrato, tabelle pulite, piè di pagina con nome documento e numero pagina.",
+        regole: [
+          "Non cambiare intestazione o stile tra una revisione e la successiva.",
+          "Il controllo economico interno e il margine non devono essere esportati nel documento destinato al cliente.",
+          "IVA, sconti, commissioni, tempi e pagamento seguono la richiesta specifica; non applicare valori abituali se il titolare li ha lasciati da definire.",
+          "Non inventare misure, caratteristiche della copertura, certificazioni o cause definitive non dimostrate.",
+          "Quando il prezzo può risultare elevato, proporre una vera alternativa economica indicando chiaramente differenze e limiti.",
+          "Le correzioni del titolare prevalgono sugli esempi storici e devono essere conservate nelle revisioni successive."
+        ]
       },
       squadre: compact(database.teams, ["id", "name", "member1", "member2"], 12)
     };
@@ -1302,6 +1343,7 @@
       modelLabel: result.modelLabel || "",
       reasoningEffort: result.reasoningEffort || "",
       fallbackUsed: result.fallbackUsed === true,
+      qualityAudit: result.qualityAudit || null,
       previews: (requestAttachments || []).filter((item) => item.mimeType?.startsWith("image/")).slice(0, 6),
       at: Date.now()
     });
@@ -1412,7 +1454,7 @@
         attachments: requestAttachments,
         mediaReferences,
         useWeb: state.useWeb,
-        businessContext: requestedMode === "work" ? businessContext() : null
+        businessContext: requestedMode === "work" ? businessContext(message) : null
       });
       if (!result.jobId) throw new Error("EdilKappa AI non ha restituito l’identificativo della generazione.");
       rememberPendingJob({ jobId: result.jobId, mode: requestedMode, stage: result.stage || "analysis", message, startedAt: Date.now() });
