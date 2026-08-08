@@ -8,6 +8,17 @@
   const DOCUMENT_MAX_BYTES = 6 * 1024 * 1024;
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
   const MODEL_MODES = new Set(["auto", "sol", "terra"]);
+  const EDILKAPPA_DOCUMENT = Object.freeze({
+    legalName: "EDILKAPPA S.A.S. DI BULLARI KLODIAN & C.",
+    activity: "Lavori di completamento e finitura degli edifici",
+    email: "info@edilkappa.com",
+    phone: "+39 351 9332154",
+    address: "Via Sant’Ambrogio 38, 20055 Vimodrone (MI)",
+    vat: "14041000960",
+    yellow: [255, 216, 0],
+    dark: [35, 35, 35],
+    light: [242, 243, 245]
+  });
 
   const state = {
     mode: "work",
@@ -36,7 +47,7 @@
     .ekAiChat{min-height:440px;max-height:60vh;overflow:auto;background:#f7faf8;border:1px solid #dce7e0;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:13px}.ekAiEmpty{margin:auto;text-align:center;max-width:650px;color:#52665d;padding:28px}.ekAiEmpty strong{display:block;color:#173d2e;font-size:20px;margin-bottom:7px}
     .ekAiMessage{max-width:90%;border-radius:17px;padding:13px 15px;line-height:1.5;box-shadow:0 3px 12px rgba(20,53,40,.06)}.ekAiMessage.user{align-self:flex-end;background:#173d2e;color:#fff;border-bottom-right-radius:5px;max-width:84%}.ekAiMessage.assistant{align-self:flex-start;background:#fff;color:#1d3028;border:1px solid #dce7e0;border-bottom-left-radius:5px}.ekAiText{white-space:pre-wrap;overflow-wrap:anywhere}.ekAiMessageMeta{font-size:10px;color:#71827a;margin-top:8px}.ekAiSources{margin-top:11px;padding-top:9px;border-top:1px solid #e3ebe6;display:flex;gap:7px;flex-wrap:wrap}.ekAiSources a{font-size:12px;color:#176542;text-decoration:none;background:#e8f6ed;border-radius:999px;padding:5px 9px}.ekAiMessageMedia{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.ekAiMessageMedia button{border:1px solid #d6e2da;background:#f8faf9;border-radius:9px;padding:6px 9px;color:#284c3d;font-size:12px;font-weight:750}.ekAiMessageMedia button.generated{background:#fff7cc;border-color:#dfc243}.ekAiMessage.user .ekAiMessageMedia button{background:#fff;color:#173d2e}
     .ekAiTyping{display:inline-flex;gap:5px}.ekAiTyping i{width:7px;height:7px;background:#668078;border-radius:50%;animation:ekAiPulse 1.1s infinite}.ekAiTyping i:nth-child(2){animation-delay:.15s}.ekAiTyping i:nth-child(3){animation-delay:.3s}@keyframes ekAiPulse{0%,70%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}
-    .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiOption{border:1px solid #d8e3dc;border-radius:11px;padding:10px;margin-top:8px}.ekAiOption.recommended{border-color:#d8b600;background:#fffbee}.ekAiOptionHead{display:flex;justify-content:space-between;gap:10px}.ekAiVisualBrief{border-left:4px solid #f4c400;background:#f8faf8;padding:9px 10px;margin-top:7px}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.visual{background:#f4c400;color:#173d2e}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}.ekAiArtifactActions button:disabled{opacity:.55;cursor:wait}
+    .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiMethod{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-top:13px}.ekAiMethod>div{border:1px solid #dce4df;border-radius:11px;padding:10px;background:#fff}.ekAiMethod b{display:block;color:#284c3d;margin-bottom:5px}.ekAiPricingCheck{margin-top:13px;border:1px solid #d8b600;background:#fffbee;border-radius:12px;padding:11px}.ekAiPricingGrid{display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin-top:8px;font-size:12px}.ekAiPricingGrid b{text-align:right}.ekAiEvidenceTable{min-width:720px}.ekAiPriority{display:inline-flex;padding:4px 8px;border-radius:999px;background:#fff2c7;color:#775a00;font-size:11px;font-weight:850}.ekAiOption{border:1px solid #d8e3dc;border-radius:11px;padding:10px;margin-top:8px}.ekAiOption.recommended{border-color:#d8b600;background:#fffbee}.ekAiOptionHead{display:flex;justify-content:space-between;gap:10px}.ekAiVisualBrief{border-left:4px solid #f4c400;background:#f8faf8;padding:9px 10px;margin-top:7px}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.visual{background:#f4c400;color:#173d2e}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}.ekAiArtifactActions button:disabled{opacity:.55;cursor:wait}
     .ekAiQuick{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.ekAiQuick button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}.ekAiQuick button:hover{border-color:#6da482}
     .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:6px;background:#edf4ef;color:#355246;border-radius:9px;padding:7px 9px;font-size:12px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:10px 12px;font-size:13px}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
     @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
@@ -102,6 +113,33 @@
     return rows.length ? `<div class="ekAiArtifactSection"><h4>${escapeHtml(title)}</h4><ul>${rows.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul></div>` : "";
   }
 
+  function artifactMethodHtml(artifact) {
+    const blocks = [];
+    if (artifact.recommendedSolution) blocks.push(`<div><b>Soluzione raccomandata</b>${escapeHtml(artifact.recommendedSolution)}</div>`);
+    if (artifact.decisionRationale) blocks.push(`<div><b>Motivazione tecnica</b>${escapeHtml(artifact.decisionRationale)}</div>`);
+    const overview = blocks.length ? `<div class="ekAiMethod">${blocks.join("")}</div>` : "";
+    return `${overview}${artifactList("Evidenze utilizzate", artifact.evidence)}${artifactList("Incertezze e verifiche", artifact.uncertainties)}`;
+  }
+
+  function pricingAnalysisHtml(artifact) {
+    if (!isOwner() || artifact?.kind !== "quote") return "";
+    const pricing = artifact.quote?.pricingAnalysis || {};
+    const values = [pricing.laborCost, pricing.materialCost, pricing.equipmentCost, pricing.transportAndDisposalCost, pricing.subcontractCost, pricing.overheadAndRiskCost, pricing.contingencyCost, pricing.estimatedDirectCost, pricing.proposedNetPrice];
+    if (!values.some((value) => Number(value) > 0) && !(pricing.rationale || []).length && !(pricing.verificationChecks || []).length) return "";
+    const rows = [
+      ["Manodopera", pricing.laborCost], ["Materiali e sfridi", pricing.materialCost], ["Mezzi e noleggi", pricing.equipmentCost],
+      ["Trasporto e smaltimento", pricing.transportAndDisposalCost], ["Subappalti", pricing.subcontractCost], ["Generali e rischio", pricing.overheadAndRiskCost],
+      ["Imprevisti", pricing.contingencyCost], ["Costo diretto stimato", pricing.estimatedDirectCost], [`Prezzo netto proposto · margine obiettivo ${Number(pricing.targetMarginPct || 0).toLocaleString("it-IT")}%`, pricing.proposedNetPrice]
+    ];
+    return `<div class="ekAiPricingCheck"><b>Controllo economico interno · non esportato al cliente</b><div class="ekAiPricingGrid">${rows.map(([label, value]) => `<span>${escapeHtml(label)}</span><b>${euro(value)}</b>`).join("")}</div>${artifactList("Criteri di prezzo", pricing.rationale)}${artifactList("Controlli da eseguire", pricing.verificationChecks)}</div>`;
+  }
+
+  function evidenceFindingsHtml(report) {
+    const rows = Array.isArray(report?.evidenceFindings) ? report.evidenceFindings : [];
+    if (!rows.length) return "";
+    return `<div class="ekAiArtifactSection"><h4>Riscontro tra prove e valutazione</h4><div class="ekAiTableWrap"><table class="ekAiArtifactTable ekAiEvidenceTable"><thead><tr><th>Riferimento</th><th>Osservazione</th><th>Valutazione prudente</th><th>Da verificare</th></tr></thead><tbody>${rows.map((item) => `<tr><td><b>${escapeHtml(item.reference)}</b></td><td>${escapeHtml(item.observation)}</td><td>${escapeHtml(item.assessment)}</td><td>${escapeHtml(item.verificationNeeded)}</td></tr>`).join("")}</tbody></table></div></div>`;
+  }
+
   function priceSourceHtml(line) {
     const labels = { tariffario: "Listino EdilKappa", storico: "Storico", stima_ai: "Stima AI", da_definire: "Da definire" };
     const className = line.priceSource === "stima_ai" ? "estimate" : line.priceSource === "da_definire" ? "missing" : "";
@@ -139,12 +177,22 @@
     });
     const mainSubtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const mainNet = mainSubtotal * (1 - Number(artifact.quote?.discountPct || 0) / 100);
+    const pricingAnalysis = artifact.quote?.pricingAnalysis || {};
+    const proposedNetPrice = Number(pricingAnalysis.proposedNetPrice || 0);
+    const priceAlignmentWarning = proposedNetPrice && Math.abs(proposedNetPrice - mainNet) > 0.02
+      ? `Il controllo economico interno è stato riallineato all’imponibile ricalcolato dal gestionale (${euro(mainNet)}).`
+      : "";
     return {
       ...artifact,
       quote: {
         ...(artifact.quote || {}),
         lines,
         options: (artifact.quote?.options || []).map((option) => option.recommended && lines.length ? { ...option, total: mainNet } : { ...option }),
+        pricingAnalysis: {
+          ...pricingAnalysis,
+          proposedNetPrice: mainNet,
+          verificationChecks: Array.from(new Set([...(pricingAnalysis.verificationChecks || []), priceAlignmentWarning].filter(Boolean)))
+        },
         missingInformation: Array.from(new Set([...(artifact.quote?.missingInformation || []), ...warnings]))
       }
     };
@@ -158,14 +206,14 @@
     const net = subtotal - discount;
     const vat = net * Number(quote.vatRate || 0) / 100;
     const options = (quote.options || []).map((option) => `<div class="ekAiOption ${option.recommended ? "recommended" : ""}"><div class="ekAiOptionHead"><b>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)}</b><b>${euro(option.total)} + IVA</b></div>${option.description ? `<div>${escapeHtml(option.description)}</div>` : ""}${option.includedWorks?.length ? `<small>Comprende: ${escapeHtml(option.includedWorks.join(" · "))}</small>` : ""}${option.notes ? `<br><small>${escapeHtml(option.notes)}</small>` : ""}</div>`).join("");
-    return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th><th>Origine</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit)}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td><td>${priceSourceHtml(line)}<br><small>Affidabilità ${escapeHtml(line.confidence || "bassa")}</small></td></tr>`).join("") || `<tr><td colspan="6">Le voci devono ancora essere definite.</td></tr>`}</tbody></table></div>
+    return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${artifactMethodHtml(artifact)}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th><th>Origine</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit)}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td><td>${priceSourceHtml(line)}<br><small>Affidabilità ${escapeHtml(line.confidence || "bassa")}</small></td></tr>`).join("") || `<tr><td colspan="6">Le voci devono ancora essere definite.</td></tr>`}</tbody></table></div>
       <div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b><span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b><span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>
-      ${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata stimata</h4><div>${escapeHtml(quote.estimatedDuration)}</div></div>` : ""}${artifactList("Opere comprese", quote.includedWorks)}${artifactList("Esclusioni", quote.exclusions)}${options ? `<div class="ekAiArtifactSection"><h4>Alternative e scenari</h4>${options}</div>` : ""}${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
+      ${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata stimata</h4><div>${escapeHtml(quote.estimatedDuration)}</div></div>` : ""}${artifactList("Opere comprese", quote.includedWorks)}${artifactList("Esclusioni", quote.exclusions)}${options ? `<div class="ekAiArtifactSection"><h4>Alternative e scenari</h4>${options}</div>` : ""}${pricingAnalysisHtml(artifact)}${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
   }
 
   function reportArtifactHtml(artifact) {
     const report = artifact.report || {};
-    return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${report.executiveSummary ? `<div class="ekAiArtifactSection"><h4>Sintesi</h4><div>${escapeHtml(report.executiveSummary)}</div></div>` : ""}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Osservazioni", report.observations)}${artifactList("Cause probabili", report.probableCauses)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}${artifactList("Interventi consigliati", report.recommendedWorks)}${artifactList("Sicurezza", report.safetyNotes)}${artifactList("Limiti dell’analisi", report.limitations)}${report.conclusions ? `<div class="ekAiArtifactSection"><h4>Conclusioni</h4><div>${escapeHtml(report.conclusions)}</div></div>` : ""}${artifactList("Informazioni da confermare", report.missingInformation)}`;
+    return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${report.executiveSummary ? `<div class="ekAiArtifactSection"><h4>Sintesi</h4><div>${escapeHtml(report.executiveSummary)}</div></div>` : ""}${artifactMethodHtml(artifact)}${report.interventionPriority ? `<div class="ekAiArtifactSection"><h4>Priorità d’intervento</h4><span class="ekAiPriority">${escapeHtml(report.interventionPriority)}</span></div>` : ""}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Osservazioni", report.observations)}${artifactList("Cause probabili", report.probableCauses)}${evidenceFindingsHtml(report)}${artifactList("Verifiche consigliate", report.recommendedVerifications)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}${artifactList("Interventi consigliati", report.recommendedWorks)}${artifactList("Sicurezza", report.safetyNotes)}${artifactList("Limiti dell’analisi", report.limitations)}${report.conclusions ? `<div class="ekAiArtifactSection"><h4>Conclusioni</h4><div>${escapeHtml(report.conclusions)}</div></div>` : ""}${artifactList("Informazioni da confermare", report.missingInformation)}`;
   }
 
   function visualBriefsHtml(artifact) {
@@ -185,7 +233,7 @@
     const generatedIndexes = new Set((message?.media || []).filter((item) => item.generated).map((item) => Number(item.briefIndex)));
     const nextBrief = (checkedArtifact.visualBriefs || []).findIndex((_, index) => !generatedIndexes.has(index));
     const visualButton = nextBrief >= 0 ? `<button class="visual" onclick="edilkappaAiGenerateVisual(${messageIndex},${nextBrief})" ${state.generatingVisual ? "disabled" : ""}>${state.generatingVisual === checkedArtifact.id ? "Creo l’immagine…" : `Crea ${nextBrief === 0 ? "fotomontaggio / immagine" : "altra immagine"}`}</button>` : "";
-    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><span class="ekAiPriceSource ${saved ? "" : "estimate"}">${saved ? "Salvato" : "Da controllare"}</span></div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
+    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Bozza di preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><span class="ekAiPriceSource ${saved ? "" : "estimate"}">${saved ? "Salvato" : "Da controllare"}</span></div><div class="ekAiArtifactBody">${checkedArtifact.summary ? `<div>${escapeHtml(checkedArtifact.summary)}</div>` : ""}${detail}${visualBriefsHtml(checkedArtifact)}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "Salva e modifica preventivo" : "Salva relazione PDF"}</button>`}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})">Scarica PDF EdilKappa</button><button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>${visualButton}</div></div></section>`;
   }
 
   function messageHtml(message, index) {
@@ -203,8 +251,8 @@
           { label: "Cerca informazioni aggiornate", prompt: "Cerca informazioni aggiornate su questo argomento:", taskType: "auto" }
         ]
       : [
-          { label: "Preventivo da allegati", prompt: "Analizza foto, video e documenti allegati. Prepara un preventivo completo con lavorazioni, quantità, prezzi del listino EdilKappa e totali. Segnala soltanto i dati che devo confermare.", taskType: "quote" },
-          { label: "Relazione da sopralluogo", prompt: "Analizza foto, video e documenti del sopralluogo e prepara una relazione tecnica completa, distinguendo osservazioni, cause probabili, interventi consigliati e verifiche necessarie.", taskType: "report" },
+          { label: "Preventivo da allegati", prompt: "Applica il Metodo EdilKappa alle foto, ai video e ai documenti allegati. Ricostruisci evidenze e incertezze, confronta le soluzioni, raccomanda quella migliore e prepara un preventivo completo con fasi, quantità, composizione dei costi, prezzi di vendita, esclusioni, tempi e controlli finali. Usa prima listino e storico validato. Segnala soltanto i dati che devo confermare.", taskType: "quote" },
+          { label: "Relazione da sopralluogo", prompt: "Applica il Metodo EdilKappa al sopralluogo allegato e prepara una relazione professionale. Collega ogni osservazione alla foto, al fotogramma o al documento pertinente; separa fatti, cause probabili e verifiche; indica priorità, interventi consigliati, limiti e conclusioni.", taskType: "report" },
           { label: "Analizza foto o video", prompt: "Analizza con attenzione le foto o il video allegato, descrivi cosa è visibile, i problemi probabili, i rischi e i prossimi controlli da fare.", taskType: "inspection" },
           { label: "Controlla i cantieri", prompt: "Controlla i cantieri attivi e indicami priorità, rischi, scadenze e prossime azioni.", taskType: "auto" }
         ];
@@ -238,7 +286,7 @@
     if (!state.loaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadHistory, 0);
     const modeLabel = state.mode === "work" ? "Lavoro" : "Personale";
     return `<div class="ekAiPage">
-      <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>GPT‑5.6 Sol analizza foto, video, audio, PDF e documenti; ragiona sulle alternative, revisiona i preventivi e può creare immagini illustrative della soluzione.</p></div><div class="ekAiHeroMark">✦</div></section>
+      <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>GPT‑5.6 Sol applica il Metodo EdilKappa: analizza prove e incertezze, confronta soluzioni, compone i prezzi e genera preventivi o relazioni nel modello aziendale.</p></div><div class="ekAiHeroMark">✦</div></section>
       <div class="ekAiToolbar"><div class="ekAiModes"><button class="${state.mode === "work" ? "active" : ""}" onclick="edilkappaAiSetMode('work')">🏗️ Lavoro</button>${isOwner() ? `<button class="${state.mode === "personal" ? "active" : ""}" onclick="edilkappaAiSetMode('personal')">👤 Personale</button>` : ""}</div><div class="ekAiStatus"><i class="ekAiDot"></i> Protetta dal login EdilKappa · ${modeLabel}</div></div>
       ${workflowHtml()}
       <div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la memoria ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
@@ -300,6 +348,16 @@
       net: item.net,
       lines: (item.lines || []).slice(0, 12).map((line) => ({ description: line.description, quantity: line.quantity, unit: line.unit, unitPrice: line.unitPrice }))
     }));
+    const validatedStatuses = new Set(["Accettato", "Approvato", "Completato", "Fatturato"]);
+    const validatedQuotes = (database.quotes || []).filter((item) => validatedStatuses.has(item.status)).slice(-16).reverse();
+    const validatedMargins = validatedQuotes.map((item) => Number(item.marginPercent)).filter(Number.isFinite);
+    const correctionMemory = (database.quotes || []).slice(-20).reverse().flatMap((item) => (item.revisions || []).slice(-4).map((revision) => ({
+      quote: item.code,
+      subject: item.subject,
+      date: revision.date,
+      change: revision.action,
+      actor: revision.actor
+    }))).slice(0, 30);
     return {
       azienda: (database.companySettings || [])[0] || {},
       riepilogo: {
@@ -315,6 +373,22 @@
       sopralluoghi: compact(database.inspections, ["id", "date", "time", "type", "client", "clientId", "interventionId", "address", "problem", "status"], 20),
       listinoEdilKappa: compact((database.priceList || []).filter((item) => item.status !== "Disattivo"), ["id", "code", "category", "description", "unit", "cost", "salePrice", "status"], 100),
       preventiviRecenti: recentQuotes,
+      memoriaPrezziValidati: validatedQuotes.map((item) => ({
+        code: item.code,
+        subject: item.subject,
+        date: item.date,
+        status: item.status,
+        net: item.net,
+        costTotal: item.costTotal,
+        marginPercent: item.marginPercent,
+        pricingAnalysis: item.aiPricingAnalysis,
+        lines: (item.lines || []).slice(0, 20).map((line) => ({ description: line.description, category: line.category, quantity: line.quantity, unit: line.unit, unitCost: line.unitCost, unitPrice: line.unitPrice }))
+      })),
+      memoriaCorrezioniPreventivi: correctionMemory,
+      controlloEconomico: {
+        margineMedioPreventiviValidatiPct: validatedMargins.length ? Math.round(validatedMargins.reduce((sum, value) => sum + value, 0) / validatedMargins.length * 10) / 10 : null,
+        usaSoloStoricoConStato: Array.from(validatedStatuses)
+      },
       squadre: compact(database.teams, ["id", "name", "member1", "member2"], 12)
     };
   }
@@ -505,6 +579,10 @@
   function notesForQuote(artifact) {
     const quote = artifact.quote || {};
     const blocks = [artifact.revisionReason ? `Motivo revisione: ${artifact.revisionReason}` : ""];
+    if (artifact.evidence?.length) blocks.push(`Evidenze utilizzate:\n- ${artifact.evidence.join("\n- ")}`);
+    if (artifact.uncertainties?.length) blocks.push(`Incertezze e verifiche:\n- ${artifact.uncertainties.join("\n- ")}`);
+    if (artifact.recommendedSolution) blocks.push(`Soluzione raccomandata: ${artifact.recommendedSolution}`);
+    if (artifact.decisionRationale) blocks.push(`Motivazione tecnica: ${artifact.decisionRationale}`);
     if (artifact.technicalAssessment?.length) blocks.push(`Valutazione tecnica:\n- ${artifact.technicalAssessment.join("\n- ")}`);
     if (artifact.workPhases?.length) blocks.push(`Fasi operative:\n- ${artifact.workPhases.join("\n- ")}`);
     if (artifact.materials?.length) blocks.push(`Materiali previsti:\n- ${artifact.materials.join("\n- ")}`);
@@ -615,6 +693,10 @@
       costTotal,
       marginAmount: net - costTotal,
       marginPercent: costTotal ? (net - costTotal) / costTotal * 100 : 0,
+      aiPricingAnalysis: artifact.quote?.pricingAnalysis || {},
+      aiEvidence: artifact.evidence || [],
+      aiUncertainties: artifact.uncertainties || [],
+      aiRecommendedSolution: artifact.recommendedSolution || "",
       media: mediaForQuote(media),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -626,103 +708,312 @@
     return item;
   }
 
-  function pdfTextSection(doc, title, text, y) {
+  function documentCompany() {
+    const saved = (window.EdilKappaLocal?.getDB?.().companySettings || [])[0] || {};
+    const savedName = String(saved.name || "").trim();
+    return {
+      legalName: savedName && savedName.toUpperCase() !== "EDILKAPPA" ? savedName.toUpperCase() : EDILKAPPA_DOCUMENT.legalName,
+      activity: EDILKAPPA_DOCUMENT.activity,
+      address: saved.address || EDILKAPPA_DOCUMENT.address,
+      vat: saved.vat || EDILKAPPA_DOCUMENT.vat,
+      phone: saved.phone || EDILKAPPA_DOCUMENT.phone,
+      email: saved.email || EDILKAPPA_DOCUMENT.email
+    };
+  }
+
+  function documentTypeLabel(artifact) {
+    const labels = {
+      preventivo: "PREVENTIVO",
+      variante: "PREVENTIVO DI VARIANTE",
+      relazione_tecnica: "RELAZIONE TECNICA",
+      relazione_fotografica: "RELAZIONE TECNICA E FOTOGRAFICA",
+      relazione_assicurativa: "RELAZIONE TECNICA PER PRATICA ASSICURATIVA",
+      verbale_sopralluogo: "VERBALE DI SOPRALLUOGO"
+    };
+    return labels[artifact?.documentType] || (artifact?.kind === "quote" ? "PREVENTIVO" : "RELAZIONE TECNICA");
+  }
+
+  let documentLogoDataUrl = "";
+  async function loadDocumentLogo() {
+    if (documentLogoDataUrl) return documentLogoDataUrl;
+    documentLogoDataUrl = await new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth || 900;
+        canvas.height = image.naturalHeight || 185;
+        canvas.getContext("2d").drawImage(image, 0, 0);
+        resolve(canvas.toDataURL("image/jpeg", 0.94));
+      };
+      image.onerror = () => resolve("");
+      image.src = "./linea-vita/assets/logo-edilkappa-pdf.jpg";
+    });
+    return documentLogoDataUrl;
+  }
+
+  function drawDocumentHeader(doc, context) {
+    const company = context.company;
+    doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
+    if (context.logo) doc.addImage(context.logo, "JPEG", 14, 9, 50, 10.3, undefined, "FAST");
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(8.4);
+    doc.text(company.legalName, 196, 11, { align: "right" });
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(7.5);
+    doc.text(company.activity, 196, 16, { align: "right" });
+    doc.text(`${company.email} | ${company.phone}`, 196, 21, { align: "right" });
+    doc.setFillColor(...EDILKAPPA_DOCUMENT.yellow);
+    doc.rect(14, 27, 182, 5, "F");
+    doc.setFillColor(...EDILKAPPA_DOCUMENT.dark);
+    doc.rect(14, 32, 182, 8, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(8.4);
+    doc.text(context.label, 18, 37.4);
+    doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
+  }
+
+  function newDocumentPage(doc, context) {
+    doc.addPage();
+    drawDocumentHeader(doc, context);
+    return 47;
+  }
+
+  function ensureDocumentSpace(doc, context, y, needed = 18) {
+    return y + needed > 274 ? newDocumentPage(doc, context) : y;
+  }
+
+  function pdfTextSection(doc, context, title, text, y) {
     if (!text) return y;
     const lines = doc.splitTextToSize(String(text), 180);
-    if (y + 14 > 280) { doc.addPage(); y = 18; }
+    y = ensureDocumentSpace(doc, context, y, 14);
     doc.setFont(undefined, "bold");
-    doc.setFontSize(11);
-    doc.text(title, 14, y);
+    doc.setFontSize(10.5);
+    doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
+    doc.text(String(title).toUpperCase(), 14, y);
     y += 6;
     doc.setFont(undefined, "normal");
-    doc.setFontSize(9.5);
+    doc.setFontSize(9.2);
     lines.forEach((line) => {
-      if (y + 5 > 280) { doc.addPage(); y = 18; }
+      y = ensureDocumentSpace(doc, context, y, 5);
       doc.text(line, 14, y);
-      y += 4.7;
+      y += 4.5;
     });
-    return y + 5;
+    return y + 4;
   }
 
-  function pdfListSection(doc, title, values, y) {
+  function pdfListSection(doc, context, title, values, y) {
     const rows = (Array.isArray(values) ? values : []).filter(Boolean);
-    if (!rows.length) return y;
-    return pdfTextSection(doc, title, rows.map((value) => `• ${value}`).join("\n"), y);
+    return rows.length ? pdfTextSection(doc, context, title, rows.map((value) => `- ${value}`).join("\n"), y) : y;
   }
 
-  async function reportPdfBlob(artifact, destination, previews) {
-    if (!window.jspdf?.jsPDF) throw new Error("Il generatore PDF non è disponibile. Ricarica la pagina e riprova.");
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const company = (window.EdilKappaLocal.getDB().companySettings || [])[0] || {};
-    doc.setTextColor(17, 17, 17);
+  function runDocumentTable(doc, context, options) {
+    if (typeof doc.autoTable !== "function") throw new Error("Il modulo tabelle PDF non è disponibile. Ricarica la pagina e riprova.");
+    doc.autoTable({
+      margin: { top: 45, right: 14, bottom: 21, left: 14 },
+      didDrawPage: () => drawDocumentHeader(doc, context),
+      styles: { font: "helvetica", fontSize: 8.4, cellPadding: 2.7, lineColor: [212, 214, 216], lineWidth: 0.18, textColor: EDILKAPPA_DOCUMENT.dark },
+      headStyles: { fillColor: EDILKAPPA_DOCUMENT.dark, textColor: [255, 255, 255], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [249, 249, 249] },
+      theme: "grid",
+      ...options
+    });
+    return doc.lastAutoTable.finalY;
+  }
+
+  function pdfSignatureBlock(doc, context, y) {
+    y = ensureDocumentSpace(doc, context, y, 45);
     doc.setFont(undefined, "bold");
-    doc.setFontSize(18);
-    doc.text(company.name || "EDILKAPPA", 14, 18);
+    doc.setFontSize(9.2);
+    doc.text("ACCETTAZIONE E FIRME", 14, y);
+    y += 9;
     doc.setFont(undefined, "normal");
     doc.setFontSize(8.5);
-    const companyLine = [company.address, company.vat ? `P.IVA ${company.vat}` : "", company.phone, company.email].filter(Boolean).join(" · ");
-    if (companyLine) doc.text(companyLine, 14, 24, { maxWidth: 180 });
-    doc.setDrawColor(244, 196, 0);
-    doc.setLineWidth(1.4);
-    doc.line(14, 29, 196, 29);
-    doc.setFont(undefined, "bold");
-    doc.setFontSize(15);
-    doc.text("RELAZIONE TECNICA", 14, 39);
-    doc.setFontSize(11);
-    doc.text(destination.title, 14, 46, { maxWidth: 180 });
-    doc.setFont(undefined, "normal");
-    doc.setFontSize(9);
-    doc.text(`Cliente: ${destination.client.name}`, 14, 55);
-    if (destination.client.address || artifact.address) doc.text(`Indirizzo: ${destination.client.address || artifact.address}`, 14, 61, { maxWidth: 180 });
-    doc.text(`Data: ${new Date().toLocaleDateString("it-IT")}`, 14, 67);
-    doc.setFillColor(255, 247, 204);
-    doc.roundedRect(14, 72, 182, 14, 2, 2, "F");
-    doc.setFont(undefined, "bold");
-    doc.setFontSize(8.5);
-    doc.text("BOZZA TECNICA DA VERIFICARE PRIMA DELL’INVIO O DELLA FIRMA", 18, 81);
-    let y = 94;
-    const report = artifact.report || {};
-    y = pdfTextSection(doc, "Sintesi", report.executiveSummary || artifact.summary, y);
-    y = pdfTextSection(doc, "Motivo della revisione", artifact.revisionReason, y);
-    y = pdfListSection(doc, "Valutazione tecnica", artifact.technicalAssessment, y);
-    y = pdfListSection(doc, "Osservazioni", report.observations, y);
-    y = pdfListSection(doc, "Cause probabili", report.probableCauses, y);
-    y = pdfListSection(doc, "Fasi operative", artifact.workPhases, y);
-    y = pdfListSection(doc, "Materiali previsti", artifact.materials, y);
-    y = pdfListSection(doc, "Interventi consigliati", report.recommendedWorks, y);
-    y = pdfListSection(doc, "Indicazioni di sicurezza", report.safetyNotes, y);
-    y = pdfListSection(doc, "Limiti dell’analisi", report.limitations, y);
-    y = pdfTextSection(doc, "Conclusioni", report.conclusions, y);
-    y = pdfListSection(doc, "Informazioni da confermare", report.missingInformation, y);
-    const usablePreviews = (previews || []).filter((item) => /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl)).slice(0, 6);
-    usablePreviews.forEach((preview, index) => {
-      doc.addPage();
+    doc.text("Per il Committente", 14, y);
+    doc.text("Per EdilKappa", 112, y);
+    y += 17;
+    doc.setDrawColor(90, 90, 90);
+    doc.line(14, y, 94, y);
+    doc.line(112, y, 196, y);
+    doc.setFontSize(7.5);
+    doc.text("Data, timbro e firma", 14, y + 4);
+    doc.text("Timbro e firma", 112, y + 4);
+    return y + 9;
+  }
+
+  function addPhotoAppendix(doc, context, previews, artifact) {
+    const usable = (previews || []).filter((item) => /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl)).slice(0, 10);
+    const findings = artifact.report?.evidenceFindings || [];
+    for (let offset = 0; offset < usable.length; offset += 2) {
+      newDocumentPage(doc, context);
       doc.setFont(undefined, "bold");
       doc.setFontSize(12);
-      doc.text(`${preview.generated ? "Visualizzazione illustrativa AI" : "Immagine analizzata"} ${index + 1}`, 14, 18);
-      doc.setFont(undefined, "normal");
-      doc.setFontSize(8.5);
-      doc.text(preview.sourceName || preview.name || "Allegato", 14, 24, { maxWidth: 180 });
-      try {
-        const properties = doc.getImageProperties(preview.dataUrl);
-        const scale = Math.min(180 / properties.width, 245 / properties.height);
-        const width = properties.width * scale;
-        const height = properties.height * scale;
-        doc.addImage(preview.dataUrl, properties.fileType || "JPEG", 14 + (180 - width) / 2, 31, width, height, undefined, "FAST");
-      } catch (_) {
-        doc.text("Anteprima non inseribile nel PDF; l’originale resta nell’archivio EdilKappa.", 14, 36);
+      doc.text("ALLEGATO FOTOGRAFICO", 14, 49);
+      usable.slice(offset, offset + 2).forEach((preview, localIndex) => {
+        const index = offset + localIndex;
+        const top = localIndex === 0 ? 57 : 164;
+        const maxHeight = 82;
+        try {
+          const properties = doc.getImageProperties(preview.dataUrl);
+          const scale = Math.min(180 / properties.width, maxHeight / properties.height);
+          const width = properties.width * scale;
+          const height = properties.height * scale;
+          doc.addImage(preview.dataUrl, properties.fileType || "JPEG", 14 + (180 - width) / 2, top, width, height, undefined, "FAST");
+        } catch (_) {
+          doc.setFont(undefined, "normal");
+          doc.setFontSize(8.5);
+          doc.text("Anteprima non inseribile; l’originale resta nell’archivio EdilKappa.", 14, top + 8);
+        }
+        const finding = findings[index];
+        const caption = finding?.observation || artifact.evidence?.[index] || preview.sourceName || preview.name || `Immagine ${index + 1}`;
+        doc.setFont(undefined, "bold");
+        doc.setFontSize(8.2);
+        doc.text(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${String(caption)}`, 14, top + 88, { maxWidth: 180 });
+        if (finding?.assessment) {
+          doc.setFont(undefined, "normal");
+          doc.setFontSize(7.6);
+          doc.text(finding.assessment, 14, top + 94, { maxWidth: 180 });
+        }
+      });
+    }
+  }
+
+  async function artifactPdfBlob(rawArtifact, destination, previews) {
+    if (!window.jspdf?.jsPDF) throw new Error("Il generatore PDF non è disponibile. Ricarica la pagina e riprova.");
+    const artifact = verifiedArtifactPrices(rawArtifact);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const context = { company: documentCompany(), logo: await loadDocumentLogo(), label: documentTypeLabel(artifact) };
+    drawDocumentHeader(doc, context);
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(15.5);
+    doc.text(context.label, 105, 50, { align: "center" });
+    const subtitle = artifact.documentSubtitle || artifact.title || artifact.subject || destination.title;
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(9.3);
+    doc.setTextColor(95, 95, 95);
+    doc.text(subtitle, 105, 56, { align: "center", maxWidth: 176 });
+    doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
+    const vatRate = Number(artifact.quote?.vatRate || 0);
+    let y = runDocumentTable(doc, context, {
+      startY: 63,
+      body: [
+        ["Destinatario", destination.client.name || artifact.client || "Da assegnare"],
+        ["Ubicazione intervento", destination.client.address || artifact.address || "Da confermare"],
+        ["Oggetto", destination.title || artifact.subject || artifact.title || context.label],
+        ["Data emissione", new Date().toLocaleDateString("it-IT")],
+        ...(artifact.kind === "quote" ? [["IVA applicata", `${vatRate}%`], ["Validità", `${Number(artifact.quote?.validityDays || 30)} giorni`]] : [["Priorità", artifact.report?.interventionPriority || "Da definire"]])
+      ],
+      columnStyles: { 0: { cellWidth: 48, fillColor: EDILKAPPA_DOCUMENT.light, fontStyle: "bold" } }
+    }) + 6;
+    y = ensureDocumentSpace(doc, context, y, 18);
+    const callout = artifact.revisionReason || "BOZZA PROFESSIONALE DA VERIFICARE PRIMA DELL’INVIO, DELLA FIRMA O DELL’ESECUZIONE";
+    doc.setFillColor(...EDILKAPPA_DOCUMENT.yellow);
+    const calloutLines = doc.splitTextToSize(callout, 172);
+    const calloutHeight = Math.max(13, 7 + calloutLines.length * 4);
+    doc.rect(14, y, 182, calloutHeight, "F");
+    doc.setFont(undefined, "bold");
+    doc.setFontSize(8.4);
+    doc.text(calloutLines, 19, y + 6);
+    y += calloutHeight + 7;
+    const report = artifact.report || {};
+    const quote = artifact.quote || {};
+    y = pdfTextSection(doc, context, "Sintesi", artifact.kind === "report" ? (report.executiveSummary || artifact.summary) : artifact.summary, y);
+    y = pdfListSection(doc, context, "Evidenze utilizzate", artifact.evidence, y);
+    y = pdfListSection(doc, context, "Incertezze e verifiche", artifact.uncertainties, y);
+    y = pdfTextSection(doc, context, "Soluzione raccomandata", artifact.recommendedSolution, y);
+    y = pdfTextSection(doc, context, "Motivazione tecnica", artifact.decisionRationale, y);
+    y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
+
+    if (artifact.kind === "quote") {
+      y = pdfListSection(doc, context, "Fasi operative", artifact.workPhases, y);
+      y = pdfListSection(doc, context, "Materiali previsti", artifact.materials, y);
+      const lines = quote.lines || [];
+      y = ensureDocumentSpace(doc, context, y, 28);
+      y = runDocumentTable(doc, context, {
+        startY: y,
+        head: [["N.", "LAVORAZIONE", "Q.TÀ", "U.M.", "PREZZO UNIT.", "IMPORTO"]],
+        body: lines.map((line, index) => [String(index + 1), [line.description, line.notes].filter(Boolean).join("\n"), Number(line.quantity || 0).toLocaleString("it-IT"), line.unit || "a corpo", euro(line.unitPrice), euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))]),
+        columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 91 }, 2: { cellWidth: 16, halign: "right" }, 3: { cellWidth: 15 }, 4: { cellWidth: 25, halign: "right" }, 5: { cellWidth: 26, halign: "right", fontStyle: "bold" } }
+      }) + 5;
+      const subtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
+      const discount = subtotal * Number(quote.discountPct || 0) / 100;
+      const net = subtotal - discount;
+      const vat = net * vatRate / 100;
+      y = runDocumentTable(doc, context, {
+        startY: y,
+        body: [
+          ["Subtotale lavorazioni", euro(subtotal)],
+          [`Sconto ${Number(quote.discountPct || 0)}%`, `- ${euro(discount)}`],
+          ["TOTALE IMPONIBILE", euro(net)],
+          [`IVA ${vatRate}%`, euro(vat)],
+          ["TOTALE COMPLESSIVO", euro(net + vat)]
+        ],
+        tableWidth: 88,
+        margin: { top: 45, right: 14, bottom: 21, left: 108 },
+        columnStyles: { 0: { cellWidth: 53, fontStyle: "bold" }, 1: { cellWidth: 35, halign: "right", fontStyle: "bold" } },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.row.index === 4) {
+            data.cell.styles.fillColor = EDILKAPPA_DOCUMENT.yellow;
+            data.cell.styles.textColor = EDILKAPPA_DOCUMENT.dark;
+          }
+        }
+      }) + 7;
+      y = pdfTextSection(doc, context, "Durata stimata", quote.estimatedDuration, y);
+      y = pdfListSection(doc, context, "Opere comprese", quote.includedWorks, y);
+      y = pdfListSection(doc, context, "Esclusioni", quote.exclusions, y);
+      if ((quote.options || []).length) {
+        y = ensureDocumentSpace(doc, context, y, 30);
+        y = runDocumentTable(doc, context, {
+          startY: y,
+          head: [["ALTERNATIVA", "DESCRIZIONE", "IMPONIBILE"]],
+          body: quote.options.map((option) => [[option.label, option.title, option.recommended ? "RACCOMANDATA" : ""].filter(Boolean).join(" · "), option.description, euro(option.total)]),
+          columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" }, 1: { cellWidth: 98 }, 2: { cellWidth: 32, halign: "right", fontStyle: "bold" } }
+        }) + 6;
       }
-    });
+      y = pdfListSection(doc, context, "Ipotesi di calcolo", quote.assumptions, y);
+      y = pdfListSection(doc, context, "Informazioni da confermare", quote.missingInformation, y);
+      y = pdfTextSection(doc, context, "Condizioni e note", [quote.paymentTerms ? `Pagamento: ${quote.paymentTerms}` : "", quote.notes].filter(Boolean).join("\n"), y);
+    } else {
+      y = pdfListSection(doc, context, "Osservazioni", report.observations, y);
+      y = pdfListSection(doc, context, "Cause probabili", report.probableCauses, y);
+      if ((report.evidenceFindings || []).length) {
+        y = ensureDocumentSpace(doc, context, y, 30);
+        y = runDocumentTable(doc, context, {
+          startY: y,
+          head: [["RIFERIMENTO", "OSSERVAZIONE", "VALUTAZIONE", "VERIFICA"]],
+          body: report.evidenceFindings.map((item) => [item.reference, item.observation, item.assessment, item.verificationNeeded]),
+          columnStyles: { 0: { cellWidth: 31, fontStyle: "bold" }, 1: { cellWidth: 50 }, 2: { cellWidth: 55 }, 3: { cellWidth: 46 } }
+        }) + 6;
+      }
+      y = pdfListSection(doc, context, "Verifiche consigliate", report.recommendedVerifications, y);
+      y = pdfListSection(doc, context, "Fasi operative", artifact.workPhases, y);
+      y = pdfListSection(doc, context, "Materiali previsti", artifact.materials, y);
+      y = pdfListSection(doc, context, "Interventi consigliati", report.recommendedWorks, y);
+      y = pdfListSection(doc, context, "Indicazioni di sicurezza", report.safetyNotes, y);
+      y = pdfListSection(doc, context, "Limiti dell’analisi", report.limitations, y);
+      y = pdfTextSection(doc, context, "Conclusioni", report.conclusions, y);
+      y = pdfListSection(doc, context, "Informazioni da confermare", report.missingInformation, y);
+    }
+    pdfSignatureBlock(doc, context, y + 3);
+    addPhotoAppendix(doc, context, previews, artifact);
     const pages = doc.getNumberOfPages();
     for (let page = 1; page <= pages; page += 1) {
       doc.setPage(page);
+      doc.setDrawColor(190, 190, 190);
+      doc.setLineWidth(0.2);
+      doc.line(14, 281.5, 196, 281.5);
       doc.setFont(undefined, "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(95, 105, 99);
-      doc.text(`EdilKappa · bozza generata con AI · pagina ${page}/${pages}`, 14, 291);
+      doc.setFontSize(7.1);
+      doc.setTextColor(85, 85, 85);
+      doc.text(`EdilKappa S.A.S. - ${context.company.address} - P. IVA ${context.company.vat}`, 14, 287);
+      doc.text(`${context.label} | Pag. ${page}/${pages}`, 196, 287, { align: "right" });
     }
     return doc.output("blob");
+  }
+
+  async function reportPdfBlob(artifact, destination, previews) {
+    return artifactPdfBlob(artifact, destination, previews);
   }
 
   async function previewsForReport(message) {
@@ -793,21 +1084,33 @@
     return rows.length ? `<h2>${escapeHtml(title)}</h2><ul>${rows.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "";
   }
 
-  function downloadArtifactWord(artifact) {
+  async function downloadArtifactWord(artifact) {
     artifact = verifiedArtifactPrices(artifact);
     const report = artifact.report || {};
     const quote = artifact.quote || {};
-    const company = (window.EdilKappaLocal?.getDB?.().companySettings || [])[0] || {};
+    const company = documentCompany();
+    let logo = new URL("./linea-vita/assets/logo-edilkappa-pdf.jpg", location.href).href;
+    try {
+      const response = await fetch("./linea-vita/assets/logo-edilkappa-pdf.jpg");
+      if (response.ok) logo = await fileDataUrl(await response.blob());
+    } catch (_) {
+      // Word può comunque caricare il logo dall'indirizzo pubblico dell'app.
+    }
     const quoteSubtotal = (quote.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
     const quoteNet = quoteSubtotal * (1 - Number(quote.discountPct || 0) / 100);
-    const quoteRows = (quote.lines || []).map((line) => `<tr><td>${escapeHtml(line.description)}</td><td>${escapeHtml(line.quantity)}</td><td>${escapeHtml(line.unit)}</td><td class="num">${escapeHtml(euro(line.unitPrice))}</td><td class="num">${escapeHtml(euro(Number(line.quantity || 0) * Number(line.unitPrice || 0)))}</td></tr>`).join("");
+    const quoteVat = quoteNet * Number(quote.vatRate || 0) / 100;
+    const quoteRows = (quote.lines || []).map((line, index) => `<tr><td class="center">${index + 1}</td><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td class="num">${escapeHtml(line.quantity)}</td><td>${escapeHtml(line.unit)}</td><td class="num">${escapeHtml(euro(line.unitPrice))}</td><td class="num"><b>${escapeHtml(euro(Number(line.quantity || 0) * Number(line.unitPrice || 0)))}</b></td></tr>`).join("");
     const options = (quote.options || []).length ? `<h2>Alternative e scenari</h2>${quote.options.map((option) => `<h3>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)} — ${escapeHtml(euro(option.total))} + IVA${option.recommended ? " (raccomandata)" : ""}</h3><p>${escapeHtml(option.description || "")}</p>${wordList("Opere comprese nello scenario", option.includedWorks)}${option.notes ? `<p>${escapeHtml(option.notes)}</p>` : ""}`).join("")}` : "";
-    const common = `${artifact.revisionReason ? `<h2>Motivo della revisione</h2><p>${escapeHtml(artifact.revisionReason)}</p>` : ""}${wordList("Valutazione tecnica", artifact.technicalAssessment)}${wordList("Fasi operative", artifact.workPhases)}${wordList("Materiali previsti", artifact.materials)}`;
+    const evidenceRows = (report.evidenceFindings || []).map((item) => `<tr><td><b>${escapeHtml(item.reference)}</b></td><td>${escapeHtml(item.observation)}</td><td>${escapeHtml(item.assessment)}</td><td>${escapeHtml(item.verificationNeeded)}</td></tr>`).join("");
+    const common = `${wordList("Evidenze utilizzate", artifact.evidence)}${wordList("Incertezze e verifiche", artifact.uncertainties)}${artifact.recommendedSolution ? `<h2>Soluzione raccomandata</h2><p>${escapeHtml(artifact.recommendedSolution)}</p>` : ""}${artifact.decisionRationale ? `<h2>Motivazione tecnica</h2><p>${escapeHtml(artifact.decisionRationale)}</p>` : ""}${wordList("Valutazione tecnica", artifact.technicalAssessment)}${wordList("Fasi operative", artifact.workPhases)}${wordList("Materiali previsti", artifact.materials)}`;
     const body = artifact.kind === "quote"
-      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th>Prezzo</th><th>Totale</th></tr></thead><tbody>${quoteRows}</tbody></table><p class="total"><b>Imponibile:</b> ${escapeHtml(euro(quoteNet))}<br><b>IVA ${escapeHtml(quote.vatRate || 0)}%:</b> ${escapeHtml(euro(quoteNet * Number(quote.vatRate || 0) / 100))}<br><b>Totale IVA inclusa:</b> ${escapeHtml(euro(quoteNet * (1 + Number(quote.vatRate || 0) / 100)))}</p>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(quote.estimatedDuration)}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi", quote.assumptions)}${wordList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<h2>Note e condizioni</h2><p>${escapeHtml(quote.notes)}</p>` : ""}`
-      : `<h2>Sintesi</h2><p>${escapeHtml(report.executiveSummary || artifact.summary || "")}</p>${common}${wordList("Osservazioni", report.observations)}${wordList("Cause probabili", report.probableCauses)}${wordList("Interventi consigliati", report.recommendedWorks)}${wordList("Sicurezza", report.safetyNotes)}${wordList("Limiti dell’analisi", report.limitations)}<h2>Conclusioni</h2><p>${escapeHtml(report.conclusions || "")}</p>${wordList("Informazioni da confermare", report.missingInformation)}`;
-    const documentLabel = artifact.kind === "quote" ? "Preventivo" : "Relazione tecnica";
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.5;margin:40px;color:#111}h1{color:#173d2e;border-bottom:4px solid #f4c400;padding-bottom:8px}h2{color:#284c3d;margin-top:24px}h3{color:#173d2e}.warning{background:#fff7cc;border:1px solid #e2c33b;padding:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d7dfda;padding:7px;text-align:left}.num{text-align:right}.total{text-align:right;font-size:1.08em}</style></head><body><h1>${escapeHtml(company.name || "EDILKAPPA")} · ${documentLabel}</h1><p>${escapeHtml([company.address, company.vat ? `P.IVA ${company.vat}` : "", company.phone, company.email].filter(Boolean).join(" · "))}</p><h2>${escapeHtml(artifact.title || artifact.subject || documentLabel)}</h2><p><b>Cliente:</b> ${escapeHtml(artifact.client || "Da assegnare")}<br><b>Indirizzo:</b> ${escapeHtml(artifact.address || "Da confermare")}<br><b>Data:</b> ${escapeHtml(new Date().toLocaleDateString("it-IT"))}</p><p class="warning"><b>Bozza generata con EdilKappa AI.</b> Verificare misure, lavorazioni, prezzi, conclusioni e sicurezza prima dell’uso o dell’invio.</p>${body}</body></html>`;
+      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>N.</th><th>Lavorazione</th><th>Q.tà</th><th>U.M.</th><th>Prezzo unit.</th><th>Importo</th></tr></thead><tbody>${quoteRows}</tbody></table><table class="totals"><tbody><tr><td>Subtotale</td><td>${escapeHtml(euro(quoteSubtotal))}</td></tr><tr><td>Imponibile</td><td>${escapeHtml(euro(quoteNet))}</td></tr><tr><td>IVA ${escapeHtml(quote.vatRate || 0)}%</td><td>${escapeHtml(euro(quoteVat))}</td></tr><tr class="grand"><td>TOTALE COMPLESSIVO</td><td>${escapeHtml(euro(quoteNet + quoteVat))}</td></tr></tbody></table>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(quote.estimatedDuration)}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi di calcolo", quote.assumptions)}${wordList("Informazioni da confermare", quote.missingInformation)}${quote.notes || quote.paymentTerms ? `<h2>Note e condizioni</h2><p>${quote.paymentTerms ? `<b>Pagamento:</b> ${escapeHtml(quote.paymentTerms)}<br>` : ""}${escapeHtml(quote.notes || "")}</p>` : ""}`
+      : `<h2>Sintesi</h2><p>${escapeHtml(report.executiveSummary || artifact.summary || "")}</p>${common}${wordList("Osservazioni", report.observations)}${wordList("Cause probabili", report.probableCauses)}${evidenceRows ? `<h2>Riscontro tra prove e valutazione</h2><table><thead><tr><th>Riferimento</th><th>Osservazione</th><th>Valutazione</th><th>Verifica</th></tr></thead><tbody>${evidenceRows}</tbody></table>` : ""}${wordList("Verifiche consigliate", report.recommendedVerifications)}${wordList("Interventi consigliati", report.recommendedWorks)}${wordList("Sicurezza", report.safetyNotes)}${wordList("Limiti dell’analisi", report.limitations)}<h2>Conclusioni</h2><p>${escapeHtml(report.conclusions || "")}</p>${wordList("Informazioni da confermare", report.missingInformation)}`;
+    const documentLabel = documentTypeLabel(artifact);
+    const metaRows = [["Destinatario", artifact.client || "Da assegnare"], ["Ubicazione intervento", artifact.address || "Da confermare"], ["Oggetto", artifact.subject || artifact.title || documentLabel], ["Data emissione", new Date().toLocaleDateString("it-IT")], ...(artifact.kind === "quote" ? [["IVA applicata", `${Number(quote.vatRate || 0)}%`], ["Validità", `${Number(quote.validityDays || 30)} giorni`]] : [["Priorità", report.interventionPriority || "Da definire"]])];
+    const meta = `<table class="meta"><tbody>${metaRows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("")}</tbody></table>`;
+    const callout = artifact.revisionReason || "BOZZA PROFESSIONALE DA VERIFICARE PRIMA DELL’INVIO, DELLA FIRMA O DELL’ESECUZIONE";
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:A4;margin:16mm 14mm 19mm}body{font-family:Arial,sans-serif;line-height:1.42;color:#232323;font-size:10pt;margin:0}.header{width:100%;border:0;margin:0}.header td{border:0;padding:0}.header .logo{width:205px}.company{text-align:right;font-size:8.5pt;line-height:1.35}.company b{font-size:9pt}.yellowbar{height:13px;background:#ffd800;margin-top:10px}.blackbar{height:20px;background:#232323;color:#fff;font-weight:bold;padding:4px 10px;box-sizing:border-box}.docTitle{text-align:center;font-size:18pt;margin:15px 0 3px}.subtitle{text-align:center;color:#6c6c6c;margin:0 0 14px}.meta{margin-bottom:12px}.meta th{width:28%;background:#f2f3f5;color:#232323}.callout{background:#ffd800;padding:11px 13px;font-weight:bold;margin:13px 0 16px}h2{font-size:11.5pt;text-transform:uppercase;color:#232323;margin:17px 0 6px;page-break-after:avoid}h3{font-size:10.5pt;margin:12px 0 4px}p{margin:5px 0 9px}ul{margin:5px 0 9px;padding-left:20px}li{margin-bottom:3px}table{width:100%;border-collapse:collapse;page-break-inside:auto}thead{display:table-header-group}tr{page-break-inside:avoid}th,td{border:1px solid #d4d6d8;padding:6px;text-align:left;vertical-align:top}thead th{background:#232323;color:#fff;font-size:8.5pt}.num{text-align:right;white-space:nowrap}.center{text-align:center}.totals{width:48%;margin:10px 0 14px auto}.totals td:first-child{font-weight:bold}.totals td:last-child{text-align:right;font-weight:bold}.totals .grand td{background:#ffd800;color:#232323;font-size:11pt}.signatures{width:100%;margin-top:28px;border:0;page-break-inside:avoid}.signatures td{border:0;width:50%;padding:8px 18px 28px 0}.signatureLine{border-bottom:1px solid #555;height:28px}.footer{margin-top:24px;border-top:1px solid #bbb;padding-top:7px;font-size:7.5pt;color:#555;display:flex;justify-content:space-between}small{color:#666}</style></head><body><table class="header"><tr><td><img class="logo" src="${escapeHtml(logo)}" alt="EDILKAPPA"></td><td class="company"><b>${escapeHtml(company.legalName)}</b><br>${escapeHtml(company.activity)}<br>${escapeHtml(company.email)} | ${escapeHtml(company.phone)}</td></tr></table><div class="yellowbar"></div><div class="blackbar">${escapeHtml(documentLabel)}</div><h1 class="docTitle">${escapeHtml(documentLabel)}</h1><p class="subtitle">${escapeHtml(artifact.documentSubtitle || artifact.title || artifact.subject || "Documento EdilKappa")}</p>${meta}<div class="callout">${escapeHtml(callout)}</div>${body}<table class="signatures"><tr><td><b>Per il Committente</b><div class="signatureLine"></div>Data, timbro e firma</td><td><b>Per EdilKappa</b><div class="signatureLine"></div>Timbro e firma</td></tr></table><div class="footer"><span>EdilKappa S.A.S. - ${escapeHtml(company.address)} - P. IVA ${escapeHtml(company.vat)}</span><span>${escapeHtml(documentLabel)}</span></div></body></html>`;
     const blob = new Blob(["\ufeff", html], { type: "application/msword;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1053,9 +1356,40 @@
       setTimeout(() => window.openBusinessDocument?.(saved.id), 100);
     }
   };
-  window.edilkappaAiDownloadWord = (messageIndex) => {
+  window.edilkappaAiDownloadPdf = async (messageIndex) => {
+    const message = artifactMessage(messageIndex);
+    const artifact = message?.artifact;
+    if (!["quote", "report"].includes(artifact?.kind)) return;
+    state.progress = "Genero il PDF con il modello ufficiale EdilKappa…";
+    state.error = "";
+    rerender();
+    try {
+      const database = window.EdilKappaLocal?.getDB?.() || {};
+      const client = (database.condomini || []).find((item) => item.id === artifact.clientId || item.name === artifact.client) || { name: artifact.client || "Da assegnare", address: artifact.address || "" };
+      const destination = { client, interventionId: artifact.interventionId || "", title: artifact.subject || artifact.title || documentTypeLabel(artifact) };
+      const blob = await artifactPdfBlob(artifact, destination, await previewsForReport(message));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeName(artifact.title || artifact.subject, artifact.kind === "quote" ? "Preventivo" : "Relazione-tecnica")}.pdf`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      state.error = error?.message || "Non riesco a generare il PDF.";
+    } finally {
+      state.progress = "";
+      rerender();
+    }
+  };
+  window.edilkappaAiDownloadWord = async (messageIndex) => {
     const artifact = artifactMessage(messageIndex)?.artifact;
-    if (["quote", "report"].includes(artifact?.kind)) downloadArtifactWord(artifact);
+    if (!["quote", "report"].includes(artifact?.kind)) return;
+    try {
+      await downloadArtifactWord(artifact);
+    } catch (error) {
+      state.error = error?.message || "Non riesco a generare il documento Word.";
+      rerender();
+    }
   };
   window.edilkappaAiReset = async () => {
     if (state.resetting || !confirm(`Cancellare tutta la memoria ${state.mode === "work" ? "di lavoro" : "personale"} di EdilKappa AI?`)) return;

@@ -191,7 +191,7 @@ async function callOpenAI({ instructions, input, useWeb, modelChoice, safetyId }
         schema: AI_RESPONSE_SCHEMA
       }
     },
-    max_output_tokens: 12000,
+    max_output_tokens: modelChoice.maxOutputTokens || 12000,
     store: false,
     safety_identifier: safetyId
   };

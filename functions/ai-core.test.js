@@ -54,9 +54,19 @@ test("routes complex construction work to GPT-5.6 Sol and simple chat to Terra",
   const simple = chooseModel({ requestedModelMode: "auto", mode: "work", taskType: "auto", message: "Ciao" });
   const forced = chooseModel({ requestedModelMode: "sol", mode: "personal", message: "Aiutami" });
   assert.equal(quote.model, "gpt-5.6-sol");
-  assert.equal(quote.reasoningEffort, "high");
+  assert.equal(quote.reasoningEffort, "xhigh");
+  assert.equal(quote.maxOutputTokens, 18000);
   assert.equal(simple.model, "gpt-5.6-terra");
   assert.equal(forced.model, "gpt-5.6-sol");
+});
+
+test("applies the EdilKappa method without requesting hidden chain of thought", () => {
+  const instructions = buildInstructions({ mode: "work", displayName: "Klodian", taskType: "quote", businessContext: { memoriaPrezziValidati: [] } });
+  assert.match(instructions, /METODO EDILKAPPA/);
+  assert.match(instructions, /evidenze fornite/);
+  assert.match(instructions, /costi diretti, costi generali, rischio e margine/);
+  assert.match(instructions, /Non mostrare ragionamenti interni o catene di pensiero/);
+  assert.match(instructions, /relazioni assicurative/);
 });
 
 test("replays the previous structured quote when the user asks for a cheaper revision", () => {
@@ -104,7 +114,9 @@ test("extracts and normalizes a structured quote", () => {
     answer: "Ho preparato la bozza.",
     artifact: {
       kind: "quote",
+      documentType: "preventivo",
       title: "Ripristino copertura",
+      documentSubtitle: "Copertura edificio A",
       client: "Condominio Alfa",
       clientId: "c-1",
       interventionId: "i-1",
@@ -112,6 +124,10 @@ test("extracts and normalizes a structured quote", () => {
       subject: "Ripristino copertura",
       summary: "Bozza da verificare",
       currency: "EUR",
+      evidence: ["Foto 1: distacco visibile"],
+      uncertainties: ["Misura da verificare"],
+      decisionRationale: "Soluzione proporzionata al difetto osservato.",
+      recommendedSolution: "Ripristino localizzato.",
       quote: {
         lines: [{ description: "Manodopera", quantity: 8, unit: "h", unitPrice: 45, priceSource: "tariffario", priceReference: "MAN-01", confidence: "alta", notes: "" }],
         discountPct: 0,
@@ -119,6 +135,7 @@ test("extracts and normalizes a structured quote", () => {
         validityDays: 30,
         paymentTerms: "30% acconto",
         notes: "",
+        pricingAnalysis: { laborCost: 200, materialCost: 60, equipmentCost: 0, transportAndDisposalCost: 20, subcontractCost: 0, overheadAndRiskCost: 40, contingencyCost: 20, estimatedDirectCost: 340, targetMarginPct: 25, proposedNetPrice: 425, rationale: ["Otto ore di manodopera"], verificationChecks: ["Confermare la misura"] },
         assumptions: [],
         missingInformation: [],
         readyToSave: true
@@ -127,6 +144,9 @@ test("extracts and normalizes a structured quote", () => {
         executiveSummary: "",
         observations: [],
         probableCauses: [],
+        evidenceFindings: [],
+        recommendedVerifications: [],
+        interventionPriority: "media",
         recommendedWorks: [],
         safetyNotes: [],
         limitations: [],
@@ -140,6 +160,9 @@ test("extracts and normalizes a structured quote", () => {
   assert.equal(result.artifact.kind, "quote");
   assert.equal(result.artifact.quote.lines[0].unitPrice, 45);
   assert.equal(result.artifact.quote.lines[0].priceSource, "tariffario");
+  assert.equal(result.artifact.documentType, "preventivo");
+  assert.equal(result.artifact.quote.pricingAnalysis.laborCost, 200);
+  assert.deepEqual(result.artifact.evidence, ["Foto 1: distacco visibile"]);
 });
 
 test("accepts only archived media belonging to the authenticated user", () => {
@@ -156,7 +179,11 @@ test("structured response schema requires safe complete objects", () => {
   assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("quote"));
   assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("report"));
   assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("visualBriefs"));
+  assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("evidence"));
+  assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.required.includes("decisionRationale"));
   assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.properties.quote.required.includes("options"));
+  assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.properties.quote.required.includes("pricingAnalysis"));
+  assert.ok(AI_RESPONSE_SCHEMA.properties.artifact.properties.report.required.includes("evidenceFindings"));
 });
 
 test("rejects unsupported attachments", () => {
