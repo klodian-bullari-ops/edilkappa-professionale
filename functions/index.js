@@ -618,25 +618,31 @@ exports.edilkappaAi = onCall({
     }
     const conversationSnapshot = await ref.get();
     const history = Array.isArray(conversationSnapshot.data()?.messages) ? conversationSnapshot.data().messages : [];
+    const previousArtifactMessage = [...history].reverse().find((item) => normalizeArtifact(item?.artifact));
     if (result.artifact) {
-      const previousMessage = [...history].reverse().find((item) => normalizeArtifact(item?.artifact));
+      const previousMessage = previousArtifactMessage;
       if (previousMessage && isRevisionRequest(job.message)) {
         result.artifact.revisionOf ||= cleanText(previousMessage.artifact?.id || previousMessage.artifact?.title, 300);
         result.artifact.revisionReason ||= cleanText(job.message, 1200);
       }
       result.artifact.id = `ai-${randomUUID()}`;
     }
+    const inheritedMedia = isRevisionRequest(job.message) && Array.isArray(previousArtifactMessage?.media) ? previousArtifactMessage.media : [];
+    const resultMedia = [...inheritedMedia, ...(job.mediaReferences || [])].filter((item, index, values) => {
+      const key = item?.storagePath || `${item?.fileName || ""}:${item?.fileSize || 0}`;
+      return key && values.findIndex((candidate) => (candidate?.storagePath || `${candidate?.fileName || ""}:${candidate?.fileSize || 0}`) === key) === index;
+    }).slice(0, 10);
     const userMessage = { role: "user", text: job.userText, media: job.mediaReferences || [], at: Number(job.createdAtMs || Date.now()) };
     const assistantMessage = {
       role: "assistant", text: result.answer, sources: result.sources, artifact: result.artifact,
-      media: job.mediaReferences || [], model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
+      media: resultMedia, model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
       reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, at: Date.now()
     };
     const messages = history.concat([userMessage, assistantMessage]).slice(-30);
     await ref.set({ uid: account.uid, orgId: ORG_ID, mode, messages, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const completedResult = {
       mode, answer: result.answer, sources: result.sources, artifact: result.artifact,
-      media: job.mediaReferences || [], model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
+      media: resultMedia, model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
       reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, usage: openAiResponse.usage || null
     };
     await jobReference.set({ status: "completed", stage: "completed", result: completedResult, updatedAt: FieldValue.serverTimestamp() }, { merge: true });

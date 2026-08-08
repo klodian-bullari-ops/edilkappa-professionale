@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v50-ai-quality-memory`;
+const CACHE = `${CACHE_PREFIX}v51-ai-quote-release-gate`;
 const APP_SHELL = [
   "./",
   "./index.html",
