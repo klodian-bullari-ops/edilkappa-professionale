@@ -74,6 +74,14 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /edilkappaAiRetry/);
   assert.match(source, /standardDocumentaleApprovato/);
   assert.match(source, /Controllo qualità/);
+  assert.match(source, /function quoteReleaseCheck/);
+  assert.match(source, /Preventivo bloccato/);
+  assert.match(source, /prezzo unitario mancante o pari a zero/);
+  assert.match(source, /inferiore al costo complessivo stimato/);
+  assert.match(source, /normalizedReference\.includes/);
+  assert.match(source, /screenshot\|schermata\|preventiv\|tabella/);
+  assert.match(source, /setFont\("helvetica"/);
+  assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
 test("keeps EdilKappa AI available after professional extensions replace render", () => {
