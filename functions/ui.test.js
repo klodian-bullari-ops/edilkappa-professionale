@@ -20,6 +20,7 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiSend, "function");
   assert.equal(typeof global.window.edilkappaAiReset, "function");
   assert.equal(typeof global.window.edilkappaAiSaveArtifact, "function");
+  assert.equal(typeof global.window.edilkappaAiDownloadPdf, "function");
   assert.equal(typeof global.window.edilkappaAiDownloadWord, "function");
   assert.equal(typeof global.window.edilkappaAiGenerateVisual, "function");
   assert.equal(typeof global.window.edilkappaAiSetModel, "function");
@@ -36,6 +37,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /Salva e modifica preventivo/);
   assert.match(source, /Salva relazione PDF/);
   assert.match(source, /Scarica Word/);
+  assert.match(source, /Scarica PDF EdilKappa/);
   assert.match(source, /priceItem\.salePrice/);
   assert.match(source, /priceSource:\s*"da_definire"/);
   assert.match(source, /archiveWarnings/);
@@ -43,6 +45,14 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /generate_visual/);
   assert.match(source, /visualBriefs/);
   assert.match(source, /quote\.options/);
+  assert.match(source, /memoriaPrezziValidati/);
+  assert.match(source, /Controllo economico interno · non esportato al cliente/);
+  assert.match(source, /EDILKAPPA S\.A\.S\. DI BULLARI KLODIAN & C\./);
+  assert.match(source, /Lavori di completamento e finitura degli edifici/);
+  assert.match(source, /Via Sant’Ambrogio 38, 20055 Vimodrone \(MI\)/);
+  assert.match(source, /PREVENTIVO DI VARIANTE/);
+  assert.match(source, /ALLEGATO FOTOGRAFICO/);
+  assert.match(source, /TOTALE COMPLESSIVO/);
   const cloudSource = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   assert.match(cloudSource, /'text\/plain'/);
 });

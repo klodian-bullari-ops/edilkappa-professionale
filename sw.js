@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v46-ai-sol-agente-preventivi-visuali`;
+const CACHE = `${CACHE_PREFIX}v47-ai-metodo-edilkappa-documenti`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -27,6 +27,7 @@ const APP_SHELL = [
   "./public-request.js",
   "./assets/icona-edilkappa.svg",
   "./assets/logo-edilkappa.svg",
+  "./linea-vita/assets/logo-edilkappa-pdf.jpg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png"
