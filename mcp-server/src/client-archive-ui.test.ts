@@ -29,6 +29,12 @@ test('preventivi, documenti, foto e video si possono aggiungere dalla scheda int
   assert.ok(archiveUi.includes('Cronologia intervento'));
 });
 
+test('un intervento vuoto si può eliminare senza cancellare dati collegati', () => {
+  assert.ok(archiveUi.includes('window.deleteIntervention'));
+  assert.ok(archiveUi.includes('Elimina intervento'));
+  assert.ok(archiveUi.includes('non può essere eliminato perché contiene'));
+});
+
 test('gli interventi vengono sincronizzati come cartelle nell’archivio documenti protetto', () => {
   assert.ok(indexHtml.includes('interventions:[]'));
   assert.ok(firebaseCloud.includes("remoteName === 'documents'"));
