@@ -30,6 +30,7 @@ test("registers the EdilKappa AI browser interface", () => {
 
 test("supports construction photos, video workflows and managed artifacts", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   assert.match(source, /video\/mp4/);
   assert.match(source, /extractVideoFrames/);
   assert.match(source, /uploadMedia/);
@@ -88,6 +89,9 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /const EDILKAPPA_PDF_FONT = "DejaVuSans"/);
   assert.match(source, /loadDocumentFonts\(doc\)/);
   assert.match(source, /DejaVuSans-EdilKappa\.ttf/);
+  assert.match(source, /window\.heic2any/);
+  assert.match(source, /toType: "image\/jpeg"/);
+  assert.match(html, /heic2any@0\.0\.4\/dist\/heic2any\.min\.js/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
