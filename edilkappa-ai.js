@@ -25,6 +25,9 @@
     mode: "work",
     messages: { work: [], personal: [] },
     loaded: { work: false, personal: false },
+    conversations: { work: [], personal: [] },
+    conversationsLoaded: { work: false, personal: false },
+    activeConversation: { work: "legacy", personal: "legacy" },
     loading: false,
     sending: false,
     resetting: false,
@@ -52,8 +55,9 @@
     .ekAiTyping{display:inline-flex;gap:5px}.ekAiTyping i{width:7px;height:7px;background:#668078;border-radius:50%;animation:ekAiPulse 1.1s infinite}.ekAiTyping i:nth-child(2){animation-delay:.15s}.ekAiTyping i:nth-child(3){animation-delay:.3s}@keyframes ekAiPulse{0%,70%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}
     .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiMethod{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-top:13px}.ekAiMethod>div{border:1px solid #dce4df;border-radius:11px;padding:10px;background:#fff}.ekAiMethod b{display:block;color:#284c3d;margin-bottom:5px}.ekAiPricingCheck{margin-top:13px;border:1px solid #d8b600;background:#fffbee;border-radius:12px;padding:11px}.ekAiPricingGrid{display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin-top:8px;font-size:12px}.ekAiPricingGrid b{text-align:right}.ekAiEvidenceTable{min-width:720px}.ekAiPriority{display:inline-flex;padding:4px 8px;border-radius:999px;background:#fff2c7;color:#775a00;font-size:11px;font-weight:850}.ekAiOption{border:1px solid #d8e3dc;border-radius:11px;padding:10px;margin-top:8px}.ekAiOption.recommended{border-color:#d8b600;background:#fffbee}.ekAiOptionHead{display:flex;justify-content:space-between;gap:10px}.ekAiVisualBrief{border-left:4px solid #f4c400;background:#f8faf8;padding:9px 10px;margin-top:7px}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.visual{background:#f4c400;color:#173d2e}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}.ekAiArtifactActions button:disabled{opacity:.55;cursor:wait}
     .ekAiQuick{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.ekAiQuick button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}.ekAiQuick button:hover{border-color:#6da482}
+    .ekAiWorkspace{display:grid;grid-template-columns:235px minmax(0,1fr);gap:13px}.ekAiThreads{border:1px solid #dce7e0;border-radius:18px;background:#fff;padding:10px;min-height:440px;max-height:60vh;overflow:auto}.ekAiNewThread{width:100%;border:0;border-radius:11px;background:#f4c400;color:#173d2e;padding:11px;font-weight:900;cursor:pointer;margin-bottom:9px}.ekAiThread{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center;border-radius:11px;padding:9px 7px;color:#315345}.ekAiThread.active{background:#eaf3ee;color:#173d2e}.ekAiThreadMain{border:0;background:transparent;text-align:left;min-width:0;cursor:pointer;color:inherit}.ekAiThreadMain b,.ekAiThreadMain small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ekAiThreadMain small{font-size:10px;color:#75867e;margin-top:3px}.ekAiThreadMenu{border:0;background:transparent;cursor:pointer;font-size:17px}.ekAiMain{min-width:0}.ekAiHoursButton{border:1px solid #d6e2da;background:#fff;border-radius:11px;padding:9px 12px;color:#173d2e;font-weight:850;cursor:pointer}
     .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:6px;background:#edf4ef;color:#355246;border-radius:9px;padding:7px 9px;font-size:12px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:12px;font-size:13px}.ekAiSteps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:9px}.ekAiStep{padding:7px 5px;border-radius:8px;background:#dce9e1;color:#61736a;text-align:center;font-size:10px;font-weight:800}.ekAiStep.done{background:#bfe3ca;color:#175c35}.ekAiStep.active{background:#f4c400;color:#292300}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiRetry{margin-left:9px;border:1px solid #c65d57;background:#fff;color:#8f2929;border-radius:8px;padding:6px 9px;font-weight:800}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
-    @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
+    @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiWorkspace{grid-template-columns:1fr}.ekAiThreads{min-height:0;max-height:170px}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
   `;
   document.head.appendChild(css);
 
@@ -375,22 +379,29 @@
     return `<div class="ekAiWorkflow">${buttons.map(([task, label]) => `<button class="${state.taskType === task ? "active" : ""}" onclick="edilkappaAiSetTask('${task}')">${label}</button>`).join("")}<small>Modalità: ${taskLabel(state.taskType)}</small>${modelSelectHtml()}</div>`;
   }
 
+  function threadsHtml() {
+    const rows = state.conversations[state.mode] || [];
+    const active = state.activeConversation[state.mode];
+    return `<aside class="ekAiThreads"><button class="ekAiNewThread" onclick="edilkappaAiNewConversation()">＋ Nuova chat</button>${rows.map((item) => `<div class="ekAiThread ${item.id === active ? "active" : ""}"><button class="ekAiThreadMain" onclick="edilkappaAiSelectConversation('${escapeHtml(item.id)}')"><b>${escapeHtml(item.title || "Nuova conversazione")}</b><small>${Number(item.messageCount || 0)} messaggi</small></button><button class="ekAiThreadMenu" onclick="edilkappaAiConversationMenu('${escapeHtml(item.id)}')" title="Rinomina o elimina">⋯</button></div>`).join("") || `<div class="ekAiEmpty" style="padding:18px 5px">Nessuna chat salvata.</div>`}</aside>`;
+  }
+
   function view() {
     if (state.mode === "personal" && !isOwner()) state.mode = "work";
     const messages = currentMessages();
-    if (!state.loaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadHistory, 0);
-    if (state.pendingJob?.jobId && state.pendingJob.mode === state.mode && !state.sending) setTimeout(() => window.edilkappaAiResumePending?.(), 0);
+    if (!state.conversationsLoaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadConversations, 0);
+    else if (!state.loaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadHistory, 0);
+    if (state.pendingJob?.jobId && state.pendingJob.mode === state.mode && state.pendingJob.conversationId === state.activeConversation[state.mode] && !state.sending) setTimeout(() => window.edilkappaAiResumePending?.(), 0);
     const modeLabel = state.mode === "work" ? "Lavoro" : "Personale";
     return `<div class="ekAiPage">
       <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>GPT‑5.6 Sol applica il Metodo EdilKappa: analizza prove e incertezze, confronta soluzioni, compone i prezzi e genera preventivi o relazioni nel modello aziendale.</p></div><div class="ekAiHeroMark">✦</div></section>
       <div class="ekAiToolbar"><div class="ekAiModes"><button class="${state.mode === "work" ? "active" : ""}" onclick="edilkappaAiSetMode('work')">🏗️ Lavoro</button>${isOwner() ? `<button class="${state.mode === "personal" ? "active" : ""}" onclick="edilkappaAiSetMode('personal')">👤 Personale</button>` : ""}</div><div class="ekAiStatus"><i class="ekAiDot"></i> Protetta dal login EdilKappa · ${modeLabel}</div></div>
       ${workflowHtml()}
-      <div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la memoria ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
-      <div class="ekAiQuick">${quickPrompts().map((item, index) => `<button onclick="edilkappaAiUsePrompt(${index})">${escapeHtml(item.label)}</button>`).join("")}</div>
+      <div class="ekAiWorkspace">${threadsHtml()}<div class="ekAiMain"><div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la chat ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
+      <div class="ekAiQuick">${quickPrompts().map((item, index) => `<button onclick="edilkappaAiUsePrompt(${index})">${escapeHtml(item.label)}</button>`).join("")}${state.mode === "work" ? `<button class="ekAiHoursButton" onclick="openOfficeHoursEntry()">⏱️ Registra ore operaio</button>` : ""}</div>
       ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}${progressStepsHtml(state.pendingJob?.stage || "archive")}</div>` : ""}
       ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}${state.retryAvailable ? `<button class="ekAiRetry" onclick="edilkappaAiRetry()">Riprova</button>` : ""}</div>` : ""}
       <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button></div></div>
-      <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Cancella questa memoria</button></div>
+      <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Svuota questa chat</button></div></div></div>
     </div>`;
   }
 
@@ -402,6 +413,26 @@
   function scrollToBottom() {
     const chat = document.getElementById("ekAiChat");
     if (chat) chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function loadConversations() {
+    if (state.loading || state.conversationsLoaded[state.mode]) return;
+    if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.aiRequest) return loadHistory();
+    const requestedMode = state.mode;
+    state.loading = true;
+    try {
+      const result = await window.EdilKappaCloud.aiRequest({ action: "list_conversations", mode: requestedMode });
+      state.conversations[requestedMode] = Array.isArray(result.conversations) ? result.conversations : [];
+      state.conversationsLoaded[requestedMode] = true;
+      if (!state.conversations[requestedMode].some((item) => item.id === state.activeConversation[requestedMode])) {
+        state.activeConversation[requestedMode] = state.conversations[requestedMode][0]?.id || "legacy";
+      }
+    } catch (error) {
+      state.error = error?.message || "Non riesco a caricare l’elenco delle chat.";
+    } finally {
+      state.loading = false;
+      rerender();
+    }
   }
 
   async function loadHistory() {
@@ -420,7 +451,7 @@
     state.error = "";
     rerender();
     try {
-      const result = await window.EdilKappaCloud.aiRequest({ action: "history", mode: requestedMode });
+      const result = await window.EdilKappaCloud.aiRequest({ action: "history", mode: requestedMode, conversationId: state.activeConversation[requestedMode] });
       state.messages[requestedMode] = Array.isArray(result.messages) ? result.messages : [];
       state.loaded[requestedMode] = true;
       state.nextHistoryAttempt = 0;
@@ -1359,6 +1390,7 @@
       const result = await window.EdilKappaCloud.aiRequest({
         action: "generate_visual",
         mode: "work",
+        conversationId: state.activeConversation.work,
         artifactId: artifact.id,
         briefIndex,
         referenceImages
@@ -1400,12 +1432,13 @@
     state.sending = true;
     state.retryAvailable = false;
     while (state.pendingJob?.jobId === pending.jobId) {
-      const status = await window.EdilKappaCloud.aiRequest({ action: "job_status", mode: pending.mode, jobId: pending.jobId });
+      const status = await window.EdilKappaCloud.aiRequest({ action: "job_status", mode: pending.mode, conversationId: pending.conversationId, jobId: pending.jobId });
       if (status.status === "completed") {
         state.pendingJob.stage = "completed";
         state.progress = stageLabel("completed");
         rerender();
         addCompletedAiResult(status.result, pending.mode, mediaReferences, requestAttachments);
+        state.conversationsLoaded[pending.mode] = false;
         rememberPendingJob(null);
         state.attachments = [];
         state.draft = "";
@@ -1492,6 +1525,7 @@
       const result = await window.EdilKappaCloud.aiRequest({
         action: "ask",
         mode: requestedMode,
+        conversationId: state.activeConversation[requestedMode],
         taskType: requestedMode === "work" ? state.taskType : "auto",
         modelMode: state.modelMode,
         message,
@@ -1501,7 +1535,7 @@
         businessContext: requestedMode === "work" ? businessContext(message) : null
       });
       if (!result.jobId) throw new Error("EdilKappa AI non ha restituito l’identificativo della generazione.");
-      rememberPendingJob({ jobId: result.jobId, mode: requestedMode, stage: result.stage || "analysis", message, startedAt: Date.now() });
+      rememberPendingJob({ jobId: result.jobId, mode: requestedMode, conversationId: state.activeConversation[requestedMode], stage: result.stage || "analysis", message, startedAt: Date.now() });
       state.progress = stageLabel(state.pendingJob.stage);
       rerender();
       await pollPendingJob(requestAttachments, mediaReferences);
@@ -1595,12 +1629,58 @@
       rerender();
     }
   };
+  window.edilkappaAiNewConversation = async () => {
+    if (state.sending || !window.EdilKappaCloud?.aiRequest) return;
+    try {
+      const result = await window.EdilKappaCloud.aiRequest({ action: "new_conversation", mode: state.mode });
+      if (!result.conversation?.id) throw new Error("Non riesco a creare la nuova chat.");
+      state.conversations[state.mode].unshift(result.conversation);
+      state.activeConversation[state.mode] = result.conversation.id;
+      state.messages[state.mode] = [];
+      state.loaded[state.mode] = true;
+      state.draft = "";
+      state.attachments = [];
+      rerender();
+    } catch (error) { state.error = error?.message || "Non riesco a creare la nuova chat."; rerender(); }
+  };
+  window.edilkappaAiSelectConversation = (id) => {
+    if (state.sending || !id || id === state.activeConversation[state.mode]) return;
+    state.activeConversation[state.mode] = id;
+    state.messages[state.mode] = [];
+    state.loaded[state.mode] = false;
+    state.draft = "";
+    state.attachments = [];
+    rerender();
+  };
+  window.edilkappaAiConversationMenu = async (id) => {
+    if (state.sending) return;
+    const item = state.conversations[state.mode].find((row) => row.id === id);
+    if (!item) return;
+    const title = prompt("Rinomina la chat. Lascia vuoto e premi OK per eliminarla.", item.title || "Nuova conversazione");
+    if (title === null) return;
+    try {
+      if (!title.trim()) {
+        if (!confirm("Eliminare definitivamente questa chat?")) return;
+        await window.EdilKappaCloud.aiRequest({ action: "delete_conversation", mode: state.mode, conversationId: id });
+        state.conversations[state.mode] = state.conversations[state.mode].filter((row) => row.id !== id);
+        if (state.activeConversation[state.mode] === id) {
+          state.activeConversation[state.mode] = state.conversations[state.mode][0]?.id || "legacy";
+          state.messages[state.mode] = [];
+          state.loaded[state.mode] = false;
+        }
+      } else {
+        await window.EdilKappaCloud.aiRequest({ action: "rename_conversation", mode: state.mode, conversationId: id, title: title.trim() });
+        item.title = title.trim();
+      }
+      rerender();
+    } catch (error) { state.error = error?.message || "Non riesco a modificare la chat."; rerender(); }
+  };
   window.edilkappaAiReset = async () => {
-    if (state.resetting || !confirm(`Cancellare tutta la memoria ${state.mode === "work" ? "di lavoro" : "personale"} di EdilKappa AI?`)) return;
+    if (state.resetting || !confirm("Svuotare tutti i messaggi di questa chat?")) return;
     state.resetting = true;
     state.error = "";
     try {
-      await window.EdilKappaCloud.aiRequest({ action: "reset", mode: state.mode });
+      await window.EdilKappaCloud.aiRequest({ action: "reset", mode: state.mode, conversationId: state.activeConversation[state.mode] });
       state.messages[state.mode] = [];
       state.loaded[state.mode] = true;
     } catch (error) {

@@ -108,5 +108,5 @@ test('Excel e CSV sono ammessi nell’archivio cloud', () => {
 });
 
 test('la cache viene aggiornata per consegnare la nuova condivisione ai telefoni', () => {
-  assert.ok(serviceWorker.includes('v51-ai-quote-release-gate'));
+  assert.ok(serviceWorker.includes('v52-ai-conversations-hours'));
 });
