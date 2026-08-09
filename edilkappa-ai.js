@@ -1076,7 +1076,7 @@
   }
 
   function pdfSignatureBlock(doc, context, y) {
-    y = ensureDocumentSpace(doc, context, y, 29);
+    y = ensureDocumentSpace(doc, context, y, 26);
     doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(9.2);
     doc.text("ACCETTAZIONE E FIRME", 14, y);
@@ -1130,6 +1130,10 @@
         }
       });
     }
+    return {
+      count: usable.length,
+      signatureY: usable.length % 2 === 1 ? 170 : 0
+    };
   }
 
   async function artifactPdfBlob(rawArtifact, destination, previews) {
@@ -1257,8 +1261,13 @@
       y = pdfTextSection(doc, context, "Conclusioni", report.conclusions, y);
       y = pdfListSection(doc, context, "Informazioni da confermare", report.missingInformation, y);
     }
-    pdfSignatureBlock(doc, context, y + 3);
-    addPhotoAppendix(doc, context, previews, artifact);
+    const signatureY = y + 3;
+    const deferredSignature = signatureY + 26 > 274;
+    if (!deferredSignature) pdfSignatureBlock(doc, context, signatureY);
+    const appendix = addPhotoAppendix(doc, context, previews, artifact);
+    if (deferredSignature) {
+      pdfSignatureBlock(doc, context, appendix.signatureY || signatureY);
+    }
     const pages = doc.getNumberOfPages();
     for (let page = 1; page <= pages; page += 1) {
       doc.setPage(page);
@@ -1285,7 +1294,7 @@
   }
 
   async function cloudPhotoReference(item) {
-    if (!/^image\/(heic|heif)$/i.test(item?.fileType || "") || item.previewStoragePath) return item;
+    if (!/^image\/(heic|heif)$/i.test(item?.fileType || "")) return { reference: item, dataUrl: "" };
     if (!window.EdilKappaCloud?.aiRequest) throw new Error("Il convertitore fotografico cloud non è disponibile.");
     const result = await window.EdilKappaCloud.aiRequest({
       action: "prepare_photo_preview",
@@ -1295,18 +1304,30 @@
     });
     if (!result?.preview?.previewStoragePath) throw new Error("La fotografia convertita non è disponibile.");
     Object.assign(item, result.preview);
-    return item;
+    return { reference: item, dataUrl: String(result.previewDataUrl || "") };
   }
 
   async function pdfPreviewFromCloud(item) {
-    const reference = await cloudPhotoReference(item);
-    const storagePath = reference.previewStoragePath || reference.storagePath;
-    const url = await window.EdilKappaCloud?.getDocumentUrl?.(storagePath);
-    if (!url) throw new Error("Collegamento della fotografia non disponibile.");
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Fotografia non scaricabile dall’archivio.");
-    const blob = await response.blob();
-    const fileType = String(reference.previewFileType || blob.type || reference.fileType || "").toLowerCase();
+    const cloudPreview = await cloudPhotoReference(item);
+    const reference = cloudPreview.reference;
+    let blob;
+    let fileType;
+    if (cloudPreview.dataUrl) {
+      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/i.test(cloudPreview.dataUrl)) {
+        throw new Error("La conversione fotografica restituita non è valida.");
+      }
+      const response = await fetch(cloudPreview.dataUrl);
+      blob = await response.blob();
+      fileType = "image/jpeg";
+    } else {
+      const storagePath = reference.previewStoragePath || reference.storagePath;
+      const url = await window.EdilKappaCloud?.getDocumentUrl?.(storagePath);
+      if (!url) throw new Error("Collegamento della fotografia non disponibile.");
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Fotografia non scaricabile dall’archivio.");
+      blob = await response.blob();
+      fileType = String(reference.previewFileType || blob.type || reference.fileType || "").toLowerCase();
+    }
     if (!/^image\/(jpeg|png|webp|gif)$/i.test(fileType)) throw new Error("Formato dell’anteprima fotografica non valido.");
     const prepared = await compressedImage(new File([blob], reference.previewFileName || reference.fileName || "foto.jpg", { type: fileType }));
     return {
@@ -1343,15 +1364,18 @@
         previews.push(preview);
         if (key) seen.add(key);
       } catch (error) {
-        if (!item.generated) failedOriginals.push(item.fileName || "fotografia");
+        if (!item.generated) failedOriginals.push({ name: item.fileName || "fotografia", reason: error?.message || "Conversione non disponibile." });
         console.warn("Anteprima fotografica non disponibile", { fileName: item.fileName, message: error?.message });
       }
     }
     localHeic.forEach((item) => {
-      if (!seen.has(photoPreviewKey(item))) failedOriginals.push(item.sourceName || item.name || "fotografia HEIC");
+      if (!seen.has(photoPreviewKey(item))) failedOriginals.push({ name: item.sourceName || item.name || "fotografia HEIC", reason: "L’originale non risulta archiviato nel cloud." });
     });
     if (failedOriginals.length) {
-      throw new Error(`Non riesco a inserire nel PDF: ${Array.from(new Set(failedOriginals)).join(", ")}. Riprova il caricamento prima di scaricare il documento.`);
+      const names = Array.from(new Set(failedOriginals.map((item) => item.name)));
+      const shownNames = names.slice(0, 3).join(", ") + (names.length > 3 ? ` e altre ${names.length - 3}` : "");
+      const reason = Array.from(new Set(failedOriginals.map((item) => item.reason))).slice(0, 2).join(" ");
+      throw new Error(`Non riesco a inserire nel PDF ${failedOriginals.length === 1 ? "la fotografia" : `${failedOriginals.length} fotografie`}: ${shownNames}. ${reason}`);
     }
     return previews.filter((item) => !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
   }
@@ -1888,6 +1912,7 @@
     window.EdilKappaAiTest = {
       artifactPdfBlob,
       customerFacingValues,
+      pdfPreviewFromCloud,
       scenarioIncludedWorks,
       setDocumentLogoDataUrl(value) { documentLogoDataUrl = String(value || ""); }
     };
