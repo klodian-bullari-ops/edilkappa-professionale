@@ -89,9 +89,10 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /const EDILKAPPA_PDF_FONT = "DejaVuSans"/);
   assert.match(source, /loadDocumentFonts\(doc\)/);
   assert.match(source, /DejaVuSans-EdilKappa\.ttf/);
-  assert.match(source, /window\.heic2any/);
-  assert.match(source, /toType: "image\/jpeg"/);
-  assert.match(html, /heic2any@0\.0\.4\/dist\/heic2any\.min\.js/);
+  assert.match(source, /6 \* 1024 \* 1024/);
+  assert.doesNotMatch(html, /cdn\.jsdelivr\.net/);
+  assert.match(functionSource, /convertHeicAttachments/);
+  assert.match(functionSource, /require\("heic-convert"\)/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
