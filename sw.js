@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v54-agents-sdk`;
+const CACHE = `${CACHE_PREFIX}v55-pdf-professionale`;
 const APP_SHELL = [
   "./",
   "./index.html",
