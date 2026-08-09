@@ -3,10 +3,12 @@
 const { createHash, randomUUID } = require("node:crypto");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
 const { defineSecret } = require("firebase-functions/params");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const {
   AI_RESPONSE_SCHEMA,
   ALLOWED_VIDEO_TYPES,
@@ -34,6 +36,7 @@ const {
 
 const adminApp = initializeApp();
 const firestore = getFirestore(adminApp, "edilkappa");
+const messaging = getMessaging(adminApp);
 const storageBucket = getStorage(adminApp).bucket("edilkappa-professionale.firebasestorage.app");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const OWNER_EMAIL = "info@edilkappa.com";
@@ -48,6 +51,29 @@ const AGENT_RUN_TIMEOUT_MS = 520000;
 const MAX_AGENT_INPUT_BYTES = 32 * 1024 * 1024;
 const MAX_PREPARED_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+async function sendPush({ uid = "", staff = false, title, body, type = "activity", targetType = "", targetId = "", url = "./" }) {
+  let query = firestore.collection("pushDevices").where("orgId", "==", ORG_ID);
+  if (uid) query = query.where("uid", "==", uid);
+  const snapshot = await query.get();
+  const devices = snapshot.docs.filter((docSnapshot) => {
+    const data = docSnapshot.data();
+    return data.token && (!staff || ["owner", "office"].includes(data.role));
+  }).slice(0, 500);
+  if (!devices.length) return;
+  const eventId = `${type}-${targetId || Date.now()}`.slice(0, 120);
+  const response = await messaging.sendEachForMulticast({
+    tokens: devices.map((item) => item.data().token),
+    data: { title: cleanText(title, 120), body: cleanText(body, 300), type, targetType, targetId: cleanText(targetId, 120), eventId, url }
+  });
+  const invalidCodes = new Set(["messaging/registration-token-not-registered", "messaging/invalid-registration-token"]);
+  await Promise.all(response.responses.map((result, index) => result.success || !invalidCodes.has(result.error?.code) ? null : devices[index].ref.delete()));
+}
+
+async function pushSafely(payload) {
+  try { await sendPush(payload); }
+  catch (error) { console.warn("Push EdilKappa non inviato", { message: cleanText(error?.message, 300) }); }
+}
 
 async function convertHeicAttachments(items) {
   return Promise.all((items || []).map(async (item) => {
@@ -566,6 +592,54 @@ function agentFailureMessage(error) {
   return "L’agente preventivi non ha completato la bozza. Puoi riprovare dalla stessa chat.";
 }
 
+function envelopePayload(snapshot) {
+  try { return JSON.parse(snapshot?.data()?.payload || "{}"); }
+  catch (_) { return {}; }
+}
+
+exports.notifyNewLead = onDocumentCreated({ document: "leads/{leadId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
+  const lead = envelopePayload(event.data);
+  await pushSafely({ staff: true, title: "Nuova richiesta cliente", body: lead.subject || lead.notes || lead.name || "È arrivata una nuova richiesta.", type: "lead", targetType: "lead", targetId: event.params.leadId, url: "./?view=dashboard" });
+});
+
+exports.notifyAbsenceRequest = onDocumentCreated({ document: "absences/{absenceId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
+  const absence = envelopePayload(event.data);
+  if ((event.data?.data()?.status || absence.status) !== "In attesa") return;
+  await pushSafely({ staff: true, title: "Nuova richiesta di assenza", body: `${absence.workerName || "Un operaio"} · ${absence.type || "assenza"}`, type: "absence", targetType: "absence", targetId: absence.groupId || event.params.absenceId, url: "./?view=attendance" });
+});
+
+exports.notifyReportUpdate = onDocumentWritten({ document: "reports/{reportId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
+  const before = envelopePayload(event.data?.before);
+  const after = envelopePayload(event.data?.after);
+  if (!event.data?.after?.exists) return;
+  const beforePhotos = Math.max(Number(before.photoCount || 0), Array.isArray(before.photos) ? before.photos.length : 0);
+  const afterPhotos = Math.max(Number(after.photoCount || 0), Array.isArray(after.photos) ? after.photos.length : 0);
+  if (afterPhotos <= beforePhotos) return;
+  await pushSafely({ staff: true, title: "Nuove foto dal cantiere", body: `${after.workerName || after.teamName || "Squadra"} ha caricato ${afterPhotos - beforePhotos} nuove foto.`, type: "photos", targetType: "report", targetId: event.params.reportId, url: "./?view=activityView" });
+});
+
+exports.notifySiteCompleted = onDocumentWritten({ document: "sites/{siteId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
+  if (!event.data?.after?.exists) return;
+  const before = envelopePayload(event.data.before);
+  const after = envelopePayload(event.data.after);
+  const completed = (value) => /complet|conclus|chius|eseguit/i.test(String(value || ""));
+  if (completed(before.status) || !completed(after.status || event.data.after.data()?.status)) return;
+  await pushSafely({ staff: true, title: "Cantiere completato", body: after.title || after.client || "Una squadra ha concluso un cantiere.", type: "completed", targetType: "site", targetId: event.params.siteId, url: "./?view=completedView" });
+});
+
+exports.notifyMissingHours = onSchedule({ schedule: "30 18 * * 1-6", timeZone: "Europe/Rome", region: "europe-west8" }, async () => {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const [usersSnapshot, timesheetsSnapshot, absencesSnapshot] = await Promise.all([
+    firestore.collection("users").where("orgId", "==", ORG_ID).get(),
+    firestore.collection("timesheets").where("orgId", "==", ORG_ID).get(),
+    firestore.collection("absences").where("orgId", "==", ORG_ID).get()
+  ]);
+  const present = new Set(timesheetsSnapshot.docs.map((item) => ({ data: item.data(), payload: envelopePayload(item) })).filter(({ payload }) => String(payload.date || "").slice(0, 10) === day && Number(payload.hours || 0) > 0).map(({ data }) => data.workerUid));
+  const absent = new Set(absencesSnapshot.docs.map((item) => ({ data: item.data(), payload: envelopePayload(item) })).filter(({ data, payload }) => data.status === "Approvata" && !payload.partialDay && String(payload.startDate || "") <= day && String(payload.endDate || payload.startDate || "") >= day).map(({ data }) => data.workerUid));
+  const workers = usersSnapshot.docs.map((item) => ({ uid: item.id, ...item.data() })).filter((item) => item.active && item.role === "worker");
+  await Promise.all(workers.filter((worker) => !present.has(worker.uid) && !absent.has(worker.uid)).map((worker) => pushSafely({ uid: worker.uid, title: "Ore di oggi da comunicare", body: `${worker.displayName || "Ciao"}, inserisci le ore lavorate oppure richiedi un’assenza.`, type: "missing-hours", targetType: "hours", targetId: day, url: "./?hours=1" })));
+});
+
 exports.edilkappaQuoteAgentWorker = onDocumentCreated({
   document: "aiAgentJobs/{jobDocumentId}",
   database: "edilkappa",
@@ -678,6 +752,7 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       completedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
+    await pushSafely({ uid: job.uid, title: "Preventivo pronto", body: result.artifact?.title || result.artifact?.subject || "Apri l’anteprima, controlla e conferma.", type: "quote", targetType: "ai", targetId: result.artifact?.id || job.jobId, url: "./?view=ai" });
     completed = true;
   } catch (error) {
     console.error("EdilKappa quote agent failed", {
@@ -691,6 +766,7 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       error: agentFailureMessage(error),
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
+    await pushSafely({ uid: job.uid, title: "Preventivo non completato", body: agentFailureMessage(error), type: "ai-error", targetType: "ai", targetId: job.jobId, url: "./?view=ai" });
   } finally {
     if (completed) {
       try {
@@ -959,6 +1035,7 @@ exports.edilkappaAi = onCall({
       reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, usage: openAiResponse.usage || null
     };
     await jobReference.set({ status: "completed", stage: "completed", result: completedResult, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (result.artifact?.kind === "quote") await pushSafely({ uid: account.uid, title: "Preventivo pronto", body: result.artifact?.title || result.artifact?.subject || "Apri l’anteprima, controlla e conferma.", type: "quote", targetType: "ai", targetId: result.artifact?.id || jobId, url: "./?view=ai" });
     return { jobId, status: "completed", stage: "completed", result: completedResult };
   }
   if (action !== "ask") throw new HttpsError("invalid-argument", "Operazione AI non valida.");

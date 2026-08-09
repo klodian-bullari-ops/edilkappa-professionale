@@ -35,10 +35,12 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /extractVideoFrames/);
   assert.match(source, /uploadMedia/);
   assert.match(source, /listinoEdilKappa/);
-  assert.match(source, /Salva e modifica preventivo/);
+  assert.match(source, /Conferma e salva/);
+  assert.match(source, /Chiedi una modifica/);
+  assert.match(source, /Anteprima preventivo/);
   assert.match(source, /Salva relazione PDF/);
   assert.match(source, /Scarica Word/);
-  assert.match(source, /Scarica PDF EdilKappa/);
+  assert.match(source, /edilkappaAiSharePdf/);
   assert.match(source, /priceItem\.salePrice/);
   assert.match(source, /priceSource:\s*"da_definire"/);
   assert.match(source, /archiveWarnings/);
@@ -106,8 +108,21 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=15/);
+  assert.match(html, /edilkappa-ai\.js\?v=16/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
+});
+
+test("supports absences for workers and teams without false hour reminders", () => {
+  const attendance = fs.readFileSync(path.join(__dirname, "..", "attendance-center.js"), "utf8");
+  const hours = fs.readFileSync(path.join(__dirname, "..", "hours-closeout.js"), "utf8");
+  const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
+  assert.match(attendance, /Tutta la squadra aziendale/);
+  assert.match(attendance, /Uno o più operai/);
+  assert.match(attendance, /Mezza giornata \/ alcune ore/);
+  assert.match(attendance, /In attesa/);
+  assert.match(hours, /EdilKappaAttendance\?\.isAbsent/);
+  assert.match(cloud, /enablePushNotifications/);
+  assert.match(cloud, /pushDevices/);
 });
 
 test("keeps EdilKappa AI available after professional extensions replace render", () => {

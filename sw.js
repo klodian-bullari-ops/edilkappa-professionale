@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v60-foto-pdf-recupero`;
+const CACHE = `${CACHE_PREFIX}v61-preventivi-notifiche-assenze`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -18,6 +18,7 @@ const APP_SHELL = [
   "./bulk-sharing.js",
   "./edilconnect.js",
   "./hours-closeout.js",
+  "./attendance-center.js",
   "./edilkappa-ai.js",
   "./edilkappa-ai-route.js",
   "./firebase-cloud.js",
@@ -95,3 +96,27 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+try {
+  importScripts("https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js");
+  importScripts("https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js");
+  firebase.initializeApp({
+    projectId: "edilkappa-professionale",
+    appId: "1:583702130706:web:598e050830cef19ea2a8cb",
+    apiKey: "AIzaSyAWP8Frwm6gIQnIfaEwe639F5cSOs8wdiE",
+    authDomain: "edilkappa-professionale.firebaseapp.com",
+    messagingSenderId: "583702130706"
+  });
+  firebase.messaging().onBackgroundMessage((payload) => {
+    const data = payload.data || {};
+    return self.registration.showNotification(data.title || "Nuovo avviso EdilKappa", {
+      body: data.body || "Apri il gestionale per controllare.",
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-192.png",
+      tag: data.eventId || "edilkappa-push",
+      data: { url: data.url || "./?activity=push" }
+    });
+  });
+} catch (error) {
+  console.warn("Firebase Messaging non disponibile", error);
+}

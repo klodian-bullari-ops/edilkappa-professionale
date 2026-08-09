@@ -51,10 +51,10 @@ const COMPANY_DEFAULTS={name:'EDILKAPPA',address:'',vat:'',phone:'',email:''};
 const COMPANY={...COMPANY_DEFAULTS};
 let WORKERS=[];
 const KEY='edilkappa_professionale_v1',PDF_DB='edilkappa_documenti_v1';
-const seed={condomini:[],interventions:[],inspections:[],sites:[],quotes:[],reports:[],timesheets:[],edilconnect:[],drone:[],lifelines:[],roofs:[],drains:[],expenses:[],teams:[],staff:[],companySettings:[],staffInitialized:true};
+const seed={condomini:[],interventions:[],inspections:[],sites:[],quotes:[],reports:[],timesheets:[],absences:[],edilconnect:[],drone:[],lifelines:[],roofs:[],drains:[],expenses:[],teams:[],staff:[],companySettings:[],staffInitialized:true};
 let db=load(),role=localStorage.getItem('ek_role')||'owner',view='dashboard',searchQuery='',mapFilters={active:true,complete:true,planned:true,visit:true,lifeline:true},timesheetMonth=new Date().toISOString().slice(0,7),timesheetTeam='';WORKERS=db.teams||(db.teams=[]);let STAFF=db.staff||(db.staff=[]);applyCompanySettings();if(!db.staffInitialized){WORKERS.forEach(t=>{STAFF.push({id:'pers-'+t.id+'-1',name:t.member1||'Componente 1',phone:'',team:t.id,reminderTime:'18:00'},{id:'pers-'+t.id+'-2',name:t.member2||'Componente 2',phone:'',team:t.id,reminderTime:'18:00'})});db.staffInitialized=true;save()}
-const ownerNav=[['dashboard','⌂','Panoramica'],['ai','✦','EdilKappa AI'],['agenda','◷','Agenda'],['condomini','▦','Condomìni'],['inspections','⌖','Sopralluoghi'],['quotes','€','Preventivi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa lavori'],['hours','◷','Ore operai'],['teamsView','♟','Squadre'],['portalView','👥','Portale e accessi'],['drone','◉','Drone'],['lifeline','⚓','Linea vita'],['roofs','⌂','Tetti e gronde'],['drains','▦','Pozzetti e tombini'],['companySettingsView','⚙','Dati aziendali'],['finance','↗','Costi e margini']];
-const workerNav=[['worker','⌂','I miei lavori'],['hours','◷','Comunica ore'],['report','＋','Nuovo rapportino']];
+const ownerNav=[['dashboard','⌂','Panoramica'],['ai','✦','EdilKappa AI'],['agenda','◷','Agenda'],['condomini','▦','Condomìni'],['inspections','⌖','Sopralluoghi'],['quotes','€','Preventivi'],['sites','▤','Cantieri'],['workMap','⌖','Mappa lavori'],['hours','◷','Ore operai'],['attendance','🏖','Ferie e assenze'],['teamsView','♟','Squadre'],['portalView','👥','Portale e accessi'],['drone','◉','Drone'],['lifeline','⚓','Linea vita'],['roofs','⌂','Tetti e gronde'],['drains','▦','Pozzetti e tombini'],['companySettingsView','⚙','Dati aziendali'],['finance','↗','Costi e margini']];
+const workerNav=[['worker','⌂','I miei lavori'],['hours','◷','Comunica ore'],['attendance','🏖','Assenze'],['report','＋','Nuovo rapportino']];
 function load(){try{return Object.assign(structuredClone(seed),JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(e){return structuredClone(seed)}}
 function companySummary(separator=' · '){return [COMPANY.name,COMPANY.address,COMPANY.vat?`P.IVA ${COMPANY.vat}`:'',COMPANY.phone,COMPANY.email].filter(Boolean).join(separator)}
 function applyCompanySettings(){Object.assign(COMPANY,COMPANY_DEFAULTS,(db.companySettings||[])[0]||{});const foot=document.getElementById('companySidebar');if(foot)foot.innerHTML=`${esc(COMPANY.name)}<br>${COMPANY.address?esc(COMPANY.address):'Gestionale riservato'}`}
@@ -85,7 +85,7 @@ function renderNav(){const html=nav().map(n=>`<button class="${view===n[0]?'acti
 function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;render()}
 function runSearch(value){searchQuery=String(value||'').trim();view=searchQuery?'search':(isOffice()?'dashboard':'worker');render()}
 function openSearchResult(action,id,contextId=''){searchQuery='';const input=document.getElementById('globalSearch');if(input)input.value='';const office=isOffice();switch(action){case'client':if(typeof window.openClientArchive==='function')return window.openClientArchive(id);view='condomini';render();return window.openCondo(id);case'intervention':if(typeof window.openClientArchive==='function')window.openClientArchive(contextId);if(typeof window.openIntervention==='function')return window.openIntervention(id,contextId);return;case'inspection':view='inspections';render();return window.openInspection(id);case'quote':view='quotes';render();return window.openQuote(id);case'site':view=office?'sites':'worker';render();return office?window.openSite(id):window.openReport(id);case'team':view='teamsView';render();return window.openTeam(id);case'drone':view='drone';render();return window.openDrone(id);case'lifeline':view='lifeline';render();return window.openLifeline(id);case'roof':view=office?'roofs':'worker';render();return office?window.openRoof(id):window.updateRoofTask(id);case'drain':view=office?'drains':'worker';render();return office?window.openDrain(id):window.updateDrainTask(id);default:return go(office?'dashboard':'worker')}}
-function render(){if(!isOffice()&&!['worker','hours','report','search'].includes(view))view='worker';applyCompanySettings();renderNav();document.getElementById('avatar').textContent=roleName().charAt(0);const labels=Object.fromEntries(nav().map(x=>[x[0],x[2]]));labels.more='Altro';labels.search='Ricerca';document.getElementById('pageTitle').textContent=labels[view]||'EDILKAPPA';const fn={dashboard,ai:()=>window.edilkappaAiView?.()||'<div class="empty">Caricamento EdilKappa AI…</div>',agenda,condomini,inspections,quotes,sites,workMap,hours:hoursView,teamsView,portalView:()=>window.portalView?.()||'<div class="empty">Caricamento accessi…</div>',drone,lifeline,roofs,drains,companySettingsView,finance,more,worker,report,search:searchResults}[view]||dashboard;document.getElementById('app').innerHTML=fn()}
+function render(){if(!isOffice()&&!['worker','hours','attendance','report','search'].includes(view))view='worker';applyCompanySettings();renderNav();document.getElementById('avatar').textContent=roleName().charAt(0);const labels=Object.fromEntries(nav().map(x=>[x[0],x[2]]));labels.more='Altro';labels.search='Ricerca';document.getElementById('pageTitle').textContent=labels[view]||'EDILKAPPA';const fn={dashboard,ai:()=>window.edilkappaAiView?.()||'<div class="empty">Caricamento EdilKappa AI…</div>',agenda,condomini,inspections,quotes,sites,workMap,hours:hoursView,attendance:()=>window.EdilKappaAttendance?.attendanceView?.()||'<div class="empty">Caricamento assenze…</div>',teamsView,portalView:()=>window.portalView?.()||'<div class="empty">Caricamento accessi…</div>',drone,lifeline,roofs,drains,companySettingsView,finance,more,worker,report,search:searchResults}[view]||dashboard;document.getElementById('app').innerHTML=fn()}
 function stat(label,value,icon,sub=''){return `<div class="stat"><div class="statTop"><span>${label}</span><span class="statIcon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
 function badge(s){let c=/ritardo|rifiut/i.test(s)?'red':/corso|attesa|preventiv/i.test(s)?'orange':/accett|complet|pagat/i.test(s)?'':'blue';return `<span class="pill ${c}">${esc(s)}</span>`}
 function lifelineStatus(item){if(!item.nextCheck)return'Da verificare';const days=(new Date(item.nextCheck)-new Date())/86400000;if(days<0)return'Scaduta';if(days<=90)return'In scadenza';return'Regolare'}
@@ -217,7 +217,7 @@ window.EdilKappaLocal={
     STAFF=db.staff;role=personId;localStorage.setItem('ek_role',role);initRoles();
   },
   clearRestrictedData:()=>{
-    ['condomini','interventions','inspections','sites','quotes','reports','timesheets','edilconnect','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers','leads','priceList','certificates','inventory','equipment','companySettings'].forEach((key)=>{db[key]=[]});
+    ['condomini','interventions','inspections','sites','quotes','reports','timesheets','absences','edilconnect','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers','leads','priceList','certificates','inventory','equipment','companySettings'].forEach((key)=>{db[key]=[]});
     db.staffInitialized=true;WORKERS=db.teams;STAFF=db.staff;localStorage.setItem(KEY,JSON.stringify(db));
   },
   clearDeviceData:()=>localStorage.removeItem(KEY)
@@ -228,11 +228,12 @@ window.EdilKappaLocal={
 <script src="./smart-operations.js?v=15"></script>
 <script src="./danea-integration.js?v=23"></script>
 <script src="./intervention-lifecycle.js?v=3"></script>
-<script src="./completion-center.js?v=2"></script>
+<script src="./completion-center.js?v=3"></script>
 <script src="./bulk-sharing.js?v=5.1"></script>
 <script src="./edilconnect.js?v=2"></script>
-<script src="./hours-closeout.js?v=2"></script>
-<script src="./edilkappa-ai.js?v=15"></script>
+<script src="./hours-closeout.js?v=3"></script>
+<script src="./attendance-center.js?v=1"></script>
+<script src="./edilkappa-ai.js?v=16"></script>
 <script src="./edilkappa-ai-route.js?v=1"></script>
-<script type="module" src="./firebase-cloud.js?v=26"></script>
+<script type="module" src="./firebase-cloud.js?v=27"></script>
 </body>
