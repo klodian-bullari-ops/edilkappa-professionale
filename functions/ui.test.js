@@ -85,7 +85,9 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /inferiore al costo complessivo stimato/);
   assert.match(source, /normalizedReference\.includes/);
   assert.match(source, /screenshot\|schermata\|preventiv\|tabella/);
-  assert.match(source, /setFont\("helvetica"/);
+  assert.match(source, /const EDILKAPPA_PDF_FONT = "DejaVuSans"/);
+  assert.match(source, /loadDocumentFonts\(doc\)/);
+  assert.match(source, /DejaVuSans-EdilKappa\.ttf/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 

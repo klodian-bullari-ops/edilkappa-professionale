@@ -20,6 +20,7 @@
     dark: [35, 35, 35],
     light: [242, 243, 245]
   });
+  const EDILKAPPA_PDF_FONT = "DejaVuSans";
 
   const state = {
     mode: "work",
@@ -896,6 +897,37 @@
   }
 
   let documentLogoDataUrl = "";
+  let documentFontDataPromise;
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  async function loadDocumentFonts(doc) {
+    if (!documentFontDataPromise) {
+      documentFontDataPromise = Promise.all([
+        fetch("./linea-vita/assets/fonts/DejaVuSans-EdilKappa.ttf").then((response) => {
+          if (!response.ok) throw new Error("Font PDF regolare non disponibile.");
+          return response.arrayBuffer();
+        }),
+        fetch("./linea-vita/assets/fonts/DejaVuSans-Bold-EdilKappa.ttf").then((response) => {
+          if (!response.ok) throw new Error("Font PDF grassetto non disponibile.");
+          return response.arrayBuffer();
+        })
+      ]).then(([regular, bold]) => ({ regular: arrayBufferToBase64(regular), bold: arrayBufferToBase64(bold) }));
+    }
+    const fonts = await documentFontDataPromise;
+    doc.addFileToVFS("DejaVuSans-EdilKappa.ttf", fonts.regular);
+    doc.addFont("DejaVuSans-EdilKappa.ttf", EDILKAPPA_PDF_FONT, "normal");
+    doc.addFileToVFS("DejaVuSans-Bold-EdilKappa.ttf", fonts.bold);
+    doc.addFont("DejaVuSans-Bold-EdilKappa.ttf", EDILKAPPA_PDF_FONT, "bold");
+  }
   async function loadDocumentLogo() {
     if (documentLogoDataUrl) return documentLogoDataUrl;
     documentLogoDataUrl = await new Promise((resolve) => {
@@ -917,10 +949,10 @@
     const company = context.company;
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
     if (context.logo) doc.addImage(context.logo, "JPEG", 14, 9, 50, 10.3, undefined, "FAST");
-    doc.setFont("helvetica", "bold");
+    doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(8.4);
     doc.text(company.legalName, 196, 11, { align: "right" });
-    doc.setFont("helvetica", "normal");
+    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     doc.setFontSize(7.5);
     doc.text(company.activity, 196, 16, { align: "right" });
     doc.text(`${company.email} | ${company.phone}`, 196, 21, { align: "right" });
@@ -929,7 +961,7 @@
     doc.setFillColor(...EDILKAPPA_DOCUMENT.dark);
     doc.rect(14, 32, 182, 8, "F");
     doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
+    doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(8.4);
     doc.text(context.label, 18, 37.4);
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
@@ -949,19 +981,19 @@
     if (!text) return y;
     const lines = doc.splitTextToSize(String(text), 180);
     y = ensureDocumentSpace(doc, context, y, 14);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
+    doc.setFont(EDILKAPPA_PDF_FONT, "bold");
+    doc.setFontSize(9.4);
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
     doc.text(String(title).toUpperCase(), 14, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.2);
+    y += 5;
+    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
+    doc.setFontSize(8.3);
     lines.forEach((line) => {
       y = ensureDocumentSpace(doc, context, y, 5);
       doc.text(line, 14, y);
-      y += 4.5;
+      y += 3.9;
     });
-    return y + 4;
+    return y + 2.5;
   }
 
   function pdfListSection(doc, context, title, values, y) {
@@ -974,7 +1006,7 @@
     doc.autoTable({
       margin: { top: 45, right: 14, bottom: 21, left: 14 },
       didDrawPage: () => drawDocumentHeader(doc, context),
-      styles: { font: "helvetica", fontSize: 8.4, cellPadding: 2.7, lineColor: [212, 214, 216], lineWidth: 0.18, textColor: EDILKAPPA_DOCUMENT.dark },
+      styles: { font: EDILKAPPA_PDF_FONT, fontSize: 7.7, cellPadding: 2.1, lineColor: [212, 214, 216], lineWidth: 0.18, textColor: EDILKAPPA_DOCUMENT.dark, overflow: "linebreak" },
       headStyles: { fillColor: EDILKAPPA_DOCUMENT.dark, textColor: [255, 255, 255], fontStyle: "bold" },
       alternateRowStyles: { fillColor: [249, 249, 249] },
       theme: "grid",
@@ -984,16 +1016,16 @@
   }
 
   function pdfSignatureBlock(doc, context, y) {
-    y = ensureDocumentSpace(doc, context, y, 45);
-    doc.setFont("helvetica", "bold");
+    y = ensureDocumentSpace(doc, context, y, 36);
+    doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(9.2);
     doc.text("ACCETTAZIONE E FIRME", 14, y);
     y += 9;
-    doc.setFont("helvetica", "normal");
+    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     doc.setFontSize(8.5);
     doc.text("Per il Committente", 14, y);
     doc.text("Per EdilKappa", 112, y);
-    y += 17;
+    y += 13;
     doc.setDrawColor(90, 90, 90);
     doc.line(14, y, 94, y);
     doc.line(112, y, 196, y);
@@ -1008,7 +1040,7 @@
     const findings = artifact.report?.evidenceFindings || [];
     for (let offset = 0; offset < usable.length; offset += 2) {
       newDocumentPage(doc, context);
-      doc.setFont("helvetica", "bold");
+      doc.setFont(EDILKAPPA_PDF_FONT, "bold");
       doc.setFontSize(12);
       doc.text("ALLEGATO FOTOGRAFICO", 14, 49);
       usable.slice(offset, offset + 2).forEach((preview, localIndex) => {
@@ -1022,17 +1054,17 @@
           const height = properties.height * scale;
           doc.addImage(preview.dataUrl, properties.fileType || "JPEG", 14 + (180 - width) / 2, top, width, height, undefined, "FAST");
         } catch (_) {
-          doc.setFont("helvetica", "normal");
+          doc.setFont(EDILKAPPA_PDF_FONT, "normal");
           doc.setFontSize(8.5);
           doc.text("Anteprima non inseribile; l’originale resta nell’archivio EdilKappa.", 14, top + 8);
         }
         const finding = findings[index];
         const caption = finding?.observation || artifact.evidence?.[index] || preview.sourceName || preview.name || `Immagine ${index + 1}`;
-        doc.setFont("helvetica", "bold");
+        doc.setFont(EDILKAPPA_PDF_FONT, "bold");
         doc.setFontSize(8.2);
         doc.text(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${String(caption)}`, 14, top + 88, { maxWidth: 180 });
         if (finding?.assessment) {
-          doc.setFont("helvetica", "normal");
+          doc.setFont(EDILKAPPA_PDF_FONT, "normal");
           doc.setFontSize(7.6);
           doc.text(finding.assessment, 14, top + 94, { maxWidth: 180 });
         }
@@ -1044,15 +1076,16 @@
     if (!window.jspdf?.jsPDF) throw new Error("Il generatore PDF non è disponibile. Ricarica la pagina e riprova.");
     const artifact = rawArtifact?.kind === "quote" ? requireQuoteRelease(rawArtifact, destination) : rawArtifact;
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: "a4", putOnlyUsedFonts: true });
-    doc.setFont("helvetica", "normal");
+    const doc = new jsPDF({ unit: "mm", format: "a4", compress: true, putOnlyUsedFonts: true });
+    await loadDocumentFonts(doc);
+    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     const context = { company: documentCompany(), logo: await loadDocumentLogo(), label: documentTypeLabel(artifact) };
     drawDocumentHeader(doc, context);
-    doc.setFont("helvetica", "bold");
+    doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(15.5);
     doc.text(context.label, 105, 50, { align: "center" });
     const subtitle = artifact.documentSubtitle || artifact.title || artifact.subject || destination.title;
-    doc.setFont("helvetica", "normal");
+    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     doc.setFontSize(9.3);
     doc.setTextColor(95, 95, 95);
     doc.text(subtitle, 105, 56, { align: "center", maxWidth: 176 });
@@ -1083,12 +1116,8 @@
     const quote = artifact.quote || {};
     y = pdfTextSection(doc, context, "Sintesi", artifact.kind === "report" ? (report.executiveSummary || artifact.summary) : artifact.summary, y);
     y = pdfTextSection(doc, context, "Soluzione raccomandata", artifact.recommendedSolution, y);
-    y = pdfTextSection(doc, context, "Motivazione tecnica", artifact.decisionRationale, y);
-    y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
 
     if (artifact.kind === "quote") {
-      y = pdfListSection(doc, context, "Fasi operative", artifact.workPhases, y);
-      y = pdfListSection(doc, context, "Materiali previsti", artifact.materials, y);
       const lines = quote.lines || [];
       y = ensureDocumentSpace(doc, context, y, 28);
       y = runDocumentTable(doc, context, {
@@ -1121,6 +1150,9 @@
         }
       }) + 7;
       y = pdfTextSection(doc, context, "Durata stimata", quote.estimatedDuration, y);
+      y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
+      y = pdfListSection(doc, context, "Fasi operative", artifact.workPhases, y);
+      y = pdfListSection(doc, context, "Materiali previsti", artifact.materials, y);
       y = pdfListSection(doc, context, "Opere comprese", quote.includedWorks, y);
       y = pdfListSection(doc, context, "Esclusioni", quote.exclusions, y);
       if ((quote.options || []).length) {
@@ -1128,13 +1160,20 @@
         y = runDocumentTable(doc, context, {
           startY: y,
           head: [["ALTERNATIVA", "DESCRIZIONE", "IMPONIBILE"]],
-          body: quote.options.map((option) => [[option.label, option.title, option.recommended ? "RACCOMANDATA" : ""].filter(Boolean).join(" · "), option.description, euro(option.total)]),
+          body: quote.options.map((option) => [
+            [option.label, option.title, option.recommended ? "RACCOMANDATA" : ""].filter(Boolean).join(" · "),
+            [option.description, (option.includedWorks || []).length ? `Comprende: ${option.includedWorks.join("; ")}` : "", option.notes].filter(Boolean).join("\n"),
+            euro(option.total)
+          ]),
           columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" }, 1: { cellWidth: 98 }, 2: { cellWidth: 32, halign: "right", fontStyle: "bold" } }
         }) + 6;
       }
       y = pdfListSection(doc, context, "Ipotesi di calcolo", quote.assumptions, y);
+      y = pdfListSection(doc, context, "Dati da confermare", quote.missingInformation, y);
       y = pdfTextSection(doc, context, "Condizioni e note", [quote.paymentTerms ? `Pagamento: ${quote.paymentTerms}` : "", quote.notes].filter(Boolean).join("\n"), y);
     } else {
+      y = pdfTextSection(doc, context, "Motivazione tecnica", artifact.decisionRationale, y);
+      y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
       y = pdfListSection(doc, context, "Osservazioni", report.observations, y);
       y = pdfListSection(doc, context, "Cause probabili", report.probableCauses, y);
       if ((report.evidenceFindings || []).length) {
@@ -1163,7 +1202,7 @@
       doc.setDrawColor(190, 190, 190);
       doc.setLineWidth(0.2);
       doc.line(14, 281.5, 196, 281.5);
-      doc.setFont("helvetica", "normal");
+      doc.setFont(EDILKAPPA_PDF_FONT, "normal");
       doc.setFontSize(7.1);
       doc.setTextColor(85, 85, 85);
       doc.text(`EdilKappa S.A.S. - ${context.company.address} - P. IVA ${context.company.vat}`, 14, 287);

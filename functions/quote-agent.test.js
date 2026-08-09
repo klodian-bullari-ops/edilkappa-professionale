@@ -31,6 +31,10 @@ test("configures one bounded Agents SDK quote specialist", () => {
   assert.equal(agent.outputType, QUOTE_OUTPUT_TYPE);
   assert.equal(agent.modelSettings.store, false);
   assert.match(agent.instructions, /titolare deve controllare e approvare/i);
+  assert.match(agent.instructions, /preventivo compatto e senza ripetizioni/i);
+  assert.match(agent.instructions, /misure decisive/i);
+  assert.match(agent.instructions, /scala, trabattello o piattaforma/i);
+  assert.match(agent.instructions, /alternative soltanto quando sono tecnicamente utili/i);
   const researchAgent = createQuoteAgent({ instructions: "Preventivo.", modelChoice: {}, useWeb: true });
   assert.equal(researchAgent.tools.length, 1);
 });
