@@ -37,6 +37,12 @@ test("accepts HEIC photographs for server-side conversion", () => {
   assert.equal(attachment.isImage, true);
 });
 
+test("keeps internal management instructions out of customer documents", () => {
+  const instructions = buildInstructions({ mode: "work", displayName: "Klodian", taskType: "quote" });
+  assert.match(instructions, /non inserire istruzioni interne/i);
+  assert.match(instructions, /gestionale/i);
+});
+
 test("labels video frames and keeps their capture time", () => {
   const attachments = parseAttachments([{
     name: "tetto-fotogramma-1.jpg",

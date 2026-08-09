@@ -53,6 +53,10 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /Via Sant’Ambrogio 38, 20055 Vimodrone \(MI\)/);
   assert.match(source, /PREVENTIVO DI VARIANTE/);
   assert.match(source, /ALLEGATO FOTOGRAFICO/);
+  assert.match(source, /Le foto iPhone HEIC vengono convertite automaticamente e inserite anche nel PDF/);
+  assert.match(source, /prepare_photo_preview/);
+  assert.match(source, /previewStoragePath/);
+  assert.match(source, /edilkappaAiDownloadSavedQuote/);
   assert.match(source, /TOTALE COMPLESSIVO/);
   const cloudSource = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   assert.match(cloudSource, /'text\/plain'/);
@@ -92,7 +96,15 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /6 \* 1024 \* 1024/);
   assert.doesNotMatch(html, /cdn\.jsdelivr\.net/);
   assert.match(functionSource, /convertHeicAttachments/);
-  assert.match(functionSource, /require\("heic-convert"\)/);
+  assert.match(functionSource, /prepareArchivedHeicPhotos/);
+  assert.match(functionSource, /action === "prepare_photo_preview"/);
+  const photoSource = fs.readFileSync(path.join(__dirname, "photo-utils.js"), "utf8");
+  assert.match(photoSource, /require\("heic-convert"\)/);
+  assert.match(photoSource, /firebaseStorageDownloadTokens/);
+  assert.match(source, /discount > 0\.005/);
+  assert.match(source, /scenarioIncludedWorks/);
+  assert.match(source, /\\bgestionale\\b/);
+  assert.match(html, /edilkappa-ai\.js\?v=13/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
