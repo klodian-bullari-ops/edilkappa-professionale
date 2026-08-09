@@ -261,14 +261,14 @@ function parseAttachments(value) {
     const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
     if (!match) throw new Error("Uno degli allegati non è valido.");
     const mimeType = match[1].toLowerCase();
-    if (!ALLOWED_IMAGE_TYPES.has(mimeType) && !ALLOWED_FILE_TYPES.has(mimeType)) {
+    if (!ALLOWED_ARCHIVED_IMAGE_TYPES.has(mimeType) && !ALLOWED_FILE_TYPES.has(mimeType)) {
       throw new Error("Formato non supportato. Usa foto, PDF, Word, PowerPoint, Excel, TXT o CSV.");
     }
     const bytes = Math.floor(match[2].length * 3 / 4) - (match[2].endsWith("==") ? 2 : match[2].endsWith("=") ? 1 : 0);
     if (bytes > MAX_ATTACHMENT_BYTES) throw new Error("Ogni allegato elaborato deve pesare meno di 6 MB.");
     totalBytes += bytes;
     if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error("Gli allegati elaborati insieme devono pesare meno di 15 MB.");
-    const kind = item?.kind === "video_frame" ? "video_frame" : ALLOWED_IMAGE_TYPES.has(mimeType) ? "image" : "document";
+    const kind = item?.kind === "video_frame" ? "video_frame" : ALLOWED_ARCHIVED_IMAGE_TYPES.has(mimeType) ? "image" : "document";
     return {
       name: safeFileName(item?.name),
       sourceName: safeFileName(item?.sourceName || item?.name),
@@ -276,7 +276,7 @@ function parseAttachments(value) {
       kind,
       mimeType,
       dataUrl,
-      isImage: ALLOWED_IMAGE_TYPES.has(mimeType)
+      isImage: ALLOWED_ARCHIVED_IMAGE_TYPES.has(mimeType)
     };
   });
 }
