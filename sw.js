@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v56-heic-foto`;
+const CACHE = `${CACHE_PREFIX}v57-heic-server`;
 const APP_SHELL = [
   "./",
   "./index.html",
