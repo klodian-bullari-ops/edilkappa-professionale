@@ -63,15 +63,53 @@ test("adds video transcripts to the request", () => {
   assert.match(input[0].content[1].text, /pluviale/);
 });
 
-test("routes complex construction work to GPT-5.6 Sol and simple chat to Terra", () => {
-  const quote = chooseModel({ requestedModelMode: "auto", mode: "work", taskType: "quote", message: "Prepara il preventivo" });
-  const simple = chooseModel({ requestedModelMode: "auto", mode: "work", taskType: "auto", message: "Ciao" });
-  const forced = chooseModel({ requestedModelMode: "sol", mode: "personal", message: "Aiutami" });
-  assert.equal(quote.model, "gpt-5.6-sol");
-  assert.equal(quote.reasoningEffort, "xhigh");
-  assert.equal(quote.maxOutputTokens, 18000);
-  assert.equal(simple.model, "gpt-5.6-terra");
-  assert.equal(forced.model, "gpt-5.6-sol");
+test("uses Terra automatically for ordinary quotes and photo revisions", () => {
+  const quote = chooseModel({
+    requestedModelMode: "auto", mode: "work", taskType: "quote",
+    message: "Prepara il preventivo per installare 96 metri di dissuasori",
+    attachmentCount: 4, attachmentKinds: ["image", "image", "image", "image"]
+  });
+  const revision = chooseModel({
+    requestedModelMode: "auto", mode: "work", taskType: "quote",
+    message: "Cambia il totale e togli questa voce", hasHistoryArtifact: true
+  });
+  assert.equal(quote.model, "gpt-5.6-terra");
+  assert.equal(quote.reasoningEffort, "medium");
+  assert.equal(quote.maxOutputTokens, 10000);
+  assert.match(quote.modelLabel, /automatico economico/);
+  assert.equal(revision.model, "gpt-5.6-terra");
+  assert.equal(revision.maxOutputTokens, 9000);
+  assert.match(revision.routingReason, /revisione/);
+});
+
+test("uses Sol automatically only for high-risk or genuinely heavy technical work", () => {
+  const asbestos = chooseModel({
+    requestedModelMode: "auto", mode: "work", taskType: "quote",
+    message: "Valuta se la vecchia ondulina può contenere amianto e prepara il preventivo"
+  });
+  const heavyInspection = chooseModel({
+    requestedModelMode: "auto", mode: "work", taskType: "inspection",
+    message: "Analizza il sopralluogo e individua la causa del distacco",
+    attachmentCount: 9,
+    attachmentKinds: ["video", "video_frame", "video_frame", "image", "image", "image", "image", "image", "image"]
+  });
+  assert.equal(asbestos.model, "gpt-5.6-sol");
+  assert.equal(asbestos.reasoningEffort, "high");
+  assert.equal(asbestos.maxOutputTokens, 14000);
+  assert.match(asbestos.routingReason, /rischio tecnico/);
+  assert.equal(heavyInspection.model, "gpt-5.6-sol");
+  assert.equal(heavyInspection.reasoningEffort, "high");
+});
+
+test("respects manual model choices without making automatic work xhigh", () => {
+  const forcedSol = chooseModel({ requestedModelMode: "sol", mode: "work", taskType: "quote", message: "Prepara il preventivo" });
+  const forcedTerra = chooseModel({ requestedModelMode: "terra", mode: "work", taskType: "quote", message: "Perizia strutturale con linea vita" });
+  const personal = chooseModel({ requestedModelMode: "auto", mode: "personal", message: "Analisi approfondita della mia agenda" });
+  assert.equal(forcedSol.model, "gpt-5.6-sol");
+  assert.equal(forcedSol.reasoningEffort, "xhigh");
+  assert.equal(forcedSol.maxOutputTokens, 18000);
+  assert.equal(forcedTerra.model, "gpt-5.6-terra");
+  assert.equal(personal.model, "gpt-5.6-terra");
 });
 
 test("applies the EdilKappa method without requesting hidden chain of thought", () => {

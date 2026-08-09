@@ -43,6 +43,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /priceSource:\s*"da_definire"/);
   assert.match(source, /archiveWarnings/);
   assert.match(source, /GPT‑5\.6 Sol/);
+  assert.match(source, /Automatico · Sol solo se necessario/);
   assert.match(source, /generate_visual/);
   assert.match(source, /visualBriefs/);
   assert.match(source, /quote\.options/);
@@ -104,7 +105,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=13/);
+  assert.match(html, /edilkappa-ai\.js\?v=14/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
