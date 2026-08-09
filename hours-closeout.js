@@ -226,6 +226,7 @@
   function missingCompletedSites(person = currentPerson()) {
     if (!person) return [];
     return (database().sites || []).filter((site) => {
+      if (window.EdilKappaAttendance?.isAbsent?.(person, siteCompletionDay(site), { fullDayOnly: true })) return false;
       const assigned = typeof siteHasTeam === 'function' ? siteHasTeam(site, person.team) : String(site.worker || '') === String(person.team || '');
       return assigned && isCompleted(site) && siteNeedsHourCloseout(site) && personExpectedForSite(person, site) && !personHasCompletionHours(person, site);
     });
@@ -233,7 +234,8 @@
 
   function missingPeopleForSite(site) {
     if (!siteNeedsHourCloseout(site)) return [];
-    return closeoutPeople(site).filter((person) => !personHasCompletionHours(person, site));
+    const day = siteCompletionDay(site);
+    return closeoutPeople(site).filter((person) => !window.EdilKappaAttendance?.isAbsent?.(person, day, { fullDayOnly: true }) && !personHasCompletionHours(person, site));
   }
 
   function allCloseoutPending() {
@@ -337,7 +339,7 @@
     if (!person) return '';
     const today = typeof localToday === 'function' ? localToday() : dateOnly(new Date());
     const missingSites = missingCompletedSites(person);
-    const dailyMissing = isAfterReminder(person) && !hasHoursOnDay(person, today);
+    const dailyMissing = isAfterReminder(person) && !window.EdilKappaAttendance?.isAbsent?.(person, today, { fullDayOnly: true }) && !hasHoursOnDay(person, today);
     if (!missingSites.length && !dailyMissing) return '';
     const rows = missingSites.map((site) => `<div class="hoursAlertRow"><span><b>${esc(site.title || 'Cantiere concluso')}</b><small>${esc(site.client || '')} · concluso il ${esc(siteCompletionDay(site))}</small></span><button class="btn sm red" type="button" onclick="openCloseoutHours('${esc(site.id)}')">Inserisci ore</button></div>`).join('');
     return `<section class="hoursPersistentAlert" role="alert" aria-live="assertive"><div class="hoursAlertTitle"><span>!</span><div><h3>Ore da completare</h3><p>L’avviso rimane finché non inserisci le tue ore.</p></div></div>${rows}${dailyMissing && !missingSites.length ? '<div class="hoursAlertRow"><span><b>Ore di oggi non inserite</b><small>Comunica il totale delle ore lavorate.</small></span><button class="btn sm red" type="button" onclick="go(\'hours\')">Inserisci ore</button></div>' : ''}</section>`;
@@ -440,7 +442,7 @@
   officeIndividualHours = function () {
     const entries = annotateHourRows(filteredIndividualHours());
     const today = typeof localToday === 'function' ? localToday() : dateOnly(new Date());
-    const missingToday = managedPeople().filter((person) => !hasHoursOnDay(person, today));
+    const missingToday = managedPeople().filter((person) => !window.EdilKappaAttendance?.isAbsent?.(person, today, { fullDayOnly: true }) && !hasHoursOnDay(person, today));
     const totals = {};
     entries.forEach((entry) => {
       const key = entry.worker || `${entry.workerName}|${entry.team}`;
@@ -489,7 +491,7 @@
     decoratePersistentAlert();
     const today = typeof localToday === 'function' ? localToday() : dateOnly(new Date());
     const pendingSites = missingCompletedSites(person);
-    const dailyMissing = isAfterReminder(person) && !hasHoursOnDay(person, today);
+    const dailyMissing = isAfterReminder(person) && !window.EdilKappaAttendance?.isAbsent?.(person, today, { fullDayOnly: true }) && !hasHoursOnDay(person, today);
     if (!pendingSites.length && !dailyMissing) return closeReminderNotification(person, today);
     if (!isAfterReminder(person) && !pendingSites.length) return;
     const key = reminderKey(person, today);
@@ -515,7 +517,7 @@
     if (!person) return;
     const today = typeof localToday === 'function' ? localToday() : dateOnly(new Date());
     const pendingSites = missingCompletedSites(person);
-    const count = pendingSites.length || (isAfterReminder(person) && !hasHoursOnDay(person, today) ? 1 : 0);
+    const count = pendingSites.length || (isAfterReminder(person) && !window.EdilKappaAttendance?.isAbsent?.(person, today, { fullDayOnly: true }) && !hasHoursOnDay(person, today) ? 1 : 0);
     document.querySelectorAll('#desktopNav button, #mobileNav button').forEach((button) => {
       if (button.getAttribute('onclick') !== "go('hours')") return;
       button.querySelector('.hourNavBadge')?.remove();

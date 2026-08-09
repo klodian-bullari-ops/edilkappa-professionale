@@ -462,9 +462,12 @@
     if (!('Notification' in window)) return alert('Su questo dispositivo restano disponibili gli avvisi dentro il gestionale.');
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return alert('Le notifiche del dispositivo non sono state autorizzate. Gli avvisi nel gestionale funzionano comunque.');
+    let backgroundEnabled = false;
+    try { backgroundEnabled = await window.EdilKappaCloud?.enablePushNotifications?.() === true; }
+    catch (error) { console.warn('Notifiche push:', error); }
     localStorage.setItem(BROWSER_NOTIFICATIONS_KEY, '1');
     render();
-    alert('Avvisi foto attivati su questo dispositivo.');
+    alert(backgroundEnabled ? 'Avvisi attivati su questo dispositivo, anche quando l’app è chiusa.' : 'Avvisi attivati mentre usi il gestionale. Per gli avvisi a app chiusa verifica le autorizzazioni del browser.');
   };
 
   window.markAllActivityRead = function () {
@@ -498,6 +501,9 @@
     item.readAt = item.readAt || new Date().toISOString();
     storeNotifications(rows);
     if (item.targetType === 'report') return window.openReportActivity(item.targetId);
+    if (item.targetType === 'ai') return go('ai');
+    if (item.targetType === 'absence') return go('attendance');
+    if (item.targetType === 'hours') return go('hours');
     if (['site', 'intervention', 'roof', 'drain'].includes(item.targetType)) return window.openCompletedItem(item.targetType, item.targetId);
     go('activityView');
   };
@@ -585,6 +591,11 @@
   }).observe(document.body, { childList: true, subtree: true });
 
   function openActivityFromUrl() {
+    const requestedView = new URL(window.location.href).searchParams.get('view');
+    if (['ai', 'attendance', 'activityView', 'completedView', 'dashboard'].includes(requestedView)) {
+      setTimeout(() => go(requestedView), 250);
+      history.replaceState({}, '', new URL('./', window.location.href));
+    }
     const id = new URL(window.location.href).searchParams.get('activity');
     if (!id) return;
     let attempts = 0;
@@ -598,7 +609,7 @@
     }, 500);
   }
 
-  window.EdilKappaCompletion = { completedRows, closeoutData, notifications, detectCloudActivities };
+  window.EdilKappaCompletion = { completedRows, closeoutData, notifications, detectCloudActivities, addActivity };
   save();
   render();
   openActivityFromUrl();

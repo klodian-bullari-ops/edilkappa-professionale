@@ -28,6 +28,12 @@ import {
   httpsCallable
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 import {
+  getMessaging,
+  getToken,
+  isSupported as isMessagingSupported,
+  onMessage
+} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging.js';
+import {
   deleteObject,
   getDownloadURL,
   getStorage,
@@ -94,6 +100,7 @@ const mappings = [
   ['quotes', 'quotes'],
   ['reports', 'reports'],
   ['timesheets', 'timesheets'],
+  ['absences', 'absences'],
   ['edilconnect', 'edilconnect'],
   ['drone', 'drone'],
   ['lifelines', 'lifelines'],
@@ -114,7 +121,7 @@ const mappings = [
 
 const mappingByRemote = new Map(mappings.map(([localName, remoteName]) => [remoteName, localName]));
 const clientCollections = new Set(['clients', 'inspections', 'sites', 'quotes', 'reports', 'drone', 'lifelines', 'roofs', 'drains', 'deadlines', 'payments', 'documents', 'certificates']);
-const workerCollections = new Set(['sites', 'reports', 'timesheets', 'roofs', 'drains', 'teams']);
+const workerCollections = new Set(['sites', 'reports', 'timesheets', 'absences', 'roofs', 'drains', 'teams']);
 const remoteMaps = new Map();
 const listenerMaps = new Map();
 const remoteIds = new Map();
@@ -158,17 +165,56 @@ const api = {
   getDocumentUrl,
   openDocument,
   deleteDocument,
+  enablePushNotifications,
   get ready() { return ready; },
   get currentUid() { return user?.uid || ''; },
   get currentProfile() { return profile; },
   get workerProfiles() {
-    if (profile?.role !== 'owner') return [];
+    if (!['owner', 'office'].includes(profile?.role)) return [];
     return cloudUsers
       .filter((item) => item.role === 'worker' && item.active && item.teamId)
-      .map((item) => ({ id: item.uid, name: item.displayName || item.email, team: item.teamId }));
+      .map((item) => ({ id: item.uid, uid: item.uid, name: item.displayName || item.email, team: item.teamId }));
   }
 };
 window.EdilKappaCloud = api;
+
+async function tokenDocumentId(token) {
+  const bytes = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('').slice(0, 48);
+}
+
+async function enablePushNotifications() {
+  if (!user || !profile) throw new Error('Accedi prima di attivare le notifiche.');
+  if (!('Notification' in window) || !await isMessagingSupported()) throw new Error('Le notifiche push non sono supportate su questo dispositivo.');
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Le notifiche non sono state autorizzate.');
+  const registration = await navigator.serviceWorker.ready;
+  const messaging = getMessaging(app);
+  const token = await getToken(messaging, { serviceWorkerRegistration: registration });
+  if (!token) throw new Error('Firebase non ha restituito il token del dispositivo.');
+  const id = await tokenDocumentId(token);
+  const deviceRef = doc(firestore, 'pushDevices', `${user.uid}_${id}`);
+  const existing = await getDoc(deviceRef);
+  await setDoc(deviceRef, {
+    uid: user.uid, orgId: ORG_ID, role: profile.role, token,
+    userAgent: navigator.userAgent.slice(0, 300),
+    ...(existing.exists() ? {} : { createdAt: serverTimestamp() }), updatedAt: serverTimestamp()
+  }, { merge: true });
+  return true;
+}
+
+isMessagingSupported().then((supported) => {
+  if (!supported) return;
+  onMessage(getMessaging(app), (payload) => {
+    const data = payload.data || {};
+    window.EdilKappaCompletion?.addActivity?.({
+      id: data.eventId || `push-${Date.now()}`, type: data.type || 'push',
+      title: payload.notification?.title || data.title || 'Nuovo avviso EdilKappa',
+      text: payload.notification?.body || data.body || '', targetType: data.targetType || '', targetId: data.targetId || ''
+    });
+  });
+}).catch(() => {});
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -585,13 +631,13 @@ function boundedNumber(value, minimum, maximum) {
 function envelope(item, remoteName, isNew) {
   const database = local.getDB();
   const site = remoteName === 'reports' ? (database.sites || []).find((entry) => entry.id === item.site) : null;
-  const isWorkerItem = profile?.role === 'worker' && ['reports', 'timesheets'].includes(remoteName);
+  const isWorkerItem = profile?.role === 'worker' && ['reports', 'timesheets', 'absences'].includes(remoteName);
   const taskCollection = ['sites', 'roofs', 'drains'].includes(remoteName);
   const assignedTeamIds = taskCollection
     ? teamIdsFor(item)
     : remoteName === 'reports'
       ? teamIdsFor(site || { worker: item.team || (isWorkerItem ? profile.teamId : '') })
-      : remoteName === 'timesheets'
+      : ['timesheets', 'absences'].includes(remoteName)
         ? teamIdsFor({ worker: item.team || (isWorkerItem ? profile.teamId : '') })
         : teamIdsFor({ teamIds: item.assignedTeamIds, assignedTeamId: item.assignedTeamId });
   const assignedTeamId = String(item.assignedTeamId || (taskCollection ? item.worker : '') || (isWorkerItem ? profile.teamId : '') || assignedTeamIds[0] || '');
@@ -770,6 +816,7 @@ function startDataListeners() {
     listenTo('sites', [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)], 'legacy-team');
     ['roofs', 'drains'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('assignedTeamId', '==', profile.teamId)]));
     ['reports', 'timesheets'].forEach((remoteName) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('workerUid', '==', user.uid), where('ownerUid', '==', user.uid)]));
+    listenTo('absences', [where('orgId', '==', ORG_ID), where('workerUid', '==', user.uid)]);
     const teamRef = doc(firestore, 'teams', profile.teamId);
     const teamSourceKey = 'teams:profile-team';
     let initialTeamSnapshotPending = true;
@@ -814,6 +861,7 @@ function workerItems(remoteName, items) {
   if (profile?.role !== 'worker') return items;
   if (remoteName === 'sites') return items.filter((item) => teamIdsFor(item).includes(profile.teamId));
   if (['roofs', 'drains'].includes(remoteName)) return items.filter((item) => String(item.worker || item.assignedTeamId) === profile.teamId);
+  if (remoteName === 'absences') return items.filter((item) => item.requestedBy === 'worker' && String(item.ownerUid || user.uid) === user.uid);
   return items.filter((item) => String(item.workerUid || user.uid) === user.uid);
 }
 
