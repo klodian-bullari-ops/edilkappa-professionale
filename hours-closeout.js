@@ -377,6 +377,30 @@
     });
   };
 
+  window.openOfficeHoursEntry = function () {
+    if (!isOffice()) return alert('Questa funzione è riservata al titolare e all’ufficio.');
+    const people = managedPeople().sort((left, right) => String(left.name).localeCompare(String(right.name), 'it'));
+    const sites = (database().sites || []).slice().sort((left, right) => String(left.title || '').localeCompare(String(right.title || ''), 'it'));
+    if (!people.length) return alert('Non risultano operai configurati. Inserisci prima gli operai nelle squadre.');
+    if (!sites.length) return alert('Non risultano cantieri. Crea prima il lavoro o il cantiere.');
+    const today = typeof localToday === 'function' ? localToday() : dateOnly(new Date());
+    const peopleOptions = people.map((person) => `<option value="${esc(person.id)}">${esc(person.name)} · ${esc(WORKERS.find((team) => String(team.id) === String(person.team))?.name || 'Senza squadra')}</option>`).join('');
+    const siteOptions = sites.map((site) => `<option value="${esc(site.id)}">${esc(siteLabel(site))}${site.address ? ` · ${esc(site.address)}` : ''}</option>`).join('');
+    modal('Registra ore operaio', `<div class="notice"><b>Inserimento del titolare</b><br>Scegli il singolo operaio e il cantiere dove ha lavorato. Oltre 8 ore, sabato, domenica e festivi vengono calcolati automaticamente come straordinari.</div><div class="formGrid"><div class="field"><label>Operaio</label><select name="worker" required>${peopleOptions}</select></div><div class="field"><label>Data</label><input name="date" type="date" value="${esc(today)}" required></div><div class="field full"><label>Dove ha lavorato</label><select name="siteId" required>${siteOptions}</select></div><div class="field"><label>Totale ore lavorate</label><input name="hours" type="number" min="0.5" max="24" step="0.5" inputmode="decimal" required autofocus></div><div class="field full"><label>Note facoltative</label><textarea name="notes" placeholder="Lavorazione svolta, trasferta o informazioni utili"></textarea></div></div>`, (formData) => {
+      const person = people.find((item) => String(item.id) === String(formData.get('worker')));
+      const site = sites.find((item) => String(item.id) === String(formData.get('siteId')));
+      const day = dateOnly(formData.get('date'));
+      const hours = numberValue(formData.get('hours'));
+      if (!person || !site) throw new Error('Seleziona operaio e cantiere.');
+      if (!day) throw new Error('Seleziona una data valida.');
+      if (hours <= 0 || hours > 24) throw new Error('Inserisci un totale maggiore di zero e non superiore a 24 ore.');
+      const team = WORKERS.find((item) => String(item.id) === String(person.team));
+      const split = hourBreakdown(hours, day);
+      database().timesheets ||= [];
+      database().timesheets.push({ id: uid('ore'), date: day, worker: person.id, workerName: person.name, team: person.team || '', teamName: team?.name || 'Senza squadra', workType: 'site', job: siteLabel(site), siteId: site.id, interventionId: site.interventionId || '', clientId: site.clientId || '', hours, ordinaryHours: split.ordinary, overtimeHours: split.overtime, hourType: split.overtime > 0 ? 'Straordinario' : 'Ordinario', notes: String(formData.get('notes') || ''), enteredByOffice: true, createdAt: new Date().toISOString() });
+    });
+  };
+
   worker = function () {
     const person = currentPerson();
     const teamId = typeof currentTeamId === 'function' ? currentTeamId() : person?.team || '';
@@ -432,6 +456,11 @@
     const overtimeHours = people.reduce((sum, person) => sum + person.overtime, 0);
     const closeout = allCloseoutPending();
     return pageHead('Ore operai', 'Totali individuali con straordinari automatici', '<button class="btn lime" onclick="printHoursPdf()">Stampa / salva PDF</button>') + `<div class="grid stats">${stat('Ore complessive', totalHours.toFixed(1), '⏱️')}${stat('Ore ordinarie', ordinaryHours.toFixed(1), '◷')}${stat('Ore straordinarie', overtimeHours.toFixed(1), '↗')}${stat('Chiusure da completare', closeout.reduce((sum, row) => sum + row.people.length, 0), '!')}</div>${closeout.length ? `<section class="hoursOwnerAlert"><h3>Ore mancanti sui cantieri conclusi</h3><p>Il cantiere resta visibile soltanto agli operai indicati finché non comunicano le ore.</p>${closeout.map((row) => `<div class="hoursAlertRow"><span><b>${esc(row.site.title || 'Cantiere')}</b><small>${esc(row.people.map((person) => person.name).join(', '))}</small></span><button class="btn sm light" onclick="openSite('${esc(row.site.id)}')">Apri cantiere</button></div>`).join('')}</section><div style="height:14px"></div>` : ''}${missingToday.length ? `<div class="notice"><b>Non hanno comunicato le ore oggi:</b> ${missingToday.map((person) => esc(person.name)).join(', ')}</div><div style="height:14px"></div>` : ''}<div class="card"><div class="actions" style="margin-bottom:14px"><input class="input" style="max-width:180px" type="month" value="${timesheetMonth}" onchange="setHoursMonth(this.value)"><select class="input" style="max-width:220px" onchange="setHoursTeam(this.value)"><option value="">Tutte le squadre</option>${WORKERS.map((team) => `<option value="${team.id}" ${team.id === timesheetTeam ? 'selected' : ''}>${esc(team.name)}</option>`).join('')}</select></div><div class="cardHead"><h3>Totale per ogni operaio</h3></div><div class="tableWrap"><table class="table"><thead><tr><th>Operaio</th><th>Squadra</th><th>Giorni</th><th>Totale</th><th>Ordinarie</th><th>Straordinarie</th></tr></thead><tbody>${people.map((person) => `<tr><td><b>${esc(person.name)}</b></td><td>${esc(person.team)}</td><td>${person.days.size}</td><td class="money">${person.total.toFixed(1)}</td><td class="money">${person.ordinary.toFixed(1)}</td><td class="money overtimeText">${person.overtime.toFixed(1)}</td></tr>`).join('') || '<tr><td colspan="6">Nessuna ora registrata.</td></tr>'}</tbody></table></div></div><div style="height:16px"></div><div class="card"><div class="cardHead"><h3>Dettaglio giornaliero</h3></div><div class="tableWrap"><table class="table"><thead><tr><th>Data</th><th>Operaio</th><th>Squadra</th><th>Lavoro</th><th>Totale</th><th>Ordinarie</th><th>Straordinarie</th><th>Note</th><th></th></tr></thead><tbody>${entries.map((entry) => `<tr><td>${esc(entry.date)}</td><td><b>${esc(entry.workerName)}</b></td><td>${esc(entry.teamName)}</td><td>${esc(entry.job)}</td><td class="money">${numberValue(entry.hours).toFixed(1)}</td><td>${numberValue(entry.ordinaryHours).toFixed(1)}</td><td class="overtimeText">${numberValue(entry.overtimeHours).toFixed(1)}</td><td>${esc(entry.notes || '')}</td><td>${entry.legacy ? 'Dato precedente' : `<div class="actions"><button class="btn sm light" onclick="openIndividualHoursEntry('${entry.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('timesheets','${entry.id}','questa registrazione ore')">Elimina</button></div>`}</td></tr>`).join('') || '<tr><td colspan="9">Nessuna ora registrata nel periodo.</td></tr>'}</tbody></table></div></div>`;
+  };
+
+  const officeHoursWithEntryButton = officeIndividualHours;
+  officeIndividualHours = function () {
+    return officeHoursWithEntryButton().replace('<button class="btn lime" onclick="printHoursPdf()">', '<button class="btn green" onclick="openOfficeHoursEntry()">＋ Registra ore</button><button class="btn lime" onclick="printHoursPdf()">');
   };
 
   printHoursPdf = function () {
