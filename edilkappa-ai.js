@@ -372,7 +372,7 @@
   }
 
   function modelSelectHtml() {
-    return `<label class="ekAiModel">Motore<select onchange="edilkappaAiSetModel(this.value)"><option value="auto" ${state.modelMode === "auto" ? "selected" : ""}>Automatico · Sol sui lavori complessi</option><option value="sol" ${state.modelMode === "sol" ? "selected" : ""}>GPT‑5.6 Sol · massima qualità</option><option value="terra" ${state.modelMode === "terra" ? "selected" : ""}>GPT‑5.6 Terra · più economico</option></select></label>`;
+    return `<label class="ekAiModel">Motore<select onchange="edilkappaAiSetModel(this.value)"><option value="auto" ${state.modelMode === "auto" ? "selected" : ""}>Automatico · Sol solo se necessario</option><option value="sol" ${state.modelMode === "sol" ? "selected" : ""}>GPT‑5.6 Sol · massima qualità</option><option value="terra" ${state.modelMode === "terra" ? "selected" : ""}>GPT‑5.6 Terra · più economico</option></select></label>`;
   }
 
   function renderAttachments() {
@@ -1550,7 +1550,7 @@
     }
     state.generatingVisual = artifact.id;
     state.error = "";
-    state.progress = `Creo “${artifact.visualBriefs[briefIndex].title}” con GPT‑5.6 Sol…`;
+    state.progress = `Creo “${artifact.visualBriefs[briefIndex].title}” con il motore immagini OpenAI…`;
     rerender();
     try {
       const referenceImages = (message.previews || []).filter((item) => /^image\//i.test(item.mimeType || "")).slice(0, 2);

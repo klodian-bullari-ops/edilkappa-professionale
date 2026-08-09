@@ -363,7 +363,7 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
 }
 
 function isRevisionRequest(message) {
-  return /\b(troppo\s+car[oa]|cost[oa]|riduc|risparmi|economic|modific|cambi|revision|aggiorn|alternativ|rifai|corregg|aggiung|togli|senza)\b/i.test(cleanText(message, 8000));
+  return /\b(troppo\s+car[oa]|cost\w*|riduc\w*|risparmi\w*|economic\w*|modific\w*|cambi\w*|revision\w*|aggiorn\w*|alternativ\w*|rifai|corregg\w*|aggiung\w*|togli\w*|senza)\b/i.test(cleanText(message, 8000));
 }
 
 function buildInput(history, message, attachments, videoTranscripts = []) {
@@ -414,29 +414,87 @@ function buildInput(history, message, attachments, videoTranscripts = []) {
   return input;
 }
 
-function chooseModel({ requestedModelMode = "auto", mode = "work", taskType = "auto", message = "", attachmentCount = 0, hasHistoryArtifact = false } = {}) {
+function chooseModel({
+  requestedModelMode = "auto",
+  mode = "work",
+  taskType = "auto",
+  message = "",
+  attachmentCount = 0,
+  attachmentKinds = [],
+  hasHistoryArtifact = false,
+  useWeb = false
+} = {}) {
   const selection = ["auto", "sol", "terra"].includes(requestedModelMode) ? requestedModelMode : "auto";
-  const revisionTask = hasHistoryArtifact && isRevisionRequest(message);
+  const text = cleanText(message, 8000);
+  const normalizedKinds = (Array.isArray(attachmentKinds) ? attachmentKinds : [])
+    .map((item) => cleanText(item, 40).toLowerCase())
+    .filter(Boolean);
+  const totalAttachments = Math.max(0, Number(attachmentCount) || 0);
+  const revisionTask = hasHistoryArtifact && isRevisionRequest(text);
   const documentTask = ["quote", "report"].includes(taskType)
-    || /\b(preventiv|relazione|capitolato|computo|variante|assicurazion)\b/i.test(cleanText(message, 8000));
-  const complexTask = ["quote", "report", "inspection"].includes(taskType)
-    || Number(attachmentCount) > 0
-    || revisionTask
-    || /\b(preventiv|relazione|sopralluogo|analizz|video|foto|capitolato|computo|progetto|confronta|strategia)\b/i.test(cleanText(message, 8000));
-  const useSol = selection === "sol" || (selection === "auto" && mode === "work" && complexTask);
+    || /\b(preventiv\w*|relazion\w*|capitolat\w*|comput\w*|variant\w*|assicur\w*)\b/i.test(text);
+  const diagnosticTask = ["report", "inspection"].includes(taskType)
+    || /\b(analizz\w*|diagnos\w*|caus\w*|origine|infiltraz\w*|perdit\w*|distacc\w*|sopralluog\w*|verifica tecnica)\b/i.test(text);
+  const highRiskTask = /\b(amianto|fibrocemento|perizi\w*|assicur\w*|sinistr\w*|contenzios\w*|responsabilit\w*|linea vita|ancoragg\w*|rischio di caduta|struttural\w*|stabilit\w*|portanza|dimensionament\w*|calcolo strutturale|conformit\w*|certificaz\w*|normativ\w*|scia|cila|titolo edilizio)\b/i.test(text);
+  const explicitDeepTask = /\b(usa sol|massima qualit|massima precisione|analisi approfondita|approfondisci tutto|caso molto complesso|valutazione specialistica)\b/i.test(text);
+  const hasVideo = normalizedKinds.some((kind) => kind === "video" || kind === "video_frame");
+  const reasons = [];
+  let complexityScore = 0;
+  const addComplexity = (points, reason) => {
+    complexityScore += points;
+    reasons.push(reason);
+  };
+
+  if (highRiskTask) addComplexity(3, "rischio tecnico o documentale elevato");
+  if (explicitDeepTask) addComplexity(3, "approfondimento massimo richiesto");
+  if (diagnosticTask && ["report", "inspection"].includes(taskType)) addComplexity(1, "diagnosi tecnica");
+  if (hasVideo && ["report", "inspection"].includes(taskType)) addComplexity(1, "analisi video tecnica");
+  if (totalAttachments >= 12) addComplexity(2, "molti allegati");
+  else if (totalAttachments >= 8) addComplexity(1, "più allegati");
+  if (text.length >= 3000) addComplexity(1, "richiesta articolata");
+  if (useWeb && documentTask) addComplexity(1, "ricerca esterna nel documento");
+
+  if (revisionTask && !highRiskTask && !explicitDeepTask) {
+    complexityScore = Math.max(0, complexityScore - 2);
+  }
+
+  const automaticSol = mode === "work" && complexityScore >= 3;
+  const useSol = selection === "sol" || (selection === "auto" && automaticSol);
   const model = useSol
     ? (process.env.OPENAI_SOL_MODEL || "gpt-5.6-sol")
     : (process.env.OPENAI_TERRA_MODEL || "gpt-5.6-terra");
   const reasoningEffort = useSol
-    ? ((documentTask || revisionTask) ? "xhigh" : complexTask ? "high" : "medium")
-    : (complexTask ? "medium" : "low");
+    ? (selection === "sol" ? "xhigh" : "high")
+    : ((documentTask || diagnosticTask || revisionTask) ? "medium" : "low");
+  const maxOutputTokens = useSol
+    ? (documentTask ? (selection === "sol" ? 18000 : 14000) : 10000)
+    : (documentTask ? (revisionTask ? 9000 : 10000) : diagnosticTask ? 8000 : 6000);
+  const modelLabel = selection === "sol"
+    ? "GPT‑5.6 Sol · scelta manuale"
+    : selection === "terra"
+      ? "GPT‑5.6 Terra · scelta manuale"
+      : useSol
+        ? "GPT‑5.6 Sol · complessità elevata"
+        : "GPT‑5.6 Terra · automatico economico";
+  const routingReason = selection !== "auto"
+    ? "modello scelto manualmente"
+    : useSol
+      ? reasons.slice(0, 3).join(", ")
+      : revisionTask
+        ? "revisione del documento esistente"
+        : documentTask
+          ? "documento ordinario gestibile con Terra"
+          : "attività ordinaria";
+
   return {
     selection,
     model,
-    modelLabel: useSol ? "GPT‑5.6 Sol" : "GPT‑5.6 Terra",
+    modelLabel,
     reasoningEffort,
-    verbosity: complexTask ? "high" : "medium",
-    maxOutputTokens: documentTask ? 18000 : 12000
+    verbosity: documentTask ? "high" : "medium",
+    maxOutputTokens,
+    complexityScore,
+    routingReason
   };
 }
 

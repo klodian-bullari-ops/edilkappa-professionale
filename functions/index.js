@@ -307,7 +307,7 @@ function openAiTransportFailure(error, operation = "request") {
   const message = cleanText(error?.message, 500);
   console.error(`OpenAI ${operation} transport failed`, { name, code, message });
   if (["AbortError", "TimeoutError"].includes(name) || /timed?\s*out|timeout/i.test(message)) {
-    return new HttpsError("deadline-exceeded", "GPT‑5.6 Sol sta impiegando più tempo del previsto. Riprova: la richiesta può richiedere alcuni minuti.");
+    return new HttpsError("deadline-exceeded", "L’elaborazione AI sta impiegando più tempo del previsto. Riprova: la richiesta può richiedere alcuni minuti.");
   }
   return new HttpsError("unavailable", "Non riesco a raggiungere OpenAI in questo momento. Riprova tra poco.");
 }
@@ -494,7 +494,7 @@ async function generateVisual({ artifact, brief, referenceImages, safetyId }) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_SOL_MODEL || "gpt-5.6-sol",
+        model: process.env.OPENAI_TERRA_MODEL || "gpt-5.6-terra",
         input: [{ role: "user", content }],
         tools: [{ type: "image_generation" }],
         store: false,
@@ -986,7 +986,12 @@ exports.edilkappaAi = onCall({
     taskType,
     message,
     attachmentCount: attachments.length + mediaReferences.length,
-    hasHistoryArtifact: history.some((item) => normalizeArtifact(item?.artifact))
+    attachmentKinds: [
+      ...attachments.map((item) => item.kind),
+      ...mediaReferences.map((item) => item.kind)
+    ],
+    hasHistoryArtifact: history.some((item) => normalizeArtifact(item?.artifact)),
+    useWeb: request.data?.useWeb === true
   });
   const instructions = buildInstructions({
     mode,
