@@ -135,6 +135,25 @@
     });
   };
 
+  window.deleteIntervention = function (id, clientId = selectedClientId) {
+    const client = clientById(clientId);
+    const item = (db.interventions || []).find((entry) => entry.id === id);
+    if (!client || !item) return alert('Intervento non trovato. Aggiorna la pagina e riprova.');
+    const rows = rowsFor(client, id);
+    const linked = [
+      ['cantieri', rows.sites.length], ['preventivi', rows.quotes.length], ['documenti', rows.documents.length],
+      ['foto/video drone', rows.drone.length], ['sopralluoghi', rows.inspections.length],
+      ['rapportini', rows.reports.length], ['registrazioni ore', rows.timesheets.length]
+    ].filter(([, count]) => count > 0);
+    if (linked.length) {
+      return alert(`Questo intervento non può essere eliminato perché contiene ${linked.map(([label, count]) => `${count} ${label}`).join(', ')}. Elimina o sposta prima gli elementi collegati, così nessun dato di lavoro viene perso.`);
+    }
+    if (!confirm(`Eliminare definitivamente l’intervento “${item.title || 'Nuovo intervento'}”?`)) return;
+    db.interventions = db.interventions.filter((entry) => entry.id !== id);
+    save();
+    render();
+  };
+
   function openWithContext(clientId, interventionId, opener) {
     const client = clientById(clientId);
     if (!client) return alert('Cliente o condominio non trovato.');
@@ -301,7 +320,7 @@
     const total = rows.quotes.length + rows.documents.length + rows.drone.length + rows.sites.length + rows.inspections.length + rows.reports.length + rows.timesheets.length;
     return `<section class="card archiveIntervention" id="intervention-${esc(item.id)}"><div class="cardHead"><div><span class="pill blue">${esc(item.category || 'Intervento')}</span><h3 style="margin:9px 0 3px">${esc(item.title)}</h3><small>${esc(item.date || 'Data da definire')} · ${total} element${total === 1 ? 'o' : 'i'}</small></div>${badge(item.status || 'Pianificato')}</div>
       ${item.notes ? `<p class="company">${esc(item.notes)}</p>` : ''}
-      <div class="actions"><button class="btn sm lime" onclick="openSiteForIntervention('${client.id}','${item.id}')">＋ Cantiere</button><button class="btn sm lime" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm green" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica intervento</button></div>
+      <div class="actions"><button class="btn sm lime" onclick="openSiteForIntervention('${client.id}','${item.id}')">＋ Cantiere</button><button class="btn sm lime" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm green" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica intervento</button><button class="btn sm red" onclick="deleteIntervention('${item.id}','${client.id}')">Elimina intervento</button></div>
       ${operationalGroups(item, rows)}
       ${groupedFiles(rows)}
     </section>`;
