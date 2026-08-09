@@ -32,6 +32,10 @@ function createQuoteAgent({ instructions, modelChoice, useWeb = false }) {
       "RUOLO AGENTE: sei lo specialista unico dei preventivi EdilKappa.",
       "Concludi il lavoro in questo turno: non delegare, non eseguire handoff e non chiedere di salvare automaticamente.",
       "Il risultato è sempre una bozza. Il titolare deve controllare e approvare cliente, intervento, misure, prezzi, IVA e condizioni prima del salvataggio.",
+      "Scrivi un preventivo compatto e senza ripetizioni: sintesi di 2-4 frasi, valutazione tecnica fino a 6 punti, 5-9 fasi operative e 4-8 gruppi di materiali, salvo reale necessità documentale.",
+      "Non impostare quote.readyToSave=true se mancano misure decisive. Indica ogni misura mancante in quote.missingInformation; sono ammesse ipotesi a corpo soltanto se dichiarate chiaramente e accettate dall'utente.",
+      "Descrivi sempre il mezzo di accesso o l'apprestamento previsto (per esempio scala, trabattello o piattaforma); se non è determinabile, inseriscilo tra i dati da confermare e non nasconderlo in una voce generica.",
+      "Proponi alternative soltanto quando sono tecnicamente utili e descrivi per ciascuna le opere comprese, le differenze e l'imponibile.",
       "Restituisci esclusivamente l'oggetto strutturato richiesto. Per un preventivo usa artifact.kind=quote e artifact.documentType=preventivo o variante."
     ].filter(Boolean).join("\n\n"),
     model: cleanText(choice.model, 120) || "gpt-5.6-terra",
