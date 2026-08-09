@@ -5,6 +5,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const { defineSecret } = require("firebase-functions/params");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall } = require("firebase-functions/v2/https");
 const {
   AI_RESPONSE_SCHEMA,
@@ -21,6 +22,10 @@ const {
   parseAttachments,
   parseMediaReferences
 } = require("./ai-core");
+const {
+  QUOTE_AGENT_NAME,
+  runQuoteAgent
+} = require("./quote-agent");
 
 const adminApp = initializeApp();
 const firestore = getFirestore(adminApp, "edilkappa");
@@ -34,6 +39,8 @@ const MAX_VISUALS_PER_ARTIFACT = 3;
 const OPENAI_REQUEST_TIMEOUT_MS = 540000;
 const OPENAI_BACKGROUND_TIMEOUT_MS = 45000;
 const AI_JOB_TTL_MS = 24 * 60 * 60 * 1000;
+const AGENT_RUN_TIMEOUT_MS = 520000;
+const MAX_AGENT_INPUT_BYTES = 32 * 1024 * 1024;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 async function authorizedUser(request, mode) {
@@ -75,6 +82,44 @@ function conversationTitle(value, fallback = "Nuova conversazione") {
 
 function aiJobRef(uid, jobId) {
   return firestore.collection("aiJobs").doc(`${uid}--${cleanText(jobId, 120)}`);
+}
+
+function aiAgentJobRef(uid, jobId) {
+  return firestore.collection("aiAgentJobs").doc(`${uid}--${cleanText(jobId, 120)}`);
+}
+
+function agentInputStoragePath(uid, jobId) {
+  const safeUid = cleanText(uid, 160).replace(/[^a-zA-Z0-9_-]/g, "");
+  const safeJobId = cleanText(jobId, 120).replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!safeUid || !safeJobId) throw new HttpsError("invalid-argument", "Identificativo del lavoro agente non valido.");
+  return `organisations/${ORG_ID}/ai-agent-jobs/${safeUid}/${safeJobId}/input.json`;
+}
+
+async function saveAgentInput(uid, jobId, input) {
+  const storagePath = agentInputStoragePath(uid, jobId);
+  const payload = Buffer.from(JSON.stringify({ version: 1, input }), "utf8");
+  if (!payload.length || payload.length > MAX_AGENT_INPUT_BYTES) {
+    throw new HttpsError("invalid-argument", "Gli allegati preparati per l’agente superano il limite consentito.");
+  }
+  await storageBucket.file(storagePath).save(payload, {
+    resumable: false,
+    metadata: {
+      contentType: "application/json",
+      cacheControl: "private,no-store",
+      metadata: { orgId: ORG_ID, ownerUid: uid, agentJobId: jobId }
+    }
+  });
+  return { storagePath, bytes: payload.length };
+}
+
+async function loadAgentInput(uid, jobId, storagePath) {
+  const expectedPath = agentInputStoragePath(uid, jobId);
+  if (storagePath !== expectedPath) throw new Error("Percorso degli allegati agente non valido.");
+  const [buffer] = await storageBucket.file(storagePath).download();
+  if (!buffer.length || buffer.length > MAX_AGENT_INPUT_BYTES) throw new Error("Contenuto del lavoro agente non valido.");
+  const parsed = JSON.parse(buffer.toString("utf8"));
+  if (parsed?.version !== 1 || !Array.isArray(parsed.input)) throw new Error("Formato del lavoro agente non valido.");
+  return parsed.input;
 }
 
 async function useDailyAllowance(uid) {
@@ -458,6 +503,157 @@ async function saveGeneratedVisual(uid, artifact, brief, briefIndex, image) {
   };
 }
 
+function agentFailureMessage(error) {
+  const name = cleanText(error?.name, 120);
+  const message = cleanText(error?.message, 500);
+  if (["AbortError", "TimeoutError"].includes(name) || /timed?\s*out|timeout/i.test(message)) {
+    return "L’agente preventivi ha superato il tempo massimo. La richiesta può essere riprovata senza perdere la chat.";
+  }
+  if (/429|quota|credit|billing|resource[_ -]?exhausted/i.test(message)) {
+    return "Il credito o il limite OpenAI è terminato. Controlla la fatturazione API.";
+  }
+  if (/401|403|api.?key|authentication|permission/i.test(message)) {
+    return "La chiave OpenAI del server non è valida oppure il progetto non è autorizzato a usare il modello scelto.";
+  }
+  return "L’agente preventivi non ha completato la bozza. Puoi riprovare dalla stessa chat.";
+}
+
+exports.edilkappaQuoteAgentWorker = onDocumentCreated({
+  document: "aiAgentJobs/{jobDocumentId}",
+  database: "edilkappa",
+  region: "europe-west8",
+  secrets: [OPENAI_API_KEY],
+  timeoutSeconds: 540,
+  memory: "1GiB",
+  maxInstances: 2,
+  concurrency: 1,
+  retry: false
+}, async (event) => {
+  const jobReference = event.data?.ref;
+  if (!jobReference) return;
+  const claimed = await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(jobReference);
+    const data = snapshot.data() || {};
+    if (!snapshot.exists || data.status !== "queued" || data.engine !== "agents_sdk" || data.taskType !== "quote") return null;
+    transaction.set(jobReference, {
+      status: "working",
+      stage: "agent",
+      startedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return data;
+  });
+  if (!claimed) return;
+
+  const job = claimed;
+  let completed = false;
+  try {
+    if (job.orgId !== ORG_ID || job.mode !== "work" || !job.uid || !job.jobId) throw new Error("Lavoro agente non autorizzato.");
+    const input = await loadAgentInput(job.uid, job.jobId, job.inputStoragePath);
+    const result = await runQuoteAgent({
+      apiKey: OPENAI_API_KEY.value(),
+      instructions: job.instructions,
+      input,
+      modelChoice: job.modelChoice,
+      useWeb: job.useWeb === true,
+      conversationId: job.conversationId,
+      userId: safetyIdentifier(job.uid),
+      signal: AbortSignal.timeout(AGENT_RUN_TIMEOUT_MS)
+    });
+    const qualityAudit = auditArtifact(result.artifact, job.message);
+    if (!qualityAudit.passed && result.artifact?.quote) result.artifact.quote.readyToSave = false;
+
+    const ref = conversationRef(job.uid, job.mode, job.conversationId);
+    const conversationSnapshot = await ref.get();
+    const history = Array.isArray(conversationSnapshot.data()?.messages) ? conversationSnapshot.data().messages : [];
+    const previousArtifactMessage = [...history].reverse().find((item) => normalizeArtifact(item?.artifact));
+    if (previousArtifactMessage && isRevisionRequest(job.message)) {
+      result.artifact.revisionOf ||= cleanText(previousArtifactMessage.artifact?.id || previousArtifactMessage.artifact?.title, 300);
+      result.artifact.revisionReason ||= cleanText(job.message, 1200);
+    }
+    result.artifact.id = `ai-${randomUUID()}`;
+    const inheritedMedia = isRevisionRequest(job.message) && Array.isArray(previousArtifactMessage?.media)
+      ? previousArtifactMessage.media
+      : [];
+    const resultMedia = [...inheritedMedia, ...(job.mediaReferences || [])].filter((item, index, values) => {
+      const key = item?.storagePath || `${item?.fileName || ""}:${item?.fileSize || 0}`;
+      return key && values.findIndex((candidate) => (candidate?.storagePath || `${candidate?.fileName || ""}:${candidate?.fileSize || 0}`) === key) === index;
+    }).slice(0, 10);
+    const userMessage = { role: "user", text: job.userText, media: job.mediaReferences || [], at: Number(job.createdAtMs || Date.now()) };
+    const assistantMessage = {
+      role: "assistant",
+      text: result.answer,
+      sources: result.sources,
+      artifact: result.artifact,
+      media: resultMedia,
+      model: job.modelChoice?.model,
+      modelLabel: job.modelChoice?.modelLabel,
+      reasoningEffort: job.modelChoice?.reasoningEffort,
+      engine: "agents_sdk",
+      agentName: QUOTE_AGENT_NAME,
+      approvalRequired: true,
+      qualityAudit,
+      at: Date.now()
+    };
+    const messages = history.concat([userMessage, assistantMessage]).slice(-30);
+    const existingThread = conversationSnapshot.data() || {};
+    const generatedTitle = conversationTitle(result.artifact?.subject || result.artifact?.title || job.message, "Nuova conversazione");
+    await ref.set({
+      uid: job.uid,
+      orgId: ORG_ID,
+      mode: job.mode,
+      messages,
+      title: existingThread.titleLocked ? conversationTitle(existingThread.title) : generatedTitle,
+      updatedAtMs: Date.now(),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    const completedResult = {
+      mode: job.mode,
+      answer: result.answer,
+      sources: result.sources,
+      artifact: result.artifact,
+      media: resultMedia,
+      model: job.modelChoice?.model,
+      modelLabel: job.modelChoice?.modelLabel,
+      reasoningEffort: job.modelChoice?.reasoningEffort,
+      engine: "agents_sdk",
+      agentName: QUOTE_AGENT_NAME,
+      approvalRequired: true,
+      qualityAudit,
+      usage: result.usage
+    };
+    await jobReference.set({
+      status: "completed",
+      stage: "completed",
+      responseId: result.responseId,
+      result: completedResult,
+      completedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    completed = true;
+  } catch (error) {
+    console.error("EdilKappa quote agent failed", {
+      jobId: cleanText(job.jobId, 120),
+      name: cleanText(error?.name, 120),
+      message: cleanText(error?.message, 500)
+    });
+    await jobReference.set({
+      status: "failed",
+      stage: "failed",
+      error: agentFailureMessage(error),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+  } finally {
+    if (completed) {
+      try {
+        await storageBucket.file(agentInputStoragePath(job.uid, job.jobId)).delete({ ignoreNotFound: true });
+      } catch (error) {
+        console.warn("Temporary agent input cleanup failed", { jobId: cleanText(job.jobId, 120), message: cleanText(error?.message, 300) });
+      }
+    }
+  }
+});
+
 exports.edilkappaAi = onCall({
   region: "europe-west8",
   secrets: [OPENAI_API_KEY],
@@ -561,7 +757,8 @@ exports.edilkappaAi = onCall({
   if (action === "job_status") {
     const jobId = cleanText(request.data?.jobId, 120);
     if (!jobId) throw new HttpsError("invalid-argument", "Identificativo del lavoro AI mancante.");
-    const jobReference = aiJobRef(account.uid, jobId);
+    const isAgentJob = jobId.startsWith("agent-");
+    const jobReference = isAgentJob ? aiAgentJobRef(account.uid, jobId) : aiJobRef(account.uid, jobId);
     const jobSnapshot = await jobReference.get();
     if (!jobSnapshot.exists) throw new HttpsError("not-found", "Non trovo più questa elaborazione. Puoi avviarne una nuova.");
     const job = jobSnapshot.data() || {};
@@ -571,6 +768,15 @@ exports.edilkappaAi = onCall({
     if (Date.now() - Number(job.createdAtMs || 0) > AI_JOB_TTL_MS) {
       await jobReference.set({ status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return { jobId, status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", canRetry: true };
+    }
+    if (isAgentJob) {
+      return {
+        jobId,
+        status: "working",
+        stage: job.stage || "agent",
+        engine: "agents_sdk",
+        agentName: QUOTE_AGENT_NAME
+      };
     }
 
     let openAiResponse = await retrieveBackgroundResponse(cleanText(job.responseId, 200));
@@ -724,14 +930,50 @@ exports.edilkappaAi = onCall({
     ? mediaReferences.map((item) => item.fileName)
     : Array.from(new Set(attachments.map((item) => item.sourceName || item.name)));
   const attachmentNote = originalNames.length ? `\n[Allegati: ${originalNames.join(", ")}]` : "";
-  const jobId = randomUUID();
+  const useQuoteAgent = mode === "work" && taskType === "quote";
+  const jobId = useQuoteAgent ? `agent-${randomUUID()}` : randomUUID();
   const input = buildInput(history, message, attachments, videoTranscripts);
+  const userText = cleanText((message || "Analizza gli allegati.") + attachmentNote, 6000);
+  if (useQuoteAgent) {
+    const storedInput = await saveAgentInput(account.uid, jobId, input);
+    await aiAgentJobRef(account.uid, jobId).set({
+      jobId,
+      uid: account.uid,
+      orgId: ORG_ID,
+      mode,
+      conversationId: threadId,
+      taskType,
+      engine: "agents_sdk",
+      agentName: QUOTE_AGENT_NAME,
+      approvalRequired: true,
+      status: "queued",
+      stage: "agent",
+      message,
+      userText,
+      mediaReferences,
+      inputStoragePath: storedInput.storagePath,
+      inputBytes: storedInput.bytes,
+      instructions,
+      modelChoice,
+      useWeb: request.data?.useWeb === true,
+      createdAtMs: Date.now(),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    return {
+      jobId,
+      status: "working",
+      stage: "agent",
+      engine: "agents_sdk",
+      agentName: QUOTE_AGENT_NAME,
+      modelLabel: modelChoice.modelLabel
+    };
+  }
   const preliminary = await createBackgroundResponse(preliminaryResponseBody({
     instructions,
     input,
     safetyId: safetyIdentifier(account.uid)
   }), "preliminary analysis");
-  const userText = cleanText((message || "Analizza gli allegati.") + attachmentNote, 6000);
   await aiJobRef(account.uid, jobId).set({
     uid: account.uid,
     orgId: ORG_ID,

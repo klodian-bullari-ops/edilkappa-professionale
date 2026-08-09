@@ -66,6 +66,11 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /GPT‑5\.6 Terra · recupero automatico/);
   assert.match(functionSource, /automatic retry/);
   assert.match(functionSource, /quality repair/);
+  assert.match(functionSource, /edilkappaQuoteAgentWorker/);
+  assert.match(functionSource, /engine:\s*"agents_sdk"/);
+  assert.match(functionSource, /approvalRequired:\s*true/);
+  assert.match(source, /Preventivo · Agente SDK/);
+  assert.match(source, /approvazione richiesta/);
   assert.match(functionSource, /auditArtifact/);
   assert.match(source, /edilkappa-ai-pending-job-v1/);
   assert.match(source, /edilkappaAiResumePending/);
