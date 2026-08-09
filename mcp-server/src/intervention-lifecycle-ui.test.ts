@@ -97,6 +97,6 @@ test('il ciclo intervento è caricato e disponibile anche offline', () => {
   assert.ok(indexHtml.includes('./intervention-lifecycle.js?v=2'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
   assert.ok(indexHtml.includes('./sw.js?v=45'));
-  assert.ok(serviceWorker.includes('v51-ai-quote-release-gate'));
+  assert.ok(serviceWorker.includes('v52-ai-conversations-hours'));
   assert.ok(serviceWorker.includes('"./intervention-lifecycle.js"'));
 });
