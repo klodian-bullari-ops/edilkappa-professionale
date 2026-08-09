@@ -186,7 +186,7 @@ function updateDrainTask(id){const item=db.drains.find(x=>x.id===id);if(!item)re
 async function openStoredFile(key){const popup=window.open('','_blank');try{const blob=await readPdf(key);if(!blob)throw new Error('Il file non è più presente su questo dispositivo');const url=URL.createObjectURL(blob);if(popup)popup.location.href=url;else{const a=document.createElement('a');a.href=url;a.target='_blank';a.click()}setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(err){if(popup)popup.close();alert(err.message||'Impossibile aprire il documento')}}
 function openReport(id){go('report');setTimeout(()=>{const s=document.querySelector('[name=site]');if(s)s.value=id},0)}
 function saveReport(e){e.preventDefault();const f=new FormData(e.target),site=db.sites.find(s=>s.id===f.get('site'));if(!site)return;site.progress=Number(f.get('progress')||site.progress);site.cost+=Number(f.get('material')||0);db.reports.push({id:uid('r'),site:site.id,worker:role,date:new Date().toISOString(),hours:Number(f.get('hours')),material:Number(f.get('material')),notes:f.get('notes'),photoCount:e.target.photos.files.length});save();alert('Rapportino salvato. Il titolare lo vedrà nel cantiere.');go('worker')}
-function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;const old=document.body.innerHTML;document.body.innerHTML=`<main style="padding:35px;font-family:Arial"><h1>${COMPANY.name}</h1><p>${COMPANY.address}<br>P.IVA ${COMPANY.vat}<br>${COMPANY.phone} · ${COMPANY.email}</p><hr><h2>PREVENTIVO ${esc(q.code)}</h2><p>Data: ${esc(q.date)}</p><h3>${esc(q.client)}</h3><p>${esc(q.subject)}</p><h2 style="text-align:right">Imponibile: ${euro(q.net)}</h2><p style="margin-top:80px">Validità offerta: 30 giorni</p></main>`;window.print();document.body.innerHTML=old;location.reload()}
+function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.aiArtifact&&window.edilkappaAiDownloadSavedQuote)return window.edilkappaAiDownloadSavedQuote(q);const old=document.body.innerHTML;document.body.innerHTML=`<main style="padding:35px;font-family:Arial"><h1>${COMPANY.name}</h1><p>${COMPANY.address}<br>P.IVA ${COMPANY.vat}<br>${COMPANY.phone} · ${COMPANY.email}</p><hr><h2>PREVENTIVO ${esc(q.code)}</h2><p>Data: ${esc(q.date)}</p><h3>${esc(q.client)}</h3><p>${esc(q.subject)}</p><h2 style="text-align:right">Imponibile: ${euro(q.net)}</h2><p style="margin-top:80px">Validità offerta: 30 giorni</p></main>`;window.print();document.body.innerHTML=old;location.reload()}
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
@@ -232,7 +232,7 @@ window.EdilKappaLocal={
 <script src="./bulk-sharing.js?v=5.1"></script>
 <script src="./edilconnect.js?v=2"></script>
 <script src="./hours-closeout.js?v=2"></script>
-<script src="./edilkappa-ai.js?v=12"></script>
+<script src="./edilkappa-ai.js?v=13"></script>
 <script src="./edilkappa-ai-route.js?v=1"></script>
 <script type="module" src="./firebase-cloud.js?v=26"></script>
 </body>

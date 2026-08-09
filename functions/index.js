@@ -1,7 +1,6 @@
 "use strict";
 
 const { createHash, randomUUID } = require("node:crypto");
-const convertHeic = require("heic-convert");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
@@ -27,6 +26,11 @@ const {
   QUOTE_AGENT_NAME,
   runQuoteAgent
 } = require("./quote-agent");
+const {
+  convertHeicBuffer,
+  ensurePhotoPreview,
+  prepareArchivedHeicPhotos
+} = require("./photo-utils");
 
 const adminApp = initializeApp();
 const firestore = getFirestore(adminApp, "edilkappa");
@@ -42,6 +46,7 @@ const OPENAI_BACKGROUND_TIMEOUT_MS = 45000;
 const AI_JOB_TTL_MS = 24 * 60 * 60 * 1000;
 const AGENT_RUN_TIMEOUT_MS = 520000;
 const MAX_AGENT_INPUT_BYTES = 32 * 1024 * 1024;
+const MAX_PREPARED_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 async function convertHeicAttachments(items) {
@@ -49,19 +54,39 @@ async function convertHeicAttachments(items) {
     if (!/^image\/(heic|heif)$/i.test(item.mimeType)) return item;
     try {
       const encoded = String(item.dataUrl || "").split(",")[1] || "";
-      const output = await convertHeic({ buffer: Buffer.from(encoded, "base64"), format: "JPEG", quality: 0.86 });
-      if (!output?.length || output.length > 6 * 1024 * 1024) throw new Error("dimensione non valida");
+      const output = await convertHeicBuffer(Buffer.from(encoded, "base64"));
       return {
         ...item,
         name: String(item.name || "foto.heic").replace(/\.(heic|heif)$/i, ".jpg"),
         mimeType: "image/jpeg",
-        dataUrl: `data:image/jpeg;base64,${Buffer.from(output).toString("base64")}`,
+        dataUrl: `data:image/jpeg;base64,${output.toString("base64")}`,
         isImage: true
       };
     } catch (_) {
       throw new Error(`Non riesco a convertire la fotografia HEIC ${item.sourceName || item.name}.`);
     }
   }));
+}
+
+function preparedAttachmentBytes(item) {
+  const encoded = String(item?.dataUrl || "").split(",")[1] || "";
+  return Math.floor(encoded.length * 3 / 4);
+}
+
+function mergePreparedAttachments(inlineAttachments, archivedAttachments) {
+  const output = [];
+  const seen = new Set();
+  for (const item of [...(archivedAttachments || []), ...(inlineAttachments || [])]) {
+    const key = String(item?.sourceName || item?.name || "").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    output.push(item);
+  }
+  const totalBytes = output.reduce((sum, item) => sum + preparedAttachmentBytes(item), 0);
+  if (totalBytes > MAX_PREPARED_ATTACHMENT_BYTES) {
+    throw new Error("Le fotografie e i documenti elaborati insieme superano 15 MB. Rimuovi un allegato e riprova.");
+  }
+  return output;
 }
 
 async function authorizedUser(request, mode) {
@@ -223,13 +248,15 @@ async function storedImageReferences(media, uid, limit = 2) {
   const output = [];
   for (const item of Array.isArray(media) ? media : []) {
     if (output.length >= limit) break;
-    const storagePath = cleanText(item?.storagePath, 600);
-    if (item?.generated || item?.kind !== "image" || !storagePath.startsWith(prefix)) continue;
+    const originalPath = cleanText(item?.storagePath, 600);
+    if (item?.generated || item?.kind !== "image" || !originalPath.startsWith(prefix)) continue;
     try {
+      const prepared = await ensurePhotoPreview({ storageBucket, reference: item, uid, orgId: ORG_ID });
+      const storagePath = cleanText(prepared.reference.previewStoragePath || originalPath, 600);
       const file = storageBucket.file(storagePath);
       const [metadata] = await file.getMetadata();
-      const contentType = String(metadata.contentType || item.fileType || "").toLowerCase();
-      const size = Number(metadata.size || item.fileSize || 0);
+      const contentType = String(metadata.contentType || prepared.reference.previewFileType || item.fileType || "").toLowerCase();
+      const size = Number(metadata.size || (storagePath === originalPath ? item.fileSize : 0) || 0);
       if (!VISUAL_REFERENCE_TYPES.has(contentType) || !size || size > 6 * 1024 * 1024) continue;
       const [buffer] = await file.download();
       output.push({
@@ -238,7 +265,7 @@ async function storedImageReferences(media, uid, limit = 2) {
         dataUrl: `data:${contentType};base64,${buffer.toString("base64")}`
       });
     } catch (error) {
-      console.warn("Stored visual reference unavailable", { storagePath, message: error?.message });
+      console.warn("Stored visual reference unavailable", { storagePath: originalPath, message: error?.message });
     }
   }
   return output;
@@ -727,6 +754,18 @@ exports.edilkappaAi = onCall({
     await ref.delete();
     return { mode, conversationId: threadId, messages: [] };
   }
+  if (action === "prepare_photo_preview") {
+    if (mode !== "work") throw new HttpsError("permission-denied", "Le anteprime fotografiche sono disponibili soltanto in modalità Lavoro.");
+    let reference;
+    try {
+      [reference] = parseMediaReferences([request.data?.mediaReference], account.uid, mode);
+      if (!reference || reference.kind !== "image") throw new Error("Seleziona una fotografia archiviata valida.");
+      const prepared = await ensurePhotoPreview({ storageBucket, reference, uid: account.uid, orgId: ORG_ID });
+      return { mode, preview: prepared.reference };
+    } catch (error) {
+      throw new HttpsError("invalid-argument", error.message);
+    }
+  }
   if (action === "generate_visual") {
     if (mode !== "work") throw new HttpsError("permission-denied", "Le immagini operative sono disponibili soltanto in modalità Lavoro.");
     const artifactId = cleanText(request.data?.artifactId, 200);
@@ -924,6 +963,14 @@ exports.edilkappaAi = onCall({
   try {
     attachments = await convertHeicAttachments(parseAttachments(request.data?.attachments));
     mediaReferences = parseMediaReferences(request.data?.mediaReferences, account.uid, mode);
+    const archivedPhotos = await prepareArchivedHeicPhotos({
+      storageBucket,
+      mediaReferences,
+      uid: account.uid,
+      orgId: ORG_ID
+    });
+    mediaReferences = archivedPhotos.mediaReferences;
+    attachments = mergePreparedAttachments(attachments, archivedPhotos.attachments);
   } catch (error) {
     throw new HttpsError("invalid-argument", error.message);
   }

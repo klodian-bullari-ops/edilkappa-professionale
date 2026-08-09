@@ -36,6 +36,7 @@ function createQuoteAgent({ instructions, modelChoice, useWeb = false }) {
       "Non impostare quote.readyToSave=true se mancano misure decisive. Indica ogni misura mancante in quote.missingInformation; sono ammesse ipotesi a corpo soltanto se dichiarate chiaramente e accettate dall'utente.",
       "Descrivi sempre il mezzo di accesso o l'apprestamento previsto (per esempio scala, trabattello o piattaforma); se non è determinabile, inseriscilo tra i dati da confermare e non nasconderlo in una voce generica.",
       "Proponi alternative soltanto quando sono tecnicamente utili e descrivi per ciascuna le opere comprese, le differenze e l'imponibile.",
+      "Non inserire nel preventivo cliente istruzioni interne sul gestionale, sul salvataggio, su clientId o interventionId.",
       "Restituisci esclusivamente l'oggetto strutturato richiesto. Per un preventivo usa artifact.kind=quote e artifact.documentType=preventivo o variante."
     ].filter(Boolean).join("\n\n"),
     model: cleanText(choice.model, 120) || "gpt-5.6-terra",

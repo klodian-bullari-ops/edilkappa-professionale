@@ -6,6 +6,7 @@
   const MAX_REQUEST_BYTES = 15 * 1024 * 1024;
   const VIDEO_MAX_BYTES = 500 * 1024 * 1024;
   const DOCUMENT_MAX_BYTES = 6 * 1024 * 1024;
+  const HEIC_MAX_BYTES = 25 * 1024 * 1024;
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
   const MODEL_MODES = new Set(["auto", "sol", "terra"]);
   const PENDING_JOB_KEY = "edilkappa-ai-pending-job-v1";
@@ -57,7 +58,7 @@
     .ekAiArtifact{margin-top:14px;border:1px solid #cbd9d0;border-radius:16px;overflow:hidden;background:#fcfdfc}.ekAiArtifactHead{padding:13px 14px;background:#eef5f0;display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.ekAiArtifactHead strong{display:block;color:#173d2e}.ekAiArtifactHead small{display:block;color:#607168;margin-top:3px}.ekAiArtifactBody{padding:14px}.ekAiArtifactTable{width:100%;border-collapse:collapse;font-size:12px;min-width:660px}.ekAiArtifactTable th,.ekAiArtifactTable td{padding:8px;border-bottom:1px solid #e0e7e2;text-align:left;vertical-align:top}.ekAiArtifactTable th{color:#607168;background:#f8faf8;font-size:10px;text-transform:uppercase}.ekAiArtifactTable .right{text-align:right;white-space:nowrap}.ekAiTableWrap{overflow:auto;border:1px solid #e0e7e2;border-radius:11px}.ekAiPriceSource{display:inline-flex;border-radius:999px;padding:3px 7px;background:#eaf3ee;color:#246143;font-size:10px;font-weight:850;white-space:nowrap}.ekAiPriceSource.estimate{background:#fff2c7;color:#775a00}.ekAiPriceSource.missing{background:#ffe5e3;color:#922e27}.ekAiArtifactTotals{display:grid;grid-template-columns:1fr auto;gap:4px 18px;width:min(330px,100%);margin:12px 0 0 auto;font-size:13px}.ekAiArtifactTotals b{text-align:right}.ekAiArtifactSection{margin-top:13px}.ekAiArtifactSection h4{margin:0 0 6px;color:#284c3d}.ekAiArtifactSection ul{margin:5px 0;padding-left:20px}.ekAiArtifactSection li{margin:4px 0}.ekAiMethod{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-top:13px}.ekAiMethod>div{border:1px solid #dce4df;border-radius:11px;padding:10px;background:#fff}.ekAiMethod b{display:block;color:#284c3d;margin-bottom:5px}.ekAiPricingCheck{margin-top:13px;border:1px solid #d8b600;background:#fffbee;border-radius:12px;padding:11px}.ekAiPricingGrid{display:grid;grid-template-columns:1fr auto;gap:4px 14px;margin-top:8px;font-size:12px}.ekAiPricingGrid b{text-align:right}.ekAiEvidenceTable{min-width:720px}.ekAiPriority{display:inline-flex;padding:4px 8px;border-radius:999px;background:#fff2c7;color:#775a00;font-size:11px;font-weight:850}.ekAiOption{border:1px solid #d8e3dc;border-radius:11px;padding:10px;margin-top:8px}.ekAiOption.recommended{border-color:#d8b600;background:#fffbee}.ekAiOptionHead{display:flex;justify-content:space-between;gap:10px}.ekAiVisualBrief{border-left:4px solid #f4c400;background:#f8faf8;padding:9px 10px;margin-top:7px}.ekAiArtifactNotice{background:#fff7d9;border:1px solid #ecd987;border-radius:11px;padding:10px;margin-top:11px;color:#695300;font-size:12px}.ekAiArtifactActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}.ekAiArtifactActions button{border:0;border-radius:10px;padding:9px 12px;font-weight:850;cursor:pointer;background:#173d2e;color:#fff}.ekAiArtifactActions button.secondary{background:#fff;color:#173d2e;border:1px solid #cbd9d0}.ekAiArtifactActions button.visual{background:#f4c400;color:#173d2e}.ekAiArtifactActions button.saved{background:#e7f4eb;color:#176542;border:1px solid #b9ddc5}.ekAiArtifactActions button:disabled{opacity:.55;cursor:wait}
     .ekAiQuick{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.ekAiQuick button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}.ekAiQuick button:hover{border-color:#6da482}
     .ekAiWorkspace{display:grid;grid-template-columns:255px minmax(0,1fr);gap:13px}.ekAiThreads{border:1px solid #dce7e0;border-radius:18px;background:#fff;padding:10px;min-height:440px;max-height:60vh;overflow:auto}.ekAiNewThread{width:100%;border:0;border-radius:11px;background:#f4c400;color:#173d2e;padding:11px;font-weight:900;cursor:pointer;margin-bottom:9px}.ekAiThread{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center;border-radius:11px;padding:7px;color:#315345}.ekAiThread.active{background:#eaf3ee;color:#173d2e}.ekAiThreadMain{border:0;background:transparent;text-align:left;min-width:0;cursor:pointer;color:inherit}.ekAiThreadMain b,.ekAiThreadMain small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ekAiThreadMain small{font-size:10px;color:#75867e;margin-top:3px}.ekAiThreadActions{display:flex;gap:2px}.ekAiThreadAction{width:30px;height:30px;border:0;border-radius:8px;background:transparent;cursor:pointer;color:#526b60;font-size:14px}.ekAiThreadAction:hover{background:#dcebe2}.ekAiThreadAction.delete{color:#9b2f2f}.ekAiThreadAction.delete:hover{background:#ffe8e6}.ekAiMain{min-width:0}.ekAiHoursButton{border:1px solid #d6e2da;background:#fff;border-radius:11px;padding:9px 12px;color:#173d2e;font-weight:850;cursor:pointer}
-    .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:6px;background:#edf4ef;color:#355246;border-radius:9px;padding:7px 9px;font-size:12px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:12px;font-size:13px}.ekAiSteps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:9px}.ekAiStep{padding:7px 5px;border-radius:8px;background:#dce9e1;color:#61736a;text-align:center;font-size:10px;font-weight:800}.ekAiStep.done{background:#bfe3ca;color:#175c35}.ekAiStep.active{background:#f4c400;color:#292300}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiRetry{margin-left:9px;border:1px solid #c65d57;background:#fff;color:#8f2929;border-radius:8px;padding:6px 9px;font-weight:800}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
+    .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:8px;background:#edf4ef;color:#355246;border-radius:11px;padding:6px 8px;font-size:12px;max-width:min(100%,300px)}.ekAiFileThumb{width:42px;height:42px;object-fit:cover;border-radius:8px;background:#dce8e0;flex:0 0 auto}.ekAiFileIcon{width:42px;height:42px;border-radius:8px;background:#dce8e0;display:grid;place-items:center;font-size:20px;flex:0 0 auto}.ekAiFileBody{min-width:0;flex:1}.ekAiFileBody b,.ekAiFileBody small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ekAiFileBody small{color:#62766c;margin-top:2px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer;font-size:18px}.ekAiUploadHelp{width:100%;font-size:11px;color:#667970;margin-top:7px}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:12px;font-size:13px}.ekAiSteps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:9px}.ekAiStep{padding:7px 5px;border-radius:8px;background:#dce9e1;color:#61736a;text-align:center;font-size:10px;font-weight:800}.ekAiStep.done{background:#bfe3ca;color:#175c35}.ekAiStep.active{background:#f4c400;color:#292300}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiRetry{margin-left:9px;border:1px solid #c65d57;background:#fff;color:#8f2929;border-radius:8px;padding:6px 9px;font-weight:800}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
     @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiWorkspace{grid-template-columns:1fr}.ekAiThreads{min-height:0;max-height:170px}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
   `;
   document.head.appendChild(css);
@@ -119,6 +120,13 @@
     return Number(value || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
   }
 
+  function humanFileSize(value) {
+    const bytes = Number(value || 0);
+    if (!bytes) return "dimensione non disponibile";
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / 1024 / 1024).toLocaleString("it-IT", { maximumFractionDigits: 1 })} MB`;
+  }
+
   function localDate() {
     const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" });
     return formatter.format(new Date());
@@ -157,7 +165,7 @@
   }
 
   function artifactList(title, values) {
-    const rows = (Array.isArray(values) ? values : []).filter(Boolean);
+    const rows = customerFacingValues(values);
     return rows.length ? `<div class="ekAiArtifactSection"><h4>${escapeHtml(title)}</h4><ul>${rows.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul></div>` : "";
   }
 
@@ -299,9 +307,9 @@
     const discount = subtotal * Number(quote.discountPct || 0) / 100;
     const net = subtotal - discount;
     const vat = net * Number(quote.vatRate || 0) / 100;
-    const options = (quote.options || []).map((option) => `<div class="ekAiOption ${option.recommended ? "recommended" : ""}"><div class="ekAiOptionHead"><b>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)}</b><b>${euro(option.total)} + IVA</b></div>${option.description ? `<div>${escapeHtml(option.description)}</div>` : ""}${option.includedWorks?.length ? `<small>Comprende: ${escapeHtml(option.includedWorks.join(" · "))}</small>` : ""}${option.notes ? `<br><small>${escapeHtml(option.notes)}</small>` : ""}</div>`).join("");
+    const options = (quote.options || []).map((option) => `<div class="ekAiOption ${option.recommended ? "recommended" : ""}"><div class="ekAiOptionHead"><b>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)}</b><b>${euro(option.total)} + IVA</b></div>${option.description ? `<div>${escapeHtml(option.description)}</div>` : ""}${scenarioIncludedWorks(option.includedWorks) ? `<small>Comprende: ${escapeHtml(scenarioIncludedWorks(option.includedWorks))}.</small>` : ""}${option.notes ? `<br><small>${escapeHtml(option.notes)}</small>` : ""}</div>`).join("");
     return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${artifactMethodHtml(artifact)}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th><th>Origine</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit)}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td><td>${priceSourceHtml(line)}<br><small>Affidabilità ${escapeHtml(line.confidence || "bassa")}</small></td></tr>`).join("") || `<tr><td colspan="6">Le voci devono ancora essere definite.</td></tr>`}</tbody></table></div>
-      <div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b><span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b><span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>
+      <div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b>${discount > 0.005 ? `<span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b>` : ""}<span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>
       ${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata stimata</h4><div>${escapeHtml(quote.estimatedDuration)}</div></div>` : ""}${artifactList("Opere comprese", quote.includedWorks)}${artifactList("Esclusioni", quote.exclusions)}${options ? `<div class="ekAiArtifactSection"><h4>Alternative e scenari</h4>${options}</div>` : ""}${pricingAnalysisHtml(artifact)}${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
   }
 
@@ -370,8 +378,15 @@
   function renderAttachments() {
     return state.attachments.map((item, index) => {
       const icon = item.kind === "video" ? "🎬" : item.kind === "image" ? "📷" : "📄";
-      const detail = item.kind === "video" ? ` · ${item.frames?.length || 0} fotogrammi` : "";
-      return `<span class="ekAiFile">${icon} ${escapeHtml(item.name)}${detail} <button onclick="edilkappaAiRemoveFile(${index})" aria-label="Rimuovi">×</button></span>`;
+      const detail = item.kind === "video"
+        ? `${item.frames?.length || 0} fotogrammi · ${humanFileSize(item.file?.size)}`
+        : item.kind === "image" && /^image\/(heic|heif)$/i.test(item.mimeType)
+          ? `HEIC · conversione automatica · ${humanFileSize(item.file?.size)}`
+          : `${item.kind === "image" ? "Foto pronta" : "File pronto"} · ${humanFileSize(item.file?.size)}`;
+      const visual = item.thumbnailDataUrl
+        ? `<img class="ekAiFileThumb" src="${item.thumbnailDataUrl}" alt="">`
+        : `<span class="ekAiFileIcon">${icon}</span>`;
+      return `<div class="ekAiFile">${visual}<span class="ekAiFileBody"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(detail)}</small></span><button type="button" onclick="edilkappaAiRemoveFile(${index})" aria-label="Rimuovi">×</button></div>`;
     }).join("");
   }
 
@@ -402,7 +417,7 @@
       <div class="ekAiQuick">${quickPrompts().map((item, index) => `<button onclick="edilkappaAiUsePrompt(${index})">${escapeHtml(item.label)}</button>`).join("")}${state.mode === "work" ? `<button class="ekAiHoursButton" onclick="openOfficeHoursEntry()">⏱️ Registra ore operaio</button>` : ""}</div>
       ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}${progressStepsHtml(state.pendingJob?.stage || "archive")}</div>` : ""}
       ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}${state.retryAvailable ? `<button class="ekAiRetry" onclick="edilkappaAiRetry()">Riprova</button>` : ""}</div>` : ""}
-      <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button></div></div>
+      <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files,this)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button><div class="ekAiUploadHelp">Fino a 8 file: puoi aggiungerli uno alla volta oppure, su Windows, selezionarne più di uno tenendo premuto Ctrl. Le foto iPhone HEIC vengono convertite automaticamente e inserite anche nel PDF.</div></div></div>
       <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Svuota questa chat</button></div></div></div>
     </div>`;
   }
@@ -578,8 +593,13 @@
   async function compressedImage(file) {
     const mimeType = inferredType(file);
     if (/^image\/(heic|heif)$/i.test(mimeType)) {
-      if (file.size > 6 * 1024 * 1024) throw new Error(`${file.name} supera 6 MB. Riduci la fotografia HEIC prima di allegarla.`);
-      return { dataUrl: await fileDataUrl(file), mimeType };
+      if (file.size > HEIC_MAX_BYTES) throw new Error(`${file.name} supera 25 MB. Riduci la fotografia HEIC oppure inviala separatamente.`);
+      return {
+        dataUrl: file.size <= 6 * 1024 * 1024 ? await fileDataUrl(file) : "",
+        mimeType,
+        thumbnailDataUrl: "",
+        serverConversion: true
+      };
     }
     const objectUrl = URL.createObjectURL(file);
     try {
@@ -597,7 +617,16 @@
       let blob = await blobFromCanvas(canvas, "image/jpeg", 0.86);
       if (blob?.size > 2500000) blob = await blobFromCanvas(canvas, "image/jpeg", 0.72);
       if (!blob) throw new Error("Non riesco a preparare questa fotografia.");
-      return { dataUrl: await fileDataUrl(blob), mimeType: "image/jpeg" };
+      const thumbnail = document.createElement("canvas");
+      const thumbnailScale = Math.min(1, 160 / Math.max(canvas.width, canvas.height));
+      thumbnail.width = Math.max(1, Math.round(canvas.width * thumbnailScale));
+      thumbnail.height = Math.max(1, Math.round(canvas.height * thumbnailScale));
+      thumbnail.getContext("2d").drawImage(canvas, 0, 0, thumbnail.width, thumbnail.height);
+      return {
+        dataUrl: await fileDataUrl(blob),
+        mimeType: "image/jpeg",
+        thumbnailDataUrl: thumbnail.toDataURL("image/jpeg", 0.7)
+      };
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
@@ -677,12 +706,21 @@
     return Math.floor(base64.length * 3 / 4);
   }
 
-  function requestAttachmentsFor(items) {
+  function requestAttachmentsFor(items, options = {}) {
     const fixed = [];
     const videoFrames = [];
     items.forEach((item) => {
       if (item.kind === "video") videoFrames.push(...(item.frames || []));
-      else fixed.push({ name: item.name, sourceName: item.name, mimeType: item.mimeType, dataUrl: item.dataUrl, kind: item.kind });
+      else {
+        const isHeic = /^image\/(heic|heif)$/i.test(item.mimeType || "");
+        if (isHeic && options.omitArchivedHeic === true && (options.selectionOnly === true || item.stored)) return;
+        if (!item.dataUrl) {
+          throw new Error(isHeic
+            ? `${item.name} deve essere archiviata nel cloud prima della conversione. Riprova con una connessione stabile.`
+            : `Non riesco a preparare ${item.name}.`);
+        }
+        fixed.push({ name: item.name, sourceName: item.name, mimeType: item.mimeType, dataUrl: item.dataUrl, kind: item.kind });
+      }
     });
     const frameSlots = Math.max(0, MAX_REQUEST_ATTACHMENTS - fixed.length);
     const selectedFrames = videoFrames.length <= frameSlots
@@ -778,6 +816,9 @@
       fileName: item.fileName,
       fileType: item.fileType,
       fileSize: item.fileSize,
+      previewStoragePath: item.previewStoragePath || "",
+      previewFileName: item.previewFileName || "",
+      previewFileType: item.previewFileType || "",
       uploadedAt: item.uploadedAt || new Date().toISOString(),
       source: item.generated ? "EdilKappa AI · visualizzazione illustrativa" : "EdilKappa AI",
       generated: item.generated === true,
@@ -865,6 +906,7 @@
       aiEvidence: artifact.evidence || [],
       aiUncertainties: artifact.uncertainties || [],
       aiRecommendedSolution: artifact.recommendedSolution || "",
+      aiArtifact: artifact,
       media: mediaForQuote(media),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1001,8 +1043,21 @@
     return y + 2.5;
   }
 
+  function customerFacingValues(values) {
+    return (Array.isArray(values) ? values : [])
+      .map((value) => String(value || "").trim())
+      .filter((value) => value && !/\bgestionale\b|\bclientid\b|\binterventionid\b|selezionare\s+o\s+creare.{0,100}\bintervento\b/i.test(value));
+  }
+
+  function scenarioIncludedWorks(values) {
+    return customerFacingValues(values)
+      .map((value) => value.replace(/[\s.;:,]+$/g, ""))
+      .filter(Boolean)
+      .join("; ");
+  }
+
   function pdfListSection(doc, context, title, values, y) {
-    const rows = (Array.isArray(values) ? values : []).filter(Boolean);
+    const rows = customerFacingValues(values);
     return rows.length ? pdfTextSection(doc, context, title, rows.map((value) => `- ${value}`).join("\n"), y) : y;
   }
 
@@ -1021,23 +1076,23 @@
   }
 
   function pdfSignatureBlock(doc, context, y) {
-    y = ensureDocumentSpace(doc, context, y, 36);
+    y = ensureDocumentSpace(doc, context, y, 29);
     doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(9.2);
     doc.text("ACCETTAZIONE E FIRME", 14, y);
-    y += 9;
+    y += 7;
     doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     doc.setFontSize(8.5);
     doc.text("Per il Committente", 14, y);
     doc.text("Per EdilKappa", 112, y);
-    y += 13;
+    y += 11;
     doc.setDrawColor(90, 90, 90);
     doc.line(14, y, 94, y);
     doc.line(112, y, 196, y);
     doc.setFontSize(7.5);
     doc.text("Data, timbro e firma", 14, y + 4);
     doc.text("Timbro e firma", 112, y + 4);
-    return y + 9;
+    return y + 7;
   }
 
   function addPhotoAppendix(doc, context, previews, artifact) {
@@ -1099,6 +1154,7 @@
     let y = runDocumentTable(doc, context, {
       startY: 63,
       body: [
+        ...(destination.code ? [["Numero", destination.code]] : []),
         ["Destinatario", destination.client.name || artifact.client || "Da assegnare"],
         ["Ubicazione intervento", destination.client.address || artifact.address || "Da confermare"],
         ["Oggetto", destination.title || artifact.subject || artifact.title || context.label],
@@ -1108,7 +1164,7 @@
       columnStyles: { 0: { cellWidth: 48, fillColor: EDILKAPPA_DOCUMENT.light, fontStyle: "bold" } }
     }) + 6;
     y = ensureDocumentSpace(doc, context, y, 18);
-    const callout = "PREVENTIVO PROFESSIONALE EDILKAPPA";
+    const callout = artifact.kind === "quote" ? "PREVENTIVO PROFESSIONALE EDILKAPPA" : "DOCUMENTO TECNICO EDILKAPPA";
     doc.setFillColor(...EDILKAPPA_DOCUMENT.yellow);
     const calloutLines = doc.splitTextToSize(callout, 172);
     const calloutHeight = Math.max(13, 7 + calloutLines.length * 4);
@@ -1129,26 +1185,28 @@
         startY: y,
         head: [["N.", "LAVORAZIONE", "Q.TÀ", "U.M.", "PREZZO UNIT.", "IMPORTO"]],
         body: lines.map((line, index) => [String(index + 1), line.description, Number(line.quantity || 0).toLocaleString("it-IT"), line.unit || "a corpo", euro(line.unitPrice), euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))]),
-        columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 91 }, 2: { cellWidth: 16, halign: "right" }, 3: { cellWidth: 15 }, 4: { cellWidth: 25, halign: "right" }, 5: { cellWidth: 26, halign: "right", fontStyle: "bold" } }
+        columnStyles: { 0: { cellWidth: 9, halign: "center" }, 1: { cellWidth: 87 }, 2: { cellWidth: 15, halign: "right" }, 3: { cellWidth: 19 }, 4: { cellWidth: 25, halign: "right" }, 5: { cellWidth: 27, halign: "right", fontStyle: "bold" } }
       }) + 5;
       const subtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0);
-      const discount = subtotal * Number(quote.discountPct || 0) / 100;
+      const discountPct = Number(quote.discountPct || 0);
+      const discount = subtotal * discountPct / 100;
       const net = subtotal - discount;
       const vat = net * vatRate / 100;
+      const totalsRows = [
+        ["Subtotale lavorazioni", euro(subtotal)],
+        ...(discount > 0.005 ? [[`Sconto ${discountPct}%`, `- ${euro(discount)}`]] : []),
+        ["TOTALE IMPONIBILE", euro(net)],
+        [`IVA ${vatRate}%`, euro(vat)],
+        ["TOTALE COMPLESSIVO", euro(net + vat)]
+      ];
       y = runDocumentTable(doc, context, {
         startY: y,
-        body: [
-          ["Subtotale lavorazioni", euro(subtotal)],
-          [`Sconto ${Number(quote.discountPct || 0)}%`, `- ${euro(discount)}`],
-          ["TOTALE IMPONIBILE", euro(net)],
-          [`IVA ${vatRate}%`, euro(vat)],
-          ["TOTALE COMPLESSIVO", euro(net + vat)]
-        ],
+        body: totalsRows,
         tableWidth: 88,
         margin: { top: 45, right: 14, bottom: 21, left: 108 },
         columnStyles: { 0: { cellWidth: 53, fontStyle: "bold" }, 1: { cellWidth: 35, halign: "right", fontStyle: "bold" } },
         didParseCell: (data) => {
-          if (data.section === "body" && data.row.index === 4) {
+          if (data.section === "body" && data.row.index === totalsRows.length - 1) {
             data.cell.styles.fillColor = EDILKAPPA_DOCUMENT.yellow;
             data.cell.styles.textColor = EDILKAPPA_DOCUMENT.dark;
           }
@@ -1167,7 +1225,7 @@
           head: [["ALTERNATIVA", "DESCRIZIONE", "IMPONIBILE"]],
           body: quote.options.map((option) => [
             [option.label, option.title, option.recommended ? "RACCOMANDATA" : ""].filter(Boolean).join(" · "),
-            [option.description, (option.includedWorks || []).length ? `Comprende: ${option.includedWorks.join("; ")}` : "", option.notes].filter(Boolean).join("\n"),
+            [option.description, scenarioIncludedWorks(option.includedWorks) ? `Comprende: ${scenarioIncludedWorks(option.includedWorks)}.` : "", option.notes].filter(Boolean).join("\n"),
             euro(option.total)
           ]),
           columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" }, 1: { cellWidth: 98 }, 2: { cellWidth: 32, halign: "right", fontStyle: "bold" } }
@@ -1220,27 +1278,82 @@
     return artifactPdfBlob(artifact, destination, previews);
   }
 
+  function photoPreviewKey(item) {
+    const value = String(item?.sourceName || item?.fileName || item?.name || item?.storagePath || "").toLowerCase();
+    const fileName = value.split("/").pop() || value;
+    return fileName.replace(/\.(heic|heif|jpe?g|png|webp|gif)$/i, "");
+  }
+
+  async function cloudPhotoReference(item) {
+    if (!/^image\/(heic|heif)$/i.test(item?.fileType || "") || item.previewStoragePath) return item;
+    if (!window.EdilKappaCloud?.aiRequest) throw new Error("Il convertitore fotografico cloud non è disponibile.");
+    const result = await window.EdilKappaCloud.aiRequest({
+      action: "prepare_photo_preview",
+      mode: "work",
+      conversationId: state.activeConversation.work,
+      mediaReference: item
+    });
+    if (!result?.preview?.previewStoragePath) throw new Error("La fotografia convertita non è disponibile.");
+    Object.assign(item, result.preview);
+    return item;
+  }
+
+  async function pdfPreviewFromCloud(item) {
+    const reference = await cloudPhotoReference(item);
+    const storagePath = reference.previewStoragePath || reference.storagePath;
+    const url = await window.EdilKappaCloud?.getDocumentUrl?.(storagePath);
+    if (!url) throw new Error("Collegamento della fotografia non disponibile.");
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Fotografia non scaricabile dall’archivio.");
+    const blob = await response.blob();
+    const fileType = String(reference.previewFileType || blob.type || reference.fileType || "").toLowerCase();
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(fileType)) throw new Error("Formato dell’anteprima fotografica non valido.");
+    const prepared = await compressedImage(new File([blob], reference.previewFileName || reference.fileName || "foto.jpg", { type: fileType }));
+    return {
+      dataUrl: prepared.dataUrl,
+      mimeType: prepared.mimeType,
+      sourceName: reference.title || reference.fileName,
+      name: reference.previewFileName || reference.fileName,
+      generated: reference.generated === true
+    };
+  }
+
   async function previewsForReport(message) {
-    const previews = [...(message?.previews || [])];
-    const cloudImages = (message?.media || []).filter((item) => item.kind === "image" && item.storagePath && !/screenshot|schermata|preventiv|tabella/i.test(item.fileName || "")).slice(0, 8);
+    const previews = [];
+    const seen = new Set();
+    const localHeic = [];
+    for (const item of message?.previews || []) {
+      if (/^data:image\/(heic|heif);base64,/i.test(item?.dataUrl || "")) {
+        localHeic.push(item);
+        continue;
+      }
+      if (!/^data:image\/(jpeg|png);base64,/i.test(item?.dataUrl || "")) continue;
+      const key = photoPreviewKey(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      previews.push(item);
+    }
+    const cloudImages = (message?.media || []).filter((item) => item.kind === "image" && item.storagePath && !/screenshot|schermata|preventiv|tabella/i.test(item.fileName || "")).slice(0, 10);
+    const failedOriginals = [];
     for (const item of cloudImages) {
+      const key = photoPreviewKey(item);
+      if (key && seen.has(key)) continue;
       try {
-        const url = await window.EdilKappaCloud?.getDocumentUrl?.(item.storagePath);
-        if (!url) continue;
-        const response = await fetch(url);
-        if (!response.ok) continue;
-        const blob = await response.blob();
-        previews.push({
-          dataUrl: await fileDataUrl(blob),
-          sourceName: item.title || item.fileName,
-          name: item.fileName,
-          generated: item.generated === true
-        });
-      } catch (_) {
-        // Il PDF resta generabile anche se una singola anteprima cloud non è disponibile.
+        const preview = await pdfPreviewFromCloud(item);
+        previews.push(preview);
+        if (key) seen.add(key);
+      } catch (error) {
+        if (!item.generated) failedOriginals.push(item.fileName || "fotografia");
+        console.warn("Anteprima fotografica non disponibile", { fileName: item.fileName, message: error?.message });
       }
     }
-    return previews.filter((item) => !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 9);
+    localHeic.forEach((item) => {
+      if (!seen.has(photoPreviewKey(item))) failedOriginals.push(item.sourceName || item.name || "fotografia HEIC");
+    });
+    if (failedOriginals.length) {
+      throw new Error(`Non riesco a inserire nel PDF: ${Array.from(new Set(failedOriginals)).join(", ")}. Riprova il caricamento prima di scaricare il documento.`);
+    }
+    return previews.filter((item) => !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
   }
 
   async function saveReportArtifact(artifact, destination, media, previews) {
@@ -1284,7 +1397,7 @@
   }
 
   function wordList(title, values) {
-    const rows = (Array.isArray(values) ? values : []).filter(Boolean);
+    const rows = customerFacingValues(values);
     return rows.length ? `<h2>${escapeHtml(title)}</h2><ul>${rows.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "";
   }
 
@@ -1365,7 +1478,7 @@
     state.attachments.splice(index, 1);
     rerender();
   };
-  window.edilkappaAiAddFiles = async (files) => {
+  window.edilkappaAiAddFiles = async (files, inputElement) => {
     if (state.sending) return;
     state.error = "";
     try {
@@ -1380,7 +1493,15 @@
           state.progress = `Preparo la fotografia ${file.name}…`;
           rerender();
           const prepared = await compressedImage(file);
-          state.attachments.push({ name: file.name, mimeType: prepared.mimeType, dataUrl: prepared.dataUrl, kind: "image", file });
+          state.attachments.push({
+            name: file.name,
+            mimeType: prepared.mimeType,
+            dataUrl: prepared.dataUrl,
+            thumbnailDataUrl: prepared.thumbnailDataUrl || "",
+            serverConversion: prepared.serverConversion === true,
+            kind: "image",
+            file
+          });
         } else if (isVideo) {
           if (file.size > VIDEO_MAX_BYTES) throw new Error(`${file.name} supera 500 MB. Riduci il video prima di allegarlo.`);
           const item = { name: file.name, mimeType, kind: "video", file, frames: [], durationSeconds: 0, warning: "" };
@@ -1402,10 +1523,11 @@
           state.attachments.push({ name: file.name, mimeType, dataUrl: await fileDataUrl(file), kind: "document", file });
         }
       }
-      requestAttachmentsFor(state.attachments);
+      requestAttachmentsFor(state.attachments, { omitArchivedHeic: state.mode === "work", selectionOnly: true });
     } catch (error) {
       state.error = error?.message || "Non riesco ad allegare il file.";
     } finally {
+      if (inputElement) inputElement.value = "";
       state.progress = "";
       rerender();
     }
@@ -1554,7 +1676,6 @@
     state.progress = originals.length ? "Preparo e archivio gli allegati originali…" : "EdilKappa AI sta ragionando…";
     rerender();
     try {
-      const requestAttachments = requestAttachmentsFor(originals);
       if (requestedMode === "personal" && originals.some((item) => item.kind === "video" && !item.frames.length)) {
         throw new Error("Questo video non può essere letto dal browser. Prova a convertirlo in MP4 oppure usalo in modalità Lavoro per tentare la trascrizione audio.");
       }
@@ -1567,6 +1688,7 @@
           else if (item.archiveError) archiveWarnings.push(item.name);
         }
       }
+      const requestAttachments = requestAttachmentsFor(originals, { omitArchivedHeic: requestedMode === "work" });
       userMessage.media = mediaReferences;
       state.progress = originals.some((item) => item.kind === "video") ? "Trascrivo l’audio, analizzo i fotogrammi e preparo il risultato…" : "Analizzo gli allegati e preparo il risultato…";
       rerender();
@@ -1667,6 +1789,26 @@
       rerender();
     }
   };
+  window.edilkappaAiDownloadSavedQuote = async (quote) => {
+    if (!quote?.aiArtifact) return alert("Questo preventivo non contiene il documento completo EdilKappa AI.");
+    try {
+      const database = window.EdilKappaLocal?.getDB?.() || {};
+      const client = (database.condomini || []).find((item) => item.id === quote.clientId)
+        || (database.condomini || []).find((item) => item.name === quote.client)
+        || { id: quote.clientId || "", name: quote.client || "Da assegnare", address: quote.aiArtifact.address || "" };
+      const destination = { client, interventionId: quote.interventionId || "", title: quote.subject || quote.aiArtifact.subject || quote.aiArtifact.title, code: quote.code || "" };
+      const message = { artifact: quote.aiArtifact, media: quote.media || [], previews: [] };
+      const blob = await artifactPdfBlob(quote.aiArtifact, destination, await previewsForReport(message));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeName(quote.code ? `${quote.code}-${quote.subject || "Preventivo"}` : quote.subject, "Preventivo")}.pdf`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      alert(error?.message || "Non riesco a generare il PDF completo del preventivo.");
+    }
+  };
   window.edilkappaAiDownloadWord = async (messageIndex) => {
     const artifact = artifactMessage(messageIndex)?.artifact;
     if (!["quote", "report"].includes(artifact?.kind)) return;
@@ -1742,4 +1884,12 @@
       rerender();
     }
   };
+  if (window.__EDILKAPPA_AI_TEST__) {
+    window.EdilKappaAiTest = {
+      artifactPdfBlob,
+      customerFacingValues,
+      scenarioIncludedWorks,
+      setDocumentLogoDataUrl(value) { documentLogoDataUrl = String(value || ""); }
+    };
+  }
 })();
