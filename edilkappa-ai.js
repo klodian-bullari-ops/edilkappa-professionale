@@ -576,7 +576,21 @@
   }
 
   async function compressedImage(file) {
-    const objectUrl = URL.createObjectURL(file);
+    const mimeType = inferredType(file);
+    let readableFile = file;
+    if (/^image\/(heic|heif)$/i.test(mimeType)) {
+      if (typeof window.heic2any !== "function") {
+        throw new Error("Il convertitore HEIC non è disponibile. Controlla la connessione e ricarica EdilKappa.");
+      }
+      try {
+        const converted = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.88 });
+        readableFile = Array.isArray(converted) ? converted[0] : converted;
+        if (!(readableFile instanceof Blob) || !readableFile.size) throw new Error("conversione vuota");
+      } catch (_) {
+        throw new Error(`Non riesco a convertire ${file.name} dal formato HEIC. Verifica che la fotografia non sia danneggiata.`);
+      }
+    }
+    const objectUrl = URL.createObjectURL(readableFile);
     try {
       const picture = await new Promise((resolve, reject) => {
         const image = new Image();
