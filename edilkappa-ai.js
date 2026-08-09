@@ -81,6 +81,7 @@
   function stageLabel(stage) {
     return ({
       archive: "Archivio gli allegati originali…",
+      agent: "Agente EdilKappa Preventivi · analisi, prezzi e controllo della bozza…",
       analysis: "1/2 · Analisi tecnica, evidenze e incertezze…",
       compose: "2/2 · Compongo prezzi e documento EdilKappa…",
       retry: "La risposta si è interrotta: nuovo tentativo automatico con Sol…",
@@ -93,7 +94,7 @@
   function progressStepsHtml(stage) {
     const stages = ["archive", "analysis", "compose", "check", "completed"];
     const labels = ["Allegati", "Analisi", "Documento", "Controllo", "Pronto"];
-    const normalized = stage === "retry" || stage === "fallback" ? "compose" : stage;
+    const normalized = stage === "retry" || stage === "fallback" || stage === "agent" ? "compose" : stage;
     const active = Math.max(0, stages.indexOf(normalized));
     return `<div class="ekAiSteps">${labels.map((label, index) => `<span class="ekAiStep ${index < active ? "done" : index === active ? "active" : ""}">${label}</span>`).join("")}</div>`;
   }
@@ -337,7 +338,7 @@
 
   function messageHtml(message, index) {
     const sources = (message.sources || []).map(sourceHtml).join("");
-    const model = message.role === "assistant" && message.modelLabel ? `<div class="ekAiMessageMeta">Motore: ${escapeHtml(message.modelLabel)}${message.reasoningEffort ? ` · ragionamento ${escapeHtml(message.reasoningEffort)}` : ""}</div>` : "";
+    const model = message.role === "assistant" && message.modelLabel ? `<div class="ekAiMessageMeta">${message.engine === "agents_sdk" ? `Agente: ${escapeHtml(message.agentName || "EdilKappa Preventivi")} · ` : "Motore: "}${escapeHtml(message.modelLabel)}${message.reasoningEffort ? ` · ragionamento ${escapeHtml(message.reasoningEffort)}` : ""}${message.approvalRequired ? " · approvazione richiesta" : ""}</div>` : "";
     return `<div class="ekAiMessage ${message.role === "user" ? "user" : "assistant"}"><div class="ekAiText">${escapeHtml(message.text)}</div>${model}${mediaHtml(message, index)}${sources ? `<div class="ekAiSources">${sources}</div>` : ""}${message.role === "assistant" ? artifactHtml(message.artifact, index) : ""}</div>`;
   }
 
@@ -358,7 +359,7 @@
   }
 
   function taskLabel(task) {
-    return ({ auto: "Chat libera", quote: "Preventivo", report: "Relazione", inspection: "Analisi sopralluogo" })[task] || "Chat libera";
+    return ({ auto: "Chat libera", quote: "Preventivo · Agente SDK", report: "Relazione", inspection: "Analisi sopralluogo" })[task] || "Chat libera";
   }
 
   function modelSelectHtml() {
@@ -393,7 +394,7 @@
     if (state.pendingJob?.jobId && state.pendingJob.mode === state.mode && state.pendingJob.conversationId === state.activeConversation[state.mode] && !state.sending) setTimeout(() => window.edilkappaAiResumePending?.(), 0);
     const modeLabel = state.mode === "work" ? "Lavoro" : "Personale";
     return `<div class="ekAiPage">
-      <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>GPT‑5.6 Sol applica il Metodo EdilKappa: analizza prove e incertezze, confronta soluzioni, compone i prezzi e genera preventivi o relazioni nel modello aziendale.</p></div><div class="ekAiHeroMark">✦</div></section>
+      <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>L’Agente EdilKappa Preventivi applica il Metodo EdilKappa, compone prezzi e controlla la bozza. Relazioni, analisi e chat restano disponibili nello stesso spazio.</p></div><div class="ekAiHeroMark">✦</div></section>
       <div class="ekAiToolbar"><div class="ekAiModes"><button class="${state.mode === "work" ? "active" : ""}" onclick="edilkappaAiSetMode('work')">🏗️ Lavoro</button>${isOwner() ? `<button class="${state.mode === "personal" ? "active" : ""}" onclick="edilkappaAiSetMode('personal')">👤 Personale</button>` : ""}</div><div class="ekAiStatus"><i class="ekAiDot"></i> Protetta dal login EdilKappa · ${modeLabel}</div></div>
       ${workflowHtml()}
       <div class="ekAiWorkspace">${threadsHtml()}<div class="ekAiMain"><div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la chat ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
@@ -1419,6 +1420,9 @@
       modelLabel: result.modelLabel || "",
       reasoningEffort: result.reasoningEffort || "",
       fallbackUsed: result.fallbackUsed === true,
+      engine: result.engine || "",
+      agentName: result.agentName || "",
+      approvalRequired: result.approvalRequired === true,
       qualityAudit: result.qualityAudit || null,
       previews: (requestAttachments || []).filter((item) => item.mimeType?.startsWith("image/")).slice(0, 6),
       at: Date.now()
