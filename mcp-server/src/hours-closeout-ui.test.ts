@@ -108,7 +108,7 @@ function appContext(): AppContext {
 }
 
 test('il modulo ore è caricato dall’app e dalla cache offline', () => {
-  assert.match(indexHtml, /hours-closeout\.js\?v=1/);
+  assert.match(indexHtml, /hours-closeout\.js\?v=2/);
   assert.match(serviceWorker, /hours-closeout\.js/);
   assert.match(source, /L’avviso rimane finché non inserisci le tue ore/);
   assert.match(source, /Ore mancanti sui cantieri conclusi/);
