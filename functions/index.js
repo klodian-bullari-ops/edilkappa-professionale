@@ -1,6 +1,7 @@
 "use strict";
 
 const { createHash, randomUUID } = require("node:crypto");
+const convertHeic = require("heic-convert");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
@@ -42,6 +43,26 @@ const AI_JOB_TTL_MS = 24 * 60 * 60 * 1000;
 const AGENT_RUN_TIMEOUT_MS = 520000;
 const MAX_AGENT_INPUT_BYTES = 32 * 1024 * 1024;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+async function convertHeicAttachments(items) {
+  return Promise.all((items || []).map(async (item) => {
+    if (!/^image\/(heic|heif)$/i.test(item.mimeType)) return item;
+    try {
+      const encoded = String(item.dataUrl || "").split(",")[1] || "";
+      const output = await convertHeic({ buffer: Buffer.from(encoded, "base64"), format: "JPEG", quality: 0.86 });
+      if (!output?.length || output.length > 6 * 1024 * 1024) throw new Error("dimensione non valida");
+      return {
+        ...item,
+        name: String(item.name || "foto.heic").replace(/\.(heic|heif)$/i, ".jpg"),
+        mimeType: "image/jpeg",
+        dataUrl: `data:image/jpeg;base64,${Buffer.from(output).toString("base64")}`,
+        isImage: true
+      };
+    } catch (_) {
+      throw new Error(`Non riesco a convertire la fotografia HEIC ${item.sourceName || item.name}.`);
+    }
+  }));
+}
 
 async function authorizedUser(request, mode) {
   if (!request.auth) throw new HttpsError("unauthenticated", "Accedi a EdilKappa prima di usare l’AI.");
@@ -901,7 +922,7 @@ exports.edilkappaAi = onCall({
   let attachments;
   let mediaReferences;
   try {
-    attachments = parseAttachments(request.data?.attachments);
+    attachments = await convertHeicAttachments(parseAttachments(request.data?.attachments));
     mediaReferences = parseMediaReferences(request.data?.mediaReferences, account.uid, mode);
   } catch (error) {
     throw new HttpsError("invalid-argument", error.message);

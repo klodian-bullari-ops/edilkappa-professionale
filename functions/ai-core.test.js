@@ -30,6 +30,13 @@ test("validates and converts image attachments", () => {
   assert.equal(input[0].content[2].detail, "high");
 });
 
+test("accepts HEIC photographs for server-side conversion", () => {
+  const [attachment] = parseAttachments([{ name: "foto-ios.heic", dataUrl: "data:image/heic;base64,AAAA" }]);
+  assert.equal(attachment.mimeType, "image/heic");
+  assert.equal(attachment.kind, "image");
+  assert.equal(attachment.isImage, true);
+});
+
 test("labels video frames and keeps their capture time", () => {
   const attachments = parseAttachments([{
     name: "tetto-fotogramma-1.jpg",
