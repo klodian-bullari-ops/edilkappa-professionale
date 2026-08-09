@@ -99,13 +99,14 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /convertHeicAttachments/);
   assert.match(functionSource, /prepareArchivedHeicPhotos/);
   assert.match(functionSource, /action === "prepare_photo_preview"/);
+  assert.match(functionSource, /previewDataUrl/);
   const photoSource = fs.readFileSync(path.join(__dirname, "photo-utils.js"), "utf8");
   assert.match(photoSource, /require\("heic-convert"\)/);
   assert.match(photoSource, /firebaseStorageDownloadTokens/);
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=14/);
+  assert.match(html, /edilkappa-ai\.js\?v=15/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 

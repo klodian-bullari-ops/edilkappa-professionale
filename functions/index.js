@@ -761,7 +761,13 @@ exports.edilkappaAi = onCall({
       [reference] = parseMediaReferences([request.data?.mediaReference], account.uid, mode);
       if (!reference || reference.kind !== "image") throw new Error("Seleziona una fotografia archiviata valida.");
       const prepared = await ensurePhotoPreview({ storageBucket, reference, uid: account.uid, orgId: ORG_ID });
-      return { mode, preview: prepared.reference };
+      return {
+        mode,
+        preview: prepared.reference,
+        previewDataUrl: prepared.buffer?.length
+          ? `data:image/jpeg;base64,${Buffer.from(prepared.buffer).toString("base64")}`
+          : ""
+      };
     } catch (error) {
       throw new HttpsError("invalid-argument", error.message);
     }
