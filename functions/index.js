@@ -58,8 +58,19 @@ async function authorizedUser(request, mode) {
   };
 }
 
-function conversationRef(uid, mode) {
-  return firestore.collection("aiConversations").doc(`${uid}--${mode}`);
+function conversationId(value) {
+  const id = cleanText(value, 80).replace(/[^a-zA-Z0-9_-]/g, "");
+  return id || "legacy";
+}
+
+function conversationRef(uid, mode, id = "legacy") {
+  const safeId = conversationId(id);
+  if (safeId === "legacy") return firestore.collection("aiConversations").doc(`${uid}--${mode}`);
+  return firestore.collection("aiConversationUsers").doc(uid).collection(mode).doc(safeId);
+}
+
+function conversationTitle(value, fallback = "Nuova conversazione") {
+  return cleanText(value, 80) || fallback;
 }
 
 function aiJobRef(uid, jobId) {
@@ -460,16 +471,44 @@ exports.edilkappaAi = onCall({
     ? request.data.taskType
     : "auto";
   const account = await authorizedUser(request, mode);
-  const ref = conversationRef(account.uid, mode);
   const action = String(request.data?.action || "ask");
+  const threadId = conversationId(request.data?.conversationId);
+  const ref = conversationRef(account.uid, mode, threadId);
+
+  if (action === "list_conversations") {
+    const snapshots = await firestore.collection("aiConversationUsers").doc(account.uid).collection(mode).limit(40).get();
+    const conversations = snapshots.docs.map((doc) => {
+      const data = doc.data() || {};
+      return { id: doc.id, title: conversationTitle(data.title), updatedAtMs: Number(data.updatedAtMs || 0), messageCount: Array.isArray(data.messages) ? data.messages.length : 0 };
+    });
+    const legacy = await conversationRef(account.uid, mode, "legacy").get();
+    if (legacy.exists && Array.isArray(legacy.data()?.messages) && legacy.data().messages.length) {
+      conversations.push({ id: "legacy", title: conversationTitle(legacy.data()?.title, "Conversazione precedente"), updatedAtMs: Number(legacy.data()?.updatedAtMs || 1), messageCount: legacy.data().messages.length });
+    }
+    conversations.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+    return { mode, conversations: conversations.slice(0, 30) };
+  }
+  if (action === "new_conversation") {
+    const id = randomUUID();
+    await conversationRef(account.uid, mode, id).set({ uid: account.uid, orgId: ORG_ID, mode, title: "Nuova conversazione", messages: [], updatedAtMs: Date.now(), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    return { mode, conversation: { id, title: "Nuova conversazione", updatedAtMs: Date.now(), messageCount: 0 } };
+  }
+  if (action === "rename_conversation") {
+    await ref.set({ uid: account.uid, orgId: ORG_ID, mode, title: conversationTitle(request.data?.title), titleLocked: true, updatedAtMs: Date.now(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { mode, conversationId: threadId, title: conversationTitle(request.data?.title) };
+  }
+  if (action === "delete_conversation") {
+    await ref.delete();
+    return { mode, conversationId: threadId, deleted: true };
+  }
 
   if (action === "history") {
     const snapshot = await ref.get();
-    return { mode, messages: (snapshot.data()?.messages || []).slice(-30) };
+    return { mode, conversationId: threadId, title: conversationTitle(snapshot.data()?.title), messages: (snapshot.data()?.messages || []).slice(-30) };
   }
   if (action === "reset") {
     await ref.delete();
-    return { mode, messages: [] };
+    return { mode, conversationId: threadId, messages: [] };
   }
   if (action === "generate_visual") {
     if (mode !== "work") throw new HttpsError("permission-denied", "Le immagini operative sono disponibili soltanto in modalità Lavoro.");
@@ -515,7 +554,7 @@ exports.edilkappaAi = onCall({
       orgId: ORG_ID,
       mode,
       messages: history.slice(-30),
-      updatedAt: FieldValue.serverTimestamp()
+      updatedAtMs: Date.now(), updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
     return { mode, visual };
   }
@@ -526,7 +565,7 @@ exports.edilkappaAi = onCall({
     const jobSnapshot = await jobReference.get();
     if (!jobSnapshot.exists) throw new HttpsError("not-found", "Non trovo più questa elaborazione. Puoi avviarne una nuova.");
     const job = jobSnapshot.data() || {};
-    if (job.mode !== mode) throw new HttpsError("permission-denied", "Questa elaborazione appartiene a un’altra area.");
+    if (job.mode !== mode || conversationId(job.conversationId) !== threadId) throw new HttpsError("permission-denied", "Questa elaborazione appartiene a un’altra conversazione.");
     if (job.status === "completed") return { jobId, status: "completed", stage: "completed", result: job.result };
     if (job.status === "failed") return { jobId, status: "failed", stage: job.stage || "failed", error: job.error || "La generazione non è riuscita.", canRetry: true };
     if (Date.now() - Number(job.createdAtMs || 0) > AI_JOB_TTL_MS) {
@@ -639,7 +678,9 @@ exports.edilkappaAi = onCall({
       reasoningEffort: job.modelChoice?.reasoningEffort, fallbackUsed: job.fallbackUsed === true, qualityAudit, at: Date.now()
     };
     const messages = history.concat([userMessage, assistantMessage]).slice(-30);
-    await ref.set({ uid: account.uid, orgId: ORG_ID, mode, messages, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    const existingThread = conversationSnapshot.data() || {};
+    const generatedTitle = conversationTitle(result.artifact?.subject || result.artifact?.title || job.message, "Nuova conversazione");
+    await ref.set({ uid: account.uid, orgId: ORG_ID, mode, messages, title: existingThread.titleLocked ? conversationTitle(existingThread.title) : generatedTitle, updatedAtMs: Date.now(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const completedResult = {
       mode, answer: result.answer, sources: result.sources, artifact: result.artifact,
       media: resultMedia, model: job.modelChoice?.model, modelLabel: job.modelChoice?.modelLabel,
@@ -695,6 +736,7 @@ exports.edilkappaAi = onCall({
     uid: account.uid,
     orgId: ORG_ID,
     mode,
+    conversationId: threadId,
     taskType,
     status: "working",
     stage: "analysis",
