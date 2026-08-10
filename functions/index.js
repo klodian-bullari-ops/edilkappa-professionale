@@ -647,6 +647,7 @@ async function generateOperationsBriefing({ trigger = "manual", requestedBy = ""
 
 exports.edilkappaOperations = onCall({
   region: "europe-west8",
+  invoker: "public",
   secrets: [OPENAI_API_KEY],
   timeoutSeconds: 540,
   memory: "1GiB",
@@ -777,7 +778,7 @@ function bearerMatches(request) {
   return timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
 }
 
-exports.edilkappaDaneaIngest = onRequest({ region: "europe-west8", secrets: [DANEA_INGEST_KEY], timeoutSeconds: 60, memory: "256MiB", maxInstances: 2, cors: false }, async (request, response) => {
+exports.edilkappaDaneaIngest = onRequest({ region: "europe-west8", invoker: "public", secrets: [DANEA_INGEST_KEY], timeoutSeconds: 60, memory: "256MiB", maxInstances: 2, cors: false }, async (request, response) => {
   if (request.method !== "POST") return response.status(405).json({ ok: false, error: "method_not_allowed" });
   if (!bearerMatches(request)) return response.status(401).json({ ok: false, error: "unauthorized" });
   const raw = request.body || {};
@@ -799,7 +800,7 @@ exports.edilkappaDaneaIngest = onRequest({ region: "europe-west8", secrets: [DAN
   return response.status(200).json({ ok: true, created: result.created, id: result.id });
 });
 
-exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", timeoutSeconds: 30, memory: "256MiB", maxInstances: 1, cors: true }, async (request) => {
+exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 1, cors: true }, async (request) => {
   const account = await authorizedUser(request, "work");
   if (account.role !== "owner") throw new HttpsError("permission-denied", "Solo il titolare può controllare il collegamento Danea.");
   const action = cleanText(request.data?.action || "status", 40);

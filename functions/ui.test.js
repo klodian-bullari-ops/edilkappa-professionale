@@ -146,7 +146,7 @@ test("loads the central operations agents and keeps every action under confirmat
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
   assert.match(html, /operations-center\.js\?v=1/);
-  assert.match(serviceWorker, /v66-danea-gmail-bridge/);
+  assert.match(serviceWorker, /v67-memoria-ai-responsive/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
@@ -171,6 +171,9 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   assert.match(danea, /controllo Gmail ogni 5 minuti/);
   assert.match(backend, /exports\.edilkappaDaneaIngest/);
   assert.match(backend, /exports\.edilkappaDaneaBridge/);
+  assert.match(backend, /exports\.edilkappaDaneaIngest = onRequest\(\{[^}]*invoker: "public"/);
+  assert.match(backend, /exports\.edilkappaDaneaBridge = onCall\(\{[^}]*invoker: "public"/);
+  assert.match(backend, /exports\.edilkappaOperations = onCall\(\{[\s\S]*?invoker: "public"/);
   assert.match(backend, /DANEA_INGEST_KEY/);
   assert.match(backend, /timingSafeEqual/);
   assert.match(bridge, /everyMinutes\(5\)/);
