@@ -10,6 +10,9 @@ const {
   chooseModel,
   extractGeneratedImage,
   extractAnswer,
+  normalizeArtifact,
+  normalizeEstimatedDuration,
+  normalizeQuoteMissingInformation,
   parseAttachments,
   parseMediaReferences
 } = require("./ai-core");
@@ -343,6 +346,50 @@ test("quality audit blocks a concatenated 710-day duration", () => {
   assert.equal(audit.passed, false);
   assert.equal(audit.blocking, true);
   assert.match(audit.blockingIssues.join("\n"), /Durata plausibile/);
+});
+
+test("normalizes duration ranges and replaces concatenated day values with a safe question", () => {
+  assert.equal(normalizeEstimatedDuration("8–12 giorni lavorativi"), "8-12 giorni lavorativi");
+  assert.match(normalizeEstimatedDuration("812 giorni lavorativi"), /non è plausibile/i);
+
+  const artifact = releaseReadyQuote();
+  artifact.quote.estimatedDuration = "812 giorni lavorativi";
+  const normalized = normalizeArtifact(artifact);
+  assert.match(normalized.quote.estimatedDuration, /non è plausibile/i);
+  assert.ok(normalized.quote.missingInformation.some((item) => /8-12 giorni/i.test(item)));
+});
+
+test("turns generic kitchen gaps into precise measurement and photo questions", () => {
+  const questions = normalizeQuoteMissingInformation([
+    "Rilevare le misure della sala e della parete destinata alla cucina",
+    "Verificare distanza e quota dello scarico",
+    "Identificare la caldaia a gas installata a parete"
+  ]);
+  assert.ok(questions.some((item) => /lunghezza, larghezza e altezza della sala/i.test(item)));
+  assert.ok(questions.some((item) => /distanza tra il punto acqua\/scarico/i.test(item)));
+  assert.ok(questions.some((item) => /foto ravvicinata dell'etichetta/i.test(item)));
+  assert.ok(questions.every((item) => !/piano a induzione/i.test(item)));
+  assert.ok(questions.every((item) => item.endsWith("?")));
+});
+
+test("quality audit blocks an existing-kitchen transfer described as a new kitchen", () => {
+  const artifact = releaseReadyQuote();
+  artifact.title = "Trasferimento della cucina esistente in sala";
+  artifact.subject = artifact.title;
+  artifact.summary = "Smontaggio e rimontaggio della cucina esistente nella sala.";
+  artifact.recommendedSolution = "Realizzare la nuova cucina nella sala.";
+  artifact.quote.exclusions = ["Fornitura di una nuova cucina non compresa"];
+  const audit = auditArtifact(artifact, "Trasferisci la cucina esistente nella sala");
+  assert.equal(audit.blocking, true);
+  assert.match(audit.blockingIssues.join("\n"), /Cucina nuova o esistente/);
+});
+
+test("quality audit requires an explicit gas boundary when utilities are closed", () => {
+  const artifact = releaseReadyQuote();
+  artifact.quote.includedWorks = ["Scollegamento e chiusura delle utenze esistenti"];
+  const audit = auditArtifact(artifact, "Sposta la cucina e chiudi le utenze");
+  assert.equal(audit.blocking, true);
+  assert.match(audit.blockingIssues.join("\n"), /Perimetro del gas esplicito/);
 });
 
 test("quality audit blocks gas versus induction and provisional VAT contradictions", () => {
