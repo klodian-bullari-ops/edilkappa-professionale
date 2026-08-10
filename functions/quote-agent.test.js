@@ -41,6 +41,10 @@ test("configures one bounded Agents SDK quote specialist", () => {
   assert.match(agent.instructions, /misure decisive/i);
   assert.match(agent.instructions, /domanda diretta e specifica/i);
   assert.match(agent.instructions, /stima a corpo da verificare in sopralluogo/i);
+  assert.match(agent.instructions, /812 o 710/i);
+  assert.match(agent.instructions, /trasferimento della cucina esistente/i);
+  assert.match(agent.instructions, /punto gas/i);
+  assert.match(agent.instructions, /didascalie.*fotografiche/i);
   assert.match(agent.instructions, /scala, trabattello o piattaforma/i);
   assert.match(agent.instructions, /alternative soltanto quando sono tecnicamente utili/i);
   const researchAgent = createQuoteAgent({ instructions: "Preventivo.", modelChoice: {}, useWeb: true });
@@ -59,9 +63,11 @@ test("configures a separate strict reviewer with no tools or handoffs", () => {
   assert.equal(reviewer.modelSettings.reasoning.effort, "high");
   assert.equal(QUOTE_REVIEW_SCHEMA.additionalProperties, false);
   assert.deepEqual(QUOTE_REVIEW_SCHEMA.required, ["verdict", "corrections", "blockingIssues", "warnings", "response"]);
-  assert.match(reviewer.instructions, /710 invece di 7-10/i);
+  assert.match(reviewer.instructions, /710 o 812 al posto di 7-10 o 8-12/i);
   assert.match(reviewer.instructions, /Dichiarazione di Conformità/i);
   assert.match(reviewer.instructions, /gas e induzione/i);
+  assert.match(reviewer.instructions, /nuova cucina e trasferimento della cucina esistente/i);
+  assert.match(reviewer.instructions, /osservazioni fotografiche/i);
 });
 
 test("the reviewer blocks unresolved drafts and the merged audit stays blocking", () => {
