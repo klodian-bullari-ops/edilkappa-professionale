@@ -98,6 +98,6 @@ test('il ciclo intervento è caricato e disponibile anche offline', () => {
   assert.ok(indexHtml.includes('./intervention-lifecycle.js?v=3'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
   assert.ok(indexHtml.includes('./sw.js?v=46'));
-  assert.ok(serviceWorker.includes('v62-apprendimento-controllato'));
+  assert.ok(serviceWorker.includes('v63-memoria-ai-menu-iniziale'));
   assert.ok(serviceWorker.includes('"./intervention-lifecycle.js"'));
 });
