@@ -912,16 +912,44 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
   try {
     if (job.orgId !== ORG_ID || job.mode !== "work" || !job.uid || !job.jobId) throw new Error("Lavoro agente non autorizzato.");
     const input = await loadAgentInput(job.uid, job.jobId, job.inputStoragePath);
-    const result = await runQuoteAgent({
-      apiKey: OPENAI_API_KEY.value(),
-      instructions: job.instructions,
-      input,
-      modelChoice: job.modelChoice,
-      useWeb: job.useWeb === true,
-      conversationId: job.conversationId,
-      userId: safetyIdentifier(job.uid),
-      signal: AbortSignal.timeout(AGENT_RUN_TIMEOUT_MS)
-    });
+    let result;
+    let agentFallbackUsed = false;
+    try {
+      result = await runQuoteAgent({
+        apiKey: OPENAI_API_KEY.value(),
+        instructions: job.instructions,
+        input,
+        modelChoice: job.modelChoice,
+        useWeb: job.useWeb === true,
+        conversationId: job.conversationId,
+        userId: safetyIdentifier(job.uid),
+        signal: AbortSignal.timeout(AGENT_RUN_TIMEOUT_MS)
+      });
+    } catch (agentError) {
+      console.warn("Agents SDK quote failed; starting Responses fallback", {
+        jobId: cleanText(job.jobId, 120),
+        name: cleanText(agentError?.name, 120),
+        message: cleanText(agentError?.message, 500)
+      });
+      const fallbackChoice = terraFallbackChoice(job.modelChoice || {});
+      const fallbackResponse = await callOpenAI({
+        instructions: job.instructions,
+        input,
+        useWeb: job.useWeb === true,
+        modelChoice: fallbackChoice,
+        safetyId: safetyIdentifier(job.uid)
+      });
+      const fallbackResult = extractAnswer(fallbackResponse);
+      if (!fallbackResult.answer || fallbackResult.artifact?.kind !== "quote") throw agentError;
+      result = {
+        answer: fallbackResult.answer,
+        artifact: fallbackResult.artifact,
+        sources: fallbackResult.sources,
+        responseId: cleanText(fallbackResponse.id, 200),
+        usage: fallbackResponse.usage || null
+      };
+      agentFallbackUsed = true;
+    }
     const qualityAudit = auditArtifact(result.artifact, job.message);
     if (!qualityAudit.passed && result.artifact?.quote) result.artifact.quote.readyToSave = false;
 
@@ -953,6 +981,7 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       reasoningEffort: job.modelChoice?.reasoningEffort,
       engine: "agents_sdk",
       agentName: QUOTE_AGENT_NAME,
+      fallbackUsed: agentFallbackUsed,
       approvalRequired: true,
       qualityAudit,
       at: Date.now()
@@ -980,6 +1009,7 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       reasoningEffort: job.modelChoice?.reasoningEffort,
       engine: "agents_sdk",
       agentName: QUOTE_AGENT_NAME,
+      fallbackUsed: agentFallbackUsed,
       approvalRequired: true,
       qualityAudit,
       usage: result.usage
