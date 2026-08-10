@@ -152,7 +152,10 @@ test("loads the central operations agents and keeps every action under confirmat
   const center = fs.readFileSync(path.join(__dirname, "..", "operations-center.js"), "utf8");
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
-  assert.match(html, /operations-center\.js\?v=1/);
+  assert.match(html, /operations-center\.js\?v=2/);
+  assert.match(center, /latestAttempted: false/);
+  assert.match(center, /state\.latestAttempted = true/);
+  assert.match(center, /!state\.latestAttempted/);
   assert.match(serviceWorker, /v68-ai-job-recovery/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
