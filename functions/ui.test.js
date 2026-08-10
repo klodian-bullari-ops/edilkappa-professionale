@@ -26,6 +26,9 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiGenerateVisual, "function");
   assert.equal(typeof global.window.edilkappaAiSetModel, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.pdfTextSection, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.euro, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.formatEstimatedDuration, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.photoCaptionForPreview, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.quoteMissingQuestions, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.runDocumentTable, "function");
 
@@ -34,6 +37,38 @@ test("registers the EdilKappa AI browser interface", () => {
   });
   assert.match(missingQuestions[0], /Quale aliquota IVA definitiva/);
   assert.match(missingQuestions[1], /stima a corpo da verificare in sopralluogo/);
+
+  const kitchenQuestions = global.window.EdilKappaAiTest.quoteMissingQuestions({
+    quote: {
+      estimatedDuration: "812 giorni lavorativi",
+      missingInformation: [
+        "Rilevare misure della sala e della parete destinata",
+        "Verificare distanza e quota dello scarico",
+        "Identificare la caldaia a gas installata a parete"
+      ]
+    }
+  });
+  assert.ok(kitchenQuestions.some((item) => /lunghezza, larghezza e altezza della sala/i.test(item)));
+  assert.ok(kitchenQuestions.some((item) => /distanza tra il punto acqua\/scarico/i.test(item)));
+  assert.ok(kitchenQuestions.some((item) => /foto ravvicinata dell’etichetta/i.test(item)));
+  assert.ok(kitchenQuestions.every((item) => !/piano a induzione/i.test(item)));
+  assert.ok(kitchenQuestions.some((item) => /8-12 giorni/i.test(item)));
+  assert.equal(global.window.EdilKappaAiTest.formatEstimatedDuration("8–12 giorni"), "8-12 giorni");
+  assert.match(global.window.EdilKappaAiTest.formatEstimatedDuration("812 giorni"), /non è plausibile/i);
+  assert.equal(global.window.EdilKappaAiTest.euro(1100), "1.100,00 €");
+
+  const commercialCaption = global.window.EdilKappaAiTest.photoCaptionForPreview({
+    report: { evidenceFindings: [{ reference: "Foto 1", observation: "Il cliente chiede pagamento 50% all'accettazione.", assessment: "Condizione commerciale" }] }
+  }, { sourceName: "IMG_1001.HEIC" }, 0);
+  assert.equal(commercialCaption.caption, "Stato dei luoghi documentato nella fotografia.");
+  const visualCaption = global.window.EdilKappaAiTest.photoCaptionForPreview({
+    report: { evidenceFindings: [{ reference: "Foto 2", observation: "Parete con rivestimento ceramico visibile.", assessment: "Supporto da verificare" }] }
+  }, { sourceName: "IMG_1002.HEIC" }, 1);
+  assert.match(visualCaption.caption, /rivestimento ceramico/i);
+  const wrongPhotoCaption = global.window.EdilKappaAiTest.photoCaptionForPreview({
+    report: { evidenceFindings: [{ reference: "Foto 10", observation: "Serramento visibile.", assessment: "Stato apparente" }] }
+  }, { sourceName: "IMG_1001.HEIC" }, 0);
+  assert.equal(wrongPhotoCaption.caption, "Stato dei luoghi documentato nella fotografia.");
 
   let fontStyle = "normal";
   let addedPages = 0;
@@ -148,6 +183,8 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /BOZZA PRELIMINARE · NON INVIARE AL CLIENTE PRIMA DELLA CONFERMA/);
   assert.match(source, /artifactPdfBlob\(artifact, destination, await previewsForReport\(message\), \{ draft \}\)/);
   assert.match(source, /link\.download = `\$\{draft \? "BOZZA-"/);
+  assert.match(source, /pdfNumberedListSection\(doc, context, "Dati da confermare"/);
+  assert.match(source, /if \(!draft && !deferredSignature\)/);
   assert.match(source, /requireMessageQuoteRelease/);
   assert.match(source, /rowPageBreak:\s*"avoid"/);
   assert.match(source, /function quoteReleaseCheck/);
@@ -171,7 +208,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=19/);
+  assert.match(html, /edilkappa-ai\.js\?v=20/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
@@ -212,7 +249,7 @@ test("loads the central operations agents and keeps every action under confirmat
   assert.match(center, /latestAttempted: false/);
   assert.match(center, /state\.latestAttempted = true/);
   assert.match(center, /!state\.latestAttempted/);
-  assert.match(serviceWorker, /v71-draft-pdf-questions/);
+  assert.match(serviceWorker, /v72-pdf-draft-quality/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
