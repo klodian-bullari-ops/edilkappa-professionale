@@ -7,6 +7,7 @@ const APP_SHELL = [
   "./index.html",
   "./privacy.html",
   "./manifest.json",
+  "./modern-ui.css",
   "./professional-extensions.js",
   "./business-suite.js",
   "./client-archive.js",
