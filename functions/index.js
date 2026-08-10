@@ -1,13 +1,13 @@
 "use strict";
 
-const { createHash, randomUUID } = require("node:crypto");
+const { createHash, randomUUID, timingSafeEqual } = require("node:crypto");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
 const { defineSecret } = require("firebase-functions/params");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
-const { HttpsError, onCall } = require("firebase-functions/v2/https");
+const { HttpsError, onCall, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const {
   AI_RESPONSE_SCHEMA,
@@ -34,6 +34,10 @@ const {
   runOperationsAgent
 } = require("./operations-agent");
 const {
+  parseDaneaMessage,
+  stableId
+} = require("./danea-outlook");
+const {
   convertHeicBuffer,
   ensurePhotoPreview,
   prepareArchivedHeicPhotos
@@ -44,6 +48,7 @@ const firestore = getFirestore(adminApp, "edilkappa");
 const messaging = getMessaging(adminApp);
 const storageBucket = getStorage(adminApp).bucket("edilkappa-professionale.firebasestorage.app");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const DANEA_INGEST_KEY = defineSecret("DANEA_INGEST_KEY");
 const OWNER_EMAIL = "info@edilkappa.com";
 const ORG_ID = "edilkappa";
 const DAILY_REQUEST_LIMIT = 120;
@@ -688,6 +693,121 @@ exports.generateMorningOperationsBriefing = onSchedule({
   } catch (error) {
     console.error("Morning operations briefing failed", { name: cleanText(error?.name, 120), message: cleanText(error?.message, 500) });
   }
+});
+
+const DANEA_BRIDGE_REF = () => firestore.collection("integrations").doc("daneaGmailBridge");
+
+async function ownerUid() {
+  const snapshot = await firestore.collection("users").where("orgId", "==", ORG_ID).limit(200).get();
+  return snapshot.docs.find((item) => item.data()?.role === "owner" && item.data()?.active === true)?.id || "";
+}
+
+function payloadOf(data) {
+  try { return JSON.parse(String(data?.payload || "{}")); }
+  catch (_) { return {}; }
+}
+
+function serverEnvelope({ id, clientId = "", ownerUid: uid = "", status = "", payload, existing = null, assignedTeamId = "", assignedTeamIds = [], workerUid = "", workHours = 0, materialAmount = 0, progress = 0, contractValue = 0, recordedCost = 0 }) {
+  return {
+    id, orgId: ORG_ID, clientId, assignedTeamId, assignedTeamIds, workerUid, ownerUid: uid, status,
+    workHours, materialAmount, progress, contractValue, recordedCost,
+    payload: JSON.stringify(payload),
+    createdAt: existing?.createdAt || FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  };
+}
+
+async function saveDaneaMailRequest(item, uid) {
+  const leads = await firestore.collection("leads").where("orgId", "==", ORG_ID).limit(500).get();
+  const sameIdentity = leads.docs.find((document) => {
+    const payload = payloadOf(document.data());
+    if (!/danea/i.test(String(payload.source || ""))) return false;
+    if (item.sourceMessageId && String(payload.sourceMessageId || "").toLowerCase() === item.sourceMessageId.toLowerCase()) return true;
+    return Boolean(item.daneaId && item.studio && String(payload.daneaId || "").toLowerCase() === item.daneaId.toLowerCase() && String(payload.studio || "").toLowerCase() === item.studio.toLowerCase());
+  });
+  const id = sameIdentity?.id || stableId("danea-mail", [item.sourceMessageId || item.graphMessageId, item.studio, item.daneaId]);
+  const existingData = sameIdentity?.data() || {};
+  const existing = payloadOf(existingData);
+  const now = new Date().toISOString();
+  const clientName = cleanText(item.client || existing.client || "Cliente da definire", 220);
+  const clientAddress = cleanText(item.address || existing.address, 300);
+  const clients = await firestore.collection("clients").where("orgId", "==", ORG_ID).limit(500).get();
+  const matchingClient = clients.docs.find((document) => {
+    const payload = payloadOf(document.data());
+    const sameName = String(payload.name || "").trim().toLowerCase() === clientName.toLowerCase();
+    const sameAddress = clientAddress && String(payload.address || "").trim().toLowerCase() === clientAddress.toLowerCase();
+    return sameName || sameAddress;
+  });
+  const clientId = String(existing.clientId || matchingClient?.id || stableId("c-danea", [clientName, clientAddress]));
+  const lead = {
+    ...existing,
+    ...item,
+    id,
+    client: clientName,
+    name: clientName,
+    clientId,
+    status: existing.status && existing.status !== "Nuova" ? existing.status : "Nuova",
+    daneaStatus: existing.daneaStatus && existing.daneaStatus !== "Nuovo" ? existing.daneaStatus : "Nuovo",
+    createdAt: existing.createdAt || now,
+    updatedAt: now
+  };
+  await firestore.collection("leads").doc(id).set(serverEnvelope({ id, clientId, ownerUid: String(existingData.ownerUid || uid), status: lead.status, payload: lead, existing: sameIdentity?.exists ? existingData : null }), { merge: true });
+
+  const clientRef = firestore.collection("clients").doc(clientId);
+  const clientSnapshot = await clientRef.get();
+  if (!clientSnapshot.exists) {
+    const client = { id: clientId, name: clientName, address: clientAddress, manager: item.studio || "", phone: item.phone || "", email: "", source: "Danea Interventi", createdAt: now };
+    await clientRef.set(serverEnvelope({ id: clientId, clientId, ownerUid: uid, status: "Attivo", payload: client }));
+  }
+
+  const siteId = stableId("site-danea", [id]);
+  const siteRef = firestore.collection("sites").doc(siteId);
+  const siteSnapshot = await siteRef.get();
+  if (!siteSnapshot.exists) {
+    const site = { id: siteId, code: item.daneaId ? `DANEA-${item.daneaId}` : `DANEA-${id.slice(-8).toUpperCase()}`, title: `${item.daneaId ? `Danea ${item.daneaId}` : "Danea"} · ${item.title}`, client: clientName, clientId, address: clientAddress, worker: "", teamIds: [], assignedTeamIds: [], start: String(item.receivedAt || now).slice(0, 10), value: 0, cost: 0, status: "Pianificato", progress: 0, source: "Danea Interventi", daneaManaged: true, daneaRequestId: id, daneaId: item.daneaId || "", daneaStudio: item.studio || "", daneaLink: item.sourceUrl || "", description: item.request || "", priority: item.priority || "Normale", createdAt: now, updatedAt: now };
+    await siteRef.set(serverEnvelope({ id: siteId, clientId, ownerUid: uid, status: site.status, payload: site }));
+  }
+  return { id, created: !sameIdentity };
+}
+
+function bearerMatches(request) {
+  const supplied = String(request.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const expected = String(DANEA_INGEST_KEY.value() || "");
+  if (!supplied || !expected || supplied.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
+}
+
+exports.edilkappaDaneaIngest = onRequest({ region: "europe-west8", secrets: [DANEA_INGEST_KEY], timeoutSeconds: 60, memory: "256MiB", maxInstances: 2, cors: false }, async (request, response) => {
+  if (request.method !== "POST") return response.status(405).json({ ok: false, error: "method_not_allowed" });
+  if (!bearerMatches(request)) return response.status(401).json({ ok: false, error: "unauthorized" });
+  const raw = request.body || {};
+  const message = {
+    id: cleanText(raw.id, 500),
+    internetMessageId: cleanText(raw.internetMessageId || raw.id, 500),
+    subject: cleanText(raw.subject, 500),
+    receivedDateTime: cleanText(raw.receivedDateTime, 80),
+    from: { emailAddress: { address: cleanText(raw.from, 320).toLowerCase() } },
+    body: { contentType: "html", content: String(raw.htmlBody || raw.body || "").slice(0, 100000) },
+    bodyPreview: cleanText(raw.bodyPreview, 4000)
+  };
+  const parsed = parseDaneaMessage(message);
+  if (!parsed) return response.status(422).json({ ok: false, error: "not_authentic_danea" });
+  const uid = await ownerUid();
+  const result = await saveDaneaMailRequest(parsed, uid);
+  await DANEA_BRIDGE_REF().set({ connected: true, mailbox: "info@edilkappa.com", lastReceivedAtMs: Date.now(), lastReceivedAt: FieldValue.serverTimestamp(), lastImported: result.created ? 1 : 0, lastMessageId: parsed.sourceMessageId, lastError: "" }, { merge: true });
+  if (result.created) await pushSafely({ uid, staff: !uid, title: "Nuova richiesta Danea", body: `${parsed.client} · ${parsed.title}`, type: "danea", targetType: "lead", targetId: result.id, url: "./?view=daneaRequestsView" });
+  return response.status(200).json({ ok: true, created: result.created, id: result.id });
+});
+
+exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", timeoutSeconds: 30, memory: "256MiB", maxInstances: 1, cors: true }, async (request) => {
+  const account = await authorizedUser(request, "work");
+  if (account.role !== "owner") throw new HttpsError("permission-denied", "Solo il titolare può controllare il collegamento Danea.");
+  const action = cleanText(request.data?.action || "status", 40);
+  if (action !== "status") throw new HttpsError("invalid-argument", "Operazione ponte Danea non valida.");
+  const reference = DANEA_BRIDGE_REF();
+  const snapshot = await reference.get();
+  const integration = snapshot.data() || {};
+  return { connected: Boolean(integration.connected), mailbox: integration.mailbox || "info@edilkappa.com", lastReceivedAtMs: Number(integration.lastReceivedAtMs || 0), lastImported: Number(integration.lastImported || 0), lastError: integration.lastError || "" };
 });
 
 exports.notifyNewLead = onDocumentCreated({ document: "leads/{leadId}", database: "edilkappa", region: "europe-west8" }, async (event) => {

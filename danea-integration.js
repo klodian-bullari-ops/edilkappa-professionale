@@ -17,6 +17,7 @@
   };
   let daneaFilter = 'Aperti';
   let daneaSiteSyncTimer = null;
+  const outlookState = { loading: false, status: null, error: '', device: null };
   const cloudCollectionsReady = new Set();
 
   const style = document.createElement('style');
@@ -28,6 +29,7 @@
     .daneaDescription{white-space:pre-wrap;line-height:1.5}
     .daneaSecurity{display:flex;gap:10px;align-items:flex-start}
     .daneaSecurity strong{color:#315c3b}
+    .daneaOutlook{border:1px solid #d8e3dc;background:#f8fbf9;border-radius:15px;padding:14px;margin:14px 0}.daneaOutlookHead{display:flex;justify-content:space-between;gap:12px;align-items:center}.daneaOutlookCode{font-size:24px;letter-spacing:4px;font-weight:900;background:#fff4c6;border:1px solid #e5c340;border-radius:10px;padding:10px 14px;display:inline-block;margin:10px 0}
     @media(max-width:720px){.daneaCard .actions .btn{flex:1}.daneaCard .actions{width:100%}}
   `;
   document.head.appendChild(style);
@@ -321,6 +323,25 @@
     return `<datalist id="daneaClients">${(db.condomini || []).map((item) => `<option value="${esc(item.name)}">${esc(item.address || '')}</option>`).join('')}</datalist>`;
   }
 
+  function outlookRequest(payload) {
+    if (!window.EdilKappaCloud?.daneaBridgeRequest) throw new Error('Aggiorna il gestionale e riprova: il ponte Danea non è ancora disponibile.');
+    return window.EdilKappaCloud.daneaBridgeRequest(payload);
+  }
+
+  async function loadOutlookStatus() {
+    if (outlookState.loading || !window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.daneaBridgeRequest) return;
+    outlookState.loading = true;
+    try { outlookState.status = await outlookRequest({ action: 'status' }); outlookState.error = ''; }
+    catch (error) { outlookState.error = error?.message || 'Stato del ponte Danea non disponibile.'; }
+    finally { outlookState.loading = false; if (view === 'daneaRequestsView') render(); }
+  }
+
+  function outlookPanel() {
+    const status = outlookState.status;
+    if (status?.connected) return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>✓ Importazione Danea automatica</b><small style="display:block">Outlook → ${esc(status.mailbox || 'info@edilkappa.com')} → EdilKappa · controllo Gmail ogni 5 minuti${status.lastReceivedAtMs ? ` · ultima richiesta ${esc(dateTimeText(new Date(status.lastReceivedAtMs).toISOString()))}` : ''}</small></div></div>${status.lastError ? `<div class="notice">Ultimo errore: ${esc(status.lastError)}</div>` : ''}</section>`;
+    return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>Configurazione importazione Danea in corso</b><small style="display:block">Le richieste saranno reindirizzate da edilkappasas@outlook.it a info@edilkappa.com e importate senza duplicati. Il collegamento diventerà verde alla prima richiesta ricevuta.</small></div></div>${outlookState.error ? `<div class="notice">${esc(outlookState.error)}</div>` : ''}</section>`;
+  }
+
   function mergeImportedRequest(data) {
     data.daneaKey = daneaKey(data);
     const existing = daneaRows().find((item) => item.id === data.id || item.daneaKey === data.daneaKey || daneaKey(item) === data.daneaKey);
@@ -586,7 +607,7 @@
     const transferNowSettings = window.EdilKappaCloud?.currentProfile?.role === 'owner'
       ? '<button class="btn light" onclick="openTransferNowSettings()">⚙ TransferNow</button>'
       : '';
-    return pageHead('Richieste Danea', 'Incarichi ricevuti dagli amministratori e gestione interna EdilKappa', `${transferNowSettings}<button class="btn light" onclick="openDaneaImport()">↓ Importa testo/e-mail</button><button class="btn lime" onclick="openDaneaRequest()">＋ Nuova manuale</button>`) +
+    return pageHead('Richieste Danea', 'Incarichi ricevuti dagli amministratori e gestione interna EdilKappa', `${transferNowSettings}<button class="btn light" onclick="openDaneaImport()">↓ Importa testo/e-mail</button><button class="btn lime" onclick="openDaneaRequest()">＋ Nuova manuale</button>`) + outlookPanel() +
       `<div class="notice daneaSecurity"><span>🔒</span><div><strong>Archivio riservato.</strong> I collegamenti alle pratiche Danea sono disponibili soltanto a Titolare e Ufficio.</div></div>
       <div style="height:14px"></div>
       <div class="grid stats">${stat('Da valutare', all.filter((item) => item.status === 'Nuova').length, '📥')}${stat('In gestione', active, '🔧')}${stat('Completate', all.filter((item) => item.status === 'Completato').length, '✓')}${stat('Totali', all.length, '▦')}</div>
@@ -639,6 +660,7 @@
         document.getElementById('avatar').textContent = roleName().charAt(0);
         document.getElementById('pageTitle').textContent = 'Richieste Danea';
         document.getElementById('app').innerHTML = window.daneaRequestsView();
+        if (!outlookState.status && !outlookState.loading) setTimeout(loadOutlookStatus, 0);
         return;
       }
     }

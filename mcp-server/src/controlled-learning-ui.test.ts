@@ -32,7 +32,7 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
 test('il modulo di apprendimento controllato è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./controlled-learning.js?v=1'));
   assert.ok(indexHtml.includes("['learningCenter','🧠','Memoria AI']"));
-  assert.ok(serviceWorker.includes('v64-agenti-operativi'));
+  assert.ok(serviceWorker.includes('v66-danea-gmail-bridge'));
   assert.ok(serviceWorker.includes('"./controlled-learning.js"'));
 });
 
