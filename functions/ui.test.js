@@ -76,6 +76,8 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /quality repair/);
   assert.match(functionSource, /edilkappaQuoteAgentWorker/);
   assert.match(functionSource, /recoverStaleQuoteAgentJobs/);
+  assert.match(functionSource, /Agents SDK quote failed; starting Responses fallback/);
+  assert.match(functionSource, /fallbackUsed: agentFallbackUsed/);
   assert.match(functionSource, /action === "retry_agent_job"/);
   assert.match(functionSource, /retryWithoutAttachments/);
   assert.match(functionSource, /AGENT_RUN_TIMEOUT_MS\s*=\s*8 \* 60 \* 1000/);
