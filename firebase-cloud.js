@@ -61,6 +61,7 @@ const storage = getStorage(app);
 const functions = getFunctions(app, 'europe-west8');
 const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 610000 });
 const callEdilKappaOperations = httpsCallable(functions, 'edilkappaOperations', { timeout: 550000 });
+const callEdilKappaDaneaBridge = httpsCallable(functions, 'edilkappaDaneaBridge', { timeout: 40000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -157,6 +158,10 @@ const api = {
   },
   async operationsRequest(payload) {
     const response = await callEdilKappaOperations(payload);
+    return response.data;
+  },
+  async daneaBridgeRequest(payload) {
+    const response = await callEdilKappaDaneaBridge(payload);
     return response.data;
   },
   restrictView(next) {

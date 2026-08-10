@@ -146,7 +146,7 @@ test("loads the central operations agents and keeps every action under confirmat
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
   assert.match(html, /operations-center\.js\?v=1/);
-  assert.match(serviceWorker, /v64-agenti-operativi/);
+  assert.match(serviceWorker, /v66-danea-gmail-bridge/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
@@ -156,4 +156,23 @@ test("loads the central operations agents and keeps every action under confirmat
   assert.match(backend, /generateMorningOperationsBriefing/);
   assert.match(backend, /schedule:\s*"0 7 \* \* 1-6"/);
   assert.match(backend, /action !== "refresh"/);
+});
+
+test("moves Danea intake through the authenticated Gmail bridge", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
+  const danea = fs.readFileSync(path.join(__dirname, "..", "danea-integration.js"), "utf8");
+  const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+  const bridge = fs.readFileSync(path.join(__dirname, "..", "scripts", "google-apps-script-danea.gs"), "utf8");
+  assert.match(html, /danea-integration\.js\?v=25/);
+  assert.match(html, /firebase-cloud\.js\?v=30/);
+  assert.match(cloud, /daneaBridgeRequest/);
+  assert.match(danea, /Outlook →/);
+  assert.match(danea, /controllo Gmail ogni 5 minuti/);
+  assert.match(backend, /exports\.edilkappaDaneaIngest/);
+  assert.match(backend, /exports\.edilkappaDaneaBridge/);
+  assert.match(backend, /DANEA_INGEST_KEY/);
+  assert.match(backend, /timingSafeEqual/);
+  assert.match(bridge, /everyMinutes\(5\)/);
+  assert.match(bridge, /no-reply@miocondominio\.eu/);
 });
