@@ -30,7 +30,7 @@
     .workerHero{background:linear-gradient(135deg,#111111,#22282d);border-bottom:5px solid var(--lime)}.workerHero h2{color:var(--lime)}.notice{background:#fff7cc;border-color:#eed66e;color:#725a00}.mobileNav button.active{background:#fff7cc;color:var(--ink);border-radius:12px;font-weight:850}
     @media print{.sidebar,.topbar,.mobileNav,.actions,.btn{display:none!important}.main{margin:0}.content{padding:0}.card{box-shadow:none;border:0}.printDoc{display:block!important}}
   </style>
-  <link rel="stylesheet" href="./modern-ui.css?v=1">
+  <link rel="stylesheet" href="./modern-ui.css?v=2">
 </head>
 <body>
 <div class="shell">
@@ -40,7 +40,7 @@
     <div class="sidebarFoot" id="companySidebar">EDILKAPPA<br>Gestionale riservato</div>
   </aside>
   <section class="main">
-    <header class="topbar"><div class="mobileBrand"><img src="assets/icona-edilkappa.svg" alt=""><div><b>EDILKAPPA</b><small id="mobileBrandSubtitle">Gestionale operativo</small></div></div><h1 id="pageTitle">Panoramica</h1><div class="topActions"><div class="topSearch"><input id="globalSearch" type="search" placeholder="Cerca cliente, indirizzo, lavoro…" oninput="runSearch(this.value)"></div><div class="role"><label class="hideMobile">Visualizza come</label><select id="roleSelect"></select><div class="avatar" id="avatar">K</div></div></div></header>
+    <header class="topbar"><div class="mobileBrand"><img src="assets/icona-edilkappa.svg" alt=""><div><b>EDILKAPPA</b><small id="mobileBrandSubtitle">Gestionale operativo</small></div></div><h1 id="pageTitle">Panoramica</h1><div class="mobileHeaderActions"><button aria-label="Cerca" onclick="openMobileSearch()">⌕</button><button aria-label="Notifiche" onclick="go('activityView')">♟<i id="mobileNotificationBadge"></i></button></div><div class="topActions"><div class="topSearch"><input id="globalSearch" type="search" placeholder="Cerca cliente, indirizzo, lavoro…" oninput="runSearch(this.value)" onkeydown="if(event.key==='Escape')closeMobileSearch()"></div><div class="role"><label class="hideMobile">Visualizza come</label><select id="roleSelect"></select><div class="avatar" id="avatar">K</div></div></div></header>
     <main class="content" id="app"></main>
   </section>
   <nav class="mobileNav" id="mobileNav"></nav>
@@ -92,6 +92,8 @@ function renderNav(){
   document.getElementById('mobileNav').innerHTML=mobile.map(n=>`<button data-action="${n[4]}" class="${view===n[0]||(n[0]==='more'&&moreViews.includes(view))?'active':''}" onclick="${n[3]}"><span>${n[1]}</span>${n[2]}</button>`).join('');
 }
 function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;render()}
+function openMobileSearch(){document.body.classList.add('mobileSearchOpen');setTimeout(()=>document.getElementById('globalSearch')?.focus(),30)}
+function closeMobileSearch(){document.body.classList.remove('mobileSearchOpen');document.getElementById('globalSearch')?.blur()}
 function runSearch(value){searchQuery=String(value||'').trim();view=searchQuery?'search':(isOffice()?'dashboard':'worker');render()}
 function openSearchResult(action,id,contextId=''){searchQuery='';const input=document.getElementById('globalSearch');if(input)input.value='';const office=isOffice();switch(action){case'client':if(typeof window.openClientArchive==='function')return window.openClientArchive(id);view='condomini';render();return window.openCondo(id);case'intervention':if(typeof window.openClientArchive==='function')window.openClientArchive(contextId);if(typeof window.openIntervention==='function')return window.openIntervention(id,contextId);return;case'inspection':view='inspections';render();return window.openInspection(id);case'quote':view='quotes';render();return window.openQuote(id);case'site':view=office?'sites':'worker';render();return office?window.openSite(id):window.openReport(id);case'team':view='teamsView';render();return window.openTeam(id);case'drone':view='drone';render();return window.openDrone(id);case'lifeline':view='lifeline';render();return window.openLifeline(id);case'roof':view=office?'roofs':'worker';render();return office?window.openRoof(id):window.updateRoofTask(id);case'drain':view=office?'drains':'worker';render();return office?window.openDrain(id):window.updateDrainTask(id);default:return go(office?'dashboard':'worker')}}
 function render(){
@@ -104,6 +106,8 @@ function render(){
   if(brandSubtitle)brandSubtitle.textContent=brandLabel;
   if(mobileBrandSubtitle)mobileBrandSubtitle.textContent=brandLabel;
   if(search)search.placeholder=office?'Cerca cliente, indirizzo, lavoro…':'Cerca nei miei lavori…';
+  const mobileBadge=document.getElementById('mobileNotificationBadge');
+  if(mobileBadge){const count=(db.interventions||[]).filter(item=>/nuov|da gestire|apert/i.test(item.status||'')).length;mobileBadge.textContent=count||'';mobileBadge.hidden=!count}
   renderNav();
   document.getElementById('avatar').textContent=roleName().charAt(0);
   const labels=Object.fromEntries(nav().map(x=>[x[0],x[2]]));labels.more='Altro';labels.search='Ricerca';
@@ -131,8 +135,8 @@ function dashboard(){
   const displayName=role==='owner'?'Klodian':roleName();
   return `<div class="dashboardHero"><div><span class="eyebrow">Buongiorno, ${esc(displayName)}</span><h2>Centro operativo</h2><p>Le attività importanti sono ordinate e apribili direttamente.</p></div><div class="actions"><button class="btn light" onclick="openInspection()">＋ Sopralluogo</button><button class="btn lime" onclick="openSite()">＋ Nuovo intervento</button></div></div>
   <div class="grid stats">${stat('Richieste nuove',newRequests.length,'🛠️','da prendere in carico')}${stat('Preventivi da controllare',openQuotes.length,'📄','bozze e risposte aperte')}${stat('Cantieri attivi',active.length,'🏗️','lavori in esecuzione')}${stat('Ore mancanti',missingHours.length,'◷','operai senza registrazione oggi')}</div>
-  <div class="dashboardGrid"><section class="card dashboardPriority"><div class="cardHead"><h3>Priorità operative</h3><button class="btn sm light" onclick="go('sites')">Vedi lavori</button></div><div class="list">${priorities.slice(0,5).map(item=>`<div class="row"><div class="rowIcon">${item.icon}</div><div class="rowBody"><b>${esc(item.title)}</b><small>${esc(item.meta)}</small></div>${badge(item.status)}<button class="btn sm light" onclick="${item.action}">Apri</button></div>`).join('')||'<div class="empty">Nessuna priorità urgente.</div>'}</div></section><section class="card"><div class="cardHead"><h3>Agenda di oggi</h3><button class="btn sm light" onclick="go('agenda')">Apri agenda</button></div><div class="agenda">${agendaItems.map(item=>`<div class="event"><time>${esc(item.time||'—')}</time><b>${esc(item.client||'Appuntamento')}</b><small>${esc(item.type||'Sopralluogo')} · ${esc(item.address||'')}</small></div>`).join('')||'<div class="empty">Nessun appuntamento.</div>'}</div></section></div>
-  <section class="card aiLaunchCard"><div class="aiLaunchLogo"><img src="assets/icona-edilkappa.svg" alt=""></div><div class="aiLaunchBody"><h3>EdilKappa AI</h3><p>Preventivi, relazioni e controlli operativi in un unico punto.</p></div><button class="btn" onclick="go('ai')">✦ Apri EdilKappa AI</button></section><div class="company">${esc(companySummary())}</div>`;
+  <div class="dashboardGrid"><section class="card dashboardPriority"><div class="cardHead"><h3>Priorità di oggi</h3><button class="btn sm light" onclick="go('sites')">Vedi lavori</button></div><div class="list">${priorities.slice(0,5).map(item=>`<div class="row"><div class="rowIcon">${item.icon}</div><div class="rowBody"><b>${esc(item.title)}</b><small>${esc(item.meta)}</small></div>${badge(item.status)}<button class="btn sm light" onclick="${item.action}">›</button></div>`).join('')||'<div class="empty">Nessuna priorità urgente.</div>'}</div></section><section class="card dashboardAgenda"><div class="cardHead"><h3>Agenda di oggi</h3><button class="btn sm light" onclick="go('agenda')">Apri agenda</button></div><div class="agenda">${agendaItems.map(item=>`<div class="event"><time>${esc(item.time||'—')}</time><b>${esc(item.client||'Appuntamento')}</b><small>${esc(item.type||'Sopralluogo')} · ${esc(item.address||'')}</small></div>`).join('')||'<div class="empty">Nessun appuntamento.</div>'}</div></section></div>
+  <section class="card aiLaunchCard"><div class="aiLaunchLogo"><img src="assets/icona-edilkappa.svg" alt=""></div><div class="aiLaunchBody"><h3>EdilKappa AI</h3><p>Il tuo assistente intelligente per preventivi e gestione lavori.</p><button class="btn" onclick="go('ai')">✦ Crea preventivo</button></div></section><div class="company">${esc(companySummary())}</div>`;
 }
 function agenda(){const items=db.inspections.slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));return pageHead('Agenda operativa','Sopralluoghi e controlli programmati',`<button class="btn light" onclick="requestNotifications()">🔔 Attiva notifiche</button><button class="btn lime" onclick="openInspection()">＋ Appuntamento</button>`)+`<div class="notice"><b>Promemoria affidabile su iPhone:</b> dopo aver programmato il sopralluogo premi “Calendario iPhone”. L’avviso funzionerà anche con l’app chiusa.</div><div style="height:14px"></div><div class="card"><div class="list">${items.map(x=>`<div class="row"><div class="rowIcon">📅</div><div class="rowBody"><b>${esc(x.client)}</b><small>${esc(x.date)} alle ${esc(x.time)} · ${esc(x.type)}<br>${esc(x.address)} · avviso ${reminderLabel(x.reminder)}</small></div><div class="actions">${badge(x.status)}<button class="btn sm green" onclick="downloadInspectionCalendar('${x.id}')">Calendario iPhone</button><button class="btn sm light" onclick="openInspection('${x.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('inspections','${x.id}','questo sopralluogo')">Elimina</button></div></div>`).join('')||'<div class="empty">Agenda vuota</div>'}</div></div>`}
 function pageHead(title,sub,action=''){return `<div class="headline"><div><h2>${title}</h2><p>${sub}</p></div><div class="actions">${action}</div></div>`}
@@ -234,7 +238,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.a
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=48').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=49').catch(()=>{});
 </script>
 <script src="./professional-extensions.js?v=19"></script>
 <script src="./business-suite.js?v=19"></script>
