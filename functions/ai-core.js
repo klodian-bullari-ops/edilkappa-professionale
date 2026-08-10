@@ -191,6 +191,26 @@ function safeNumber(value, maximum = 100000000) {
   return Math.max(0, Math.min(maximum, number));
 }
 
+function normalizeEstimatedDuration(value) {
+  const duration = cleanText(value, 500)
+    .replace(/[\u2012\u2013\u2014\u2212]/g, "-")
+    .replace(/(\d)\s*-\s*(\d)/g, "$1-$2")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!duration) return "";
+  const limits = [
+    { pattern: /\b(\d{1,5})\s*(?:giorn\w*|gg)\b/gi, maximum: 365 },
+    { pattern: /\b(\d{1,4})\s*settiman\w*\b/gi, maximum: 104 },
+    { pattern: /\b(\d{1,4})\s*mes\w*\b/gi, maximum: 60 }
+  ];
+  const implausible = limits.some(({ pattern, maximum }) =>
+    [...duration.matchAll(pattern)].some((match) => Number(match[1]) > maximum)
+  );
+  return implausible
+    ? "Da confermare: il valore generato non è plausibile; indicare un numero o un intervallo, per esempio 8-12 giorni lavorativi."
+    : duration;
+}
+
 function quoteAuditText(artifact) {
   const quote = artifact?.quote || {};
   return [
@@ -217,6 +237,7 @@ function quoteAuditText(artifact) {
 function durationIsPlausible(value, readyToSave) {
   const duration = cleanText(value, 500);
   if (!duration) return false;
+  if (/valore\s+generato\s+non\s+[èe]\s+plausibile/i.test(duration)) return false;
   if (readyToSave && /da\s+(?:confermare|definire|verificare)|non\s+definit/i.test(duration)) return false;
   const limits = [
     { pattern: /\b(\d{1,5})\s*(?:giorn\w*|gg)\b/gi, maximum: 365 },
@@ -307,6 +328,19 @@ function auditArtifact(value, requestMessage = "") {
     const solutionFuel = recommendationFuel(artifact.recommendedSolution);
     const optionFuel = recommendationFuel(recommended ? `${recommended.label}\n${recommended.title}\n${recommended.description}\n${recommended.includedWorks.join("\n")}\n${recommended.notes}` : "");
     addCheck("Raccomandazione tecnica coerente", !solutionFuel || !optionFuel || solutionFuel === optionFuel, `la soluzione tecnica indica ${solutionFuel || "nessuna alimentazione univoca"}, mentre l'alternativa marcata come raccomandata indica ${optionFuel || "nessuna alimentazione univoca"}`, { blocking: true });
+
+    const principalOptionText = [artifact.title, artifact.subject, artifact.recommendedSolution, recommended?.label, recommended?.title, recommended?.description].filter(Boolean).join("\n");
+    const existingKitchenTransfer = /(?:trasfer|spost|rimont|recuper)[^.\n]{0,120}cucina\s+esistente|cucina\s+esistente[^.\n]{0,120}(?:trasfer|spost|rimont|recuper)/i.test(completeText);
+    const newKitchenExcluded = quote.exclusions.some((item) => /fornitura[^.\n]{0,100}nuova\s+cucina|nuova\s+cucina[^.\n]{0,100}(?:non\s+compres|esclus)/i.test(item));
+    const misleadingNewKitchen = /\bnuova\s+cucina\b/i.test(principalOptionText) && existingKitchenTransfer && newKitchenExcluded;
+    addCheck("Cucina nuova o esistente", !misleadingNewKitchen, "non chiamare “nuova cucina” una soluzione che prevede soltanto lo smontaggio e il trasferimento della cucina esistente", { blocking: true });
+
+    const scopeText = [...quote.lines.map((line) => `${line.description} ${line.notes}`), ...quote.includedWorks].join("\n");
+    const genericUtilityClosure = /(?:dismission|scolleg|chiusur)[^.\n]{0,120}(?:utenze|punti?\s+tecnic)/i.test(scopeText);
+    const gasMentioned = /\bgas\b/i.test(completeText);
+    const explicitGasIncluded = /(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)[^.\n]{0,100}\bgas\b|\bgas\b[^.\n]{0,100}(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)/i.test(scopeText);
+    const explicitGasExcluded = quote.exclusions.some((item) => /(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)[^.\n]{0,100}\bgas\b|\bgas\b[^.\n]{0,100}(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)/i.test(item));
+    addCheck("Perimetro del gas esplicito", !gasMentioned || !genericUtilityClosure || explicitGasIncluded || explicitGasExcluded, "se si parla genericamente di chiusura delle utenze e il gas è presente, indicare espressamente se la chiusura del punto gas è compresa da impresa abilitata oppure esclusa", { blocking: true });
 
     const pendingText = [...artifact.uncertainties, ...quote.assumptions, ...quote.missingInformation, quote.notes].filter(Boolean).join("\n");
     const vatPending = /(?:\biva\b|aliquot\w*)[^.\n]{0,70}(?:da\s+(?:verificare|confermare|definire|valutare)|non\s+definit)|(?:verificare|confermare|definire|valutare)[^.\n]{0,70}(?:\biva\b|aliquot\w*)/i.test(pendingText);
@@ -409,7 +443,7 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
     `Oggi è ${date}. L'utente si chiama ${cleanText(displayName, 120) || "Klodian"}.`,
     "Ragiona sugli allegati e sui dati forniti, ma non inventare misure, quantità, norme, scadenze o risultati di ispezioni.",
     "Lavora come un agente completo: prima ricostruisci il problema, poi valuta alternative tecniche, costi, rischi e informazioni mancanti, infine produci il risultato operativo richiesto.",
-    "Quando mancano informazioni davvero necessarie, inseriscile in missingInformation come domande dirette, brevi e precise, spiegando quale dato serve. Non ripetere domande a cui i dati o gli allegati rispondono già. Se una misura non è disponibile, chiedi se il titolare autorizza una stima a corpo da verificare in sopralluogo.",
+    "Quando mancano informazioni davvero necessarie, inseriscile in missingInformation esclusivamente come domande dirette, brevi e precise, spiegando esattamente cosa deve misurare, fotografare o scegliere il titolare. Per una cucina chiedi, solo quando pertinenti: lunghezza/larghezza/altezza del locale, parete utile da spigolo a spigolo, posizione di porte/finestre/termosifoni, distanza e quota dello scarico, misure dei moduli, potenza in kW e foto del quadro, scelta gas/induzione e foto dell'etichetta di eventuali apparecchi murali. Non ripetere domande a cui i dati o gli allegati rispondono già. Se una misura non è disponibile, chiedi se il titolare autorizza una stima a corpo da verificare in sopralluogo.",
     "Distingui sempre: ciò che è visibile, ciò che è una causa probabile e ciò che richiede verifica sul posto da parte di un tecnico qualificato.",
     "Non dichiarare mai che un lavoro, un impianto o un documento è conforme o certificato basandoti soltanto su foto, fotogrammi o dati incompleti.",
     "I fotogrammi con lo stesso nome sorgente provengono dallo stesso video e sono ordinati nel tempo; analizzali come una sequenza, senza fingere di aver visto i fotogrammi intermedi.",
@@ -435,9 +469,13 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
     "Applica il METODO EDILKAPPA a ogni preventivo, relazione o analisi tecnica. Non mostrare ragionamenti interni o catene di pensiero: restituisci invece prove controllabili, conclusioni sintetiche, ipotesi, alternative e verifiche da eseguire.",
     "METODO EDILKAPPA — 1) definisci obiettivo, destinatario e risultato richiesto; 2) inventaria le evidenze fornite da testo, foto, video, documenti e gestionale; 3) separa fatti osservati, interpretazioni tecniche e incertezze; 4) valuta cause, conseguenze, urgenza e rischi; 5) confronta le soluzioni possibili per efficacia, durata, costo, tempi e manutenzione; 6) raccomanda una soluzione motivata; 7) scomponi lavorazioni e prezzi; 8) verifica coerenza tecnica, aritmetica e commerciale; 9) prepara un documento leggibile dal cliente.",
     "Compila artifact.evidence soltanto con fatti rintracciabili nei dati forniti. Compila artifact.uncertainties con ciò che non è dimostrato. artifact.decisionRationale deve essere una motivazione professionale breve e verificabile, non il ragionamento interno completo. artifact.recommendedSolution deve dichiarare chiaramente la soluzione consigliata e perché è preferibile.",
+    "Nelle evidenze fotografiche descrivi soltanto ciò che è realmente visibile nella singola foto. Condizioni di pagamento, IVA, misure dichiarate dal cliente e altre dichiarazioni non sono didascalie fotografiche: riportale nelle sezioni commerciali o tra i dati dichiarati.",
     "Scegli documentType in base alla richiesta: preventivo, variante, relazione_tecnica, relazione_fotografica, relazione_assicurativa o verbale_sopralluogo. Usa documentSubtitle per descrivere con precisione edificio, intervento o variante.",
     "Per un PREVENTIVO crea artifact.kind=quote, scomponi il lavoro in voci concrete e calcola ogni riga con quantità, unità e prezzo unitario.",
     "Un preventivo professionale deve includere, quando pertinenti: apprestamenti e protezioni, accessi e sicurezza, demolizioni/rimozioni, fornitura, posa, fissaggi e sigillature, ripristini, prove finali, trasporti, noleggi, smaltimenti, pulizia, opere comprese, esclusioni, durata, condizioni di pagamento, ipotesi e alternative. Evita voci generiche che nascondono lavorazioni diverse.",
+    "Mantieni il preventivo compatto: normalmente 5-10 righe economiche, fino a 6 valutazioni tecniche, 5-9 fasi operative e 4-8 gruppi di materiali. Elimina ripetizioni tra righe, fasi, opere comprese, ipotesi ed esclusioni.",
+    "Usa sempre intervalli numerici con il trattino ASCII, per esempio 8-12 giorni; non concatenare mai gli estremi in valori come 812 o 710.",
+    "Se la cucina esistente viene smontata e rimontata, scrivi “trasferimento della cucina esistente”, non “nuova cucina”. Se sono presenti gas e formule generiche come chiusura utenze, specifica separatamente se la chiusura o messa in sicurezza del punto gas è compresa da impresa abilitata oppure esclusa.",
     "Se esistono scenari realmente diversi (per esempio presenza o assenza di amianto, soluzione standard o soluzione economica), inseriscili in quote.options. quote.options.total è sempre l'imponibile prima dell'IVA. Le righe quote.lines rappresentano la soluzione principale raccomandata e devono essere coerenti con il relativo totale.",
     "Per i prezzi usa prima il LISTINO EDILKAPPA: abbina la voce più pertinente e copia salePrice, indicando priceSource=tariffario e il codice in priceReference. Non usare cost come prezzo di vendita.",
     "Usa poi lo STORICO DEI PREVENTIVI ACCETTATI o completati quando la lavorazione è davvero comparabile, indicando priceSource=storico e il riferimento del preventivo. Non copiare prezzi storici se unità, quantità, accessibilità, periodo o condizioni sono incompatibili.",
@@ -595,7 +633,69 @@ function chooseModel({
 }
 
 function normalizeStringList(value, maximum = 30) {
-  return (Array.isArray(value) ? value : []).slice(0, maximum).map((item) => cleanText(item, 1200)).filter(Boolean);
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map((item) => cleanText(item, 1200))
+    .filter((item) => {
+      if (!item) return false;
+      const key = item.toLocaleLowerCase("it");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, maximum);
+}
+
+function normalizeQuoteMissingQuestion(value) {
+  const text = cleanText(value, 1200).replace(/\s+/g, " ").replace(/[\s.;:]+$/g, "").trim();
+  if (!text) return "";
+  const normalized = text.toLocaleLowerCase("it");
+  if (/\biva\b|aliquota/.test(normalized)) {
+    return "Quale aliquota IVA definitiva devo applicare: 10%, 22%, reverse charge oppure un'altra aliquota?";
+  }
+  if (/indirizz|ubicazione/.test(normalized)) {
+    return "Qual è l'indirizzo completo del cantiere o dell'intervento?";
+  }
+  if (/pagament|acconto|saldo/.test(normalized)) {
+    return "Quali condizioni di pagamento devo indicare, compreso il momento in cui viene corrisposta l'IVA?";
+  }
+  if (/apparecchio\s+murale|caldaia|scaldabagno|boiler/.test(normalized)) {
+    return "Che apparecchio è quello installato a parete? Puoi inviare una foto ravvicinata dell'etichetta e indicare se deve restare, essere protetto, spostato oppure rimosso?";
+  }
+  if (/potenza\s+elettric|quadro\s+elettric/.test(normalized)) {
+    return "Qual è la potenza elettrica disponibile in kW e puoi inviare una fotografia leggibile del quadro elettrico?";
+  }
+  if (/scaric|adduzion|idr|percorso|pendenza|colonna/.test(normalized)) {
+    return "Qual è la distanza tra il punto acqua/scarico esistente e la nuova parete cucina, quale percorso è possibile e a quale quota si trova lo scarico? Se non puoi rilevarlo, autorizzi la verifica in sopralluogo e una stima a corpo provvisoria?";
+  }
+  if (/gas|induzion/.test(normalized)) {
+    return "La nuova posizione della cucina userà il gas oppure un piano a induzione? Se il gas esistente va chiuso, la chiusura deve essere compresa oppure esclusa?";
+  }
+  if ((/sala/.test(normalized) && /paret|misur|riliev|dimension/.test(normalized)) || /parete\s+destinata/.test(normalized)) {
+    return "Quali sono lunghezza, larghezza e altezza della sala e quanto misura, da spigolo a spigolo, la parete destinata alla cucina? Indica anche posizione e larghezza di porte, finestre e termosifoni; se non hai le misure, autorizzi una stima a corpo da verificare in sopralluogo?";
+  }
+  if (/cucina\s+esistente|mobili|moduli|top|cappa|elettrodomestic/.test(normalized) && /misur|dimension|recuper|stato|compatibil/.test(normalized)) {
+    return "Quali sono la lunghezza totale, l'altezza e la profondità della cucina esistente e le misure dei singoli moduli, del top, della cappa e degli elettrodomestici da recuperare?";
+  }
+  if (/finitur|tinteggiatur|pittur|rasatur|rivestiment|paviment|soffitto/.test(normalized)) {
+    return "Nell'ex cucina vuoi ripristinare soltanto le zone interessate dai lavori oppure tinteggiare completamente pareti e soffitto? Quali eventuali pavimenti o rivestimenti devono essere rimossi o mantenuti?";
+  }
+  if (/durata|tempistica|giorn/.test(normalized)) {
+    return "Quale durata indicativa devo riportare, espressa come numero o intervallo di giorni lavorativi, per esempio 8-12 giorni?";
+  }
+  if (/misur|dimension|planimetr|lunghezz|superfic|quantit/.test(normalized)) {
+    return `Quale misura o quantità esatta manca per questo punto: “${text}”? Se non è disponibile, autorizzi una stima a corpo da verificare in sopralluogo?`;
+  }
+  if (text.endsWith("?")) return text;
+  return `Puoi confermare questo dato: “${text}”?`;
+}
+
+function normalizeQuoteMissingInformation(value, maximum = 20) {
+  return normalizeStringList(value, maximum)
+    .map(normalizeQuoteMissingQuestion)
+    .filter(Boolean)
+    .filter((item, index, values) => values.findIndex((candidate) => candidate.toLocaleLowerCase("it") === item.toLocaleLowerCase("it")) === index)
+    .slice(0, maximum);
 }
 
 function normalizeVisualBriefs(value) {
@@ -650,6 +750,10 @@ function normalizeArtifact(value) {
   const kind = value.kind;
   const quoteValue = value.quote || {};
   const reportValue = value.report || {};
+  const estimatedDuration = normalizeEstimatedDuration(quoteValue.estimatedDuration);
+  const durationQuestion = !estimatedDuration || /da\s+(?:confermare|definire|verificare)|non\s+[èe]\s+plausibile/i.test(estimatedDuration)
+    ? ["Quale durata indicativa devo riportare, espressa come numero o intervallo di giorni lavorativi, per esempio 8-12 giorni?"]
+    : [];
   const lines = (Array.isArray(quoteValue.lines) ? quoteValue.lines : []).slice(0, 30).map((line) => ({
     description: cleanText(line?.description, 500),
     quantity: safeNumber(line?.quantity, 1000000),
@@ -691,13 +795,13 @@ function normalizeArtifact(value) {
       validityDays: Math.max(1, Math.round(safeNumber(quoteValue.validityDays, 365) || 30)),
       paymentTerms: cleanText(quoteValue.paymentTerms, 700),
       notes: cleanText(quoteValue.notes, 3000),
-      estimatedDuration: cleanText(quoteValue.estimatedDuration, 500),
+      estimatedDuration,
       includedWorks: normalizeStringList(quoteValue.includedWorks, 30),
       exclusions: normalizeStringList(quoteValue.exclusions, 30),
       options: normalizeQuoteOptions(quoteValue.options),
       pricingAnalysis: normalizePricingAnalysis(quoteValue.pricingAnalysis),
       assumptions: normalizeStringList(quoteValue.assumptions, 20),
-      missingInformation: normalizeStringList(quoteValue.missingInformation, 20),
+      missingInformation: normalizeQuoteMissingInformation([...(Array.isArray(quoteValue.missingInformation) ? quoteValue.missingInformation : []), ...durationQuestion], 20),
       readyToSave: quoteValue.readyToSave === true
     },
     report: {
@@ -771,6 +875,8 @@ module.exports = {
   extractAnswer,
   isRevisionRequest,
   normalizeArtifact,
+  normalizeEstimatedDuration,
+  normalizeQuoteMissingInformation,
   parseAttachments,
   parseMediaReferences
 };
