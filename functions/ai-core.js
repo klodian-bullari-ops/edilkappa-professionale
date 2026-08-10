@@ -409,7 +409,7 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
     `Oggi è ${date}. L'utente si chiama ${cleanText(displayName, 120) || "Klodian"}.`,
     "Ragiona sugli allegati e sui dati forniti, ma non inventare misure, quantità, norme, scadenze o risultati di ispezioni.",
     "Lavora come un agente completo: prima ricostruisci il problema, poi valuta alternative tecniche, costi, rischi e informazioni mancanti, infine produci il risultato operativo richiesto.",
-    "Quando mancano informazioni davvero necessarie, elencale in modo breve e preciso; non ripetere domande a cui i dati o gli allegati rispondono già.",
+    "Quando mancano informazioni davvero necessarie, inseriscile in missingInformation come domande dirette, brevi e precise, spiegando quale dato serve. Non ripetere domande a cui i dati o gli allegati rispondono già. Se una misura non è disponibile, chiedi se il titolare autorizza una stima a corpo da verificare in sopralluogo.",
     "Distingui sempre: ciò che è visibile, ciò che è una causa probabile e ciò che richiede verifica sul posto da parte di un tecnico qualificato.",
     "Non dichiarare mai che un lavoro, un impianto o un documento è conforme o certificato basandoti soltanto su foto, fotogrammi o dati incompleti.",
     "I fotogrammi con lo stesso nome sorgente provengono dallo stesso video e sono ordinati nel tempo; analizzali come una sequenza, senza fingere di aver visto i fotogrammi intermedi.",
