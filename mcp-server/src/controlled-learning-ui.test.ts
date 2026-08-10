@@ -9,6 +9,7 @@ const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'ut
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
 
 function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
+  let renderNavCount = 0;
   const document = {
     createElement: () => ({ textContent: '' }),
     head: { appendChild() {} },
@@ -17,7 +18,7 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
   const window: Record<string, unknown> = {};
   const context = vm.createContext({
     window, document, db: database, role: activeRole, ownerNav: [],
-    render() {}, openQuote() {}, save() {}, renderNav() {}, initRoles() {},
+    render() {}, openQuote() {}, save() {}, renderNav() { renderNavCount += 1; }, initRoles() {},
     isOffice: () => true, roleName: () => activeRole === 'owner' ? 'Titolare' : 'Ufficio',
     esc: (value: unknown) => String(value ?? ''), euro: (value: unknown) => `€${Number(value || 0).toFixed(2)}`,
     stat: () => '', modal() {}, alert() {}, confirm: () => true,
@@ -25,7 +26,7 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
   });
   window.openQuote = context.openQuote;
   vm.runInContext(learning, context, { filename: 'controlled-learning.js' });
-  return { context, api: window.EdilKappaLearning as { isVerified(item: Record<string, unknown>): boolean; recordQuoteChange(item: Record<string, unknown>, before: Record<string, unknown>): boolean } };
+  return { context, renderNavCount, api: window.EdilKappaLearning as { isVerified(item: Record<string, unknown>): boolean; recordQuoteChange(item: Record<string, unknown>, before: Record<string, unknown>): boolean } };
 }
 
 test('il modulo di apprendimento controllato è caricato e disponibile offline', () => {
@@ -33,6 +34,12 @@ test('il modulo di apprendimento controllato è caricato e disponibile offline',
   assert.ok(indexHtml.includes("['learningCenter','🧠','Memoria AI']"));
   assert.ok(serviceWorker.includes('v62-apprendimento-controllato'));
   assert.ok(serviceWorker.includes('"./controlled-learning.js"'));
+});
+
+test('Memoria AI compare nel menu già alla prima apertura', () => {
+  const loaded = loadLearning({ quotes: [], sites: [], timesheets: [], reports: [], priceList: [] });
+  assert.equal(loaded.renderNavCount, 1);
+  assert.ok((loaded.context.ownerNav as Array<string[]>).some((entry) => entry[0] === 'learningCenter'));
 });
 
 test('le correzioni ai preventivi vengono registrate senza modificare il listino DEI', () => {

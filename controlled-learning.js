@@ -236,6 +236,7 @@
     const before = ownerNav.findIndex((entry) => entry[0] === 'priceListView');
     ownerNav.splice(before >= 0 ? before + 1 : ownerNav.length, 0, ['learningCenter', '🧠', 'Memoria AI']);
   }
+  if (typeof renderNav === 'function') renderNav();
 
   const baseRender = render;
   render = function () {
