@@ -1,6 +1,6 @@
 "use strict";
 
-const { createHash, randomUUID, timingSafeEqual } = require("node:crypto");
+const { createHash, randomUUID } = require("node:crypto");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -48,7 +48,6 @@ const firestore = getFirestore(adminApp, "edilkappa");
 const messaging = getMessaging(adminApp);
 const storageBucket = getStorage(adminApp).bucket("edilkappa-professionale.firebasestorage.app");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
-const DANEA_INGEST_KEY = defineSecret("DANEA_INGEST_KEY");
 const OWNER_EMAIL = "info@edilkappa.com";
 const ORG_ID = "edilkappa";
 const DAILY_REQUEST_LIMIT = 120;
@@ -771,17 +770,8 @@ async function saveDaneaMailRequest(item, uid) {
   return { id, created: !sameIdentity };
 }
 
-function bearerMatches(request) {
-  const supplied = String(request.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  const expected = String(DANEA_INGEST_KEY.value() || "");
-  if (!supplied || !expected || supplied.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
-}
-
-exports.edilkappaDaneaIngest = onRequest({ region: "europe-west8", invoker: "public", secrets: [DANEA_INGEST_KEY], timeoutSeconds: 60, memory: "256MiB", maxInstances: 2, cors: false }, async (request, response) => {
-  if (request.method !== "POST") return response.status(405).json({ ok: false, error: "method_not_allowed" });
-  if (!bearerMatches(request)) return response.status(401).json({ ok: false, error: "unauthorized" });
-  const raw = request.body || {};
+exports.processDaneaInbox = onDocumentCreated({ document: "daneaInbox/{messageId}", database: "edilkappa", region: "europe-west8", retry: true }, async (event) => {
+  const raw = event.data?.data() || {};
   const message = {
     id: cleanText(raw.id, 500),
     internetMessageId: cleanText(raw.internetMessageId || raw.id, 500),
@@ -792,12 +782,15 @@ exports.edilkappaDaneaIngest = onRequest({ region: "europe-west8", invoker: "pub
     bodyPreview: cleanText(raw.bodyPreview, 4000)
   };
   const parsed = parseDaneaMessage(message);
-  if (!parsed) return response.status(422).json({ ok: false, error: "not_authentic_danea" });
+  if (!parsed) {
+    await event.data?.ref.delete();
+    return;
+  }
   const uid = await ownerUid();
   const result = await saveDaneaMailRequest(parsed, uid);
   await DANEA_BRIDGE_REF().set({ connected: true, mailbox: "info@edilkappa.com", lastReceivedAtMs: Date.now(), lastReceivedAt: FieldValue.serverTimestamp(), lastImported: result.created ? 1 : 0, lastMessageId: parsed.sourceMessageId, lastError: "" }, { merge: true });
   if (result.created) await pushSafely({ uid, staff: !uid, title: "Nuova richiesta Danea", body: `${parsed.client} · ${parsed.title}`, type: "danea", targetType: "lead", targetId: result.id, url: "./?view=daneaRequestsView" });
-  return response.status(200).json({ ok: true, created: result.created, id: result.id });
+  await event.data?.ref.delete();
 });
 
 exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 1, cors: true }, async (request) => {
