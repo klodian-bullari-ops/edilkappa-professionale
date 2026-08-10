@@ -28,6 +28,10 @@ const {
   QUOTE_AGENT_NAME,
   runQuoteAgent
 } = require("./quote-agent");
+const {
+  agentJobTimeout,
+  canRetryAgentJob
+} = require("./ai-job-state");
 const { buildOperationsSnapshot } = require("./operations-core");
 const {
   OPERATIONS_AGENT_NAME,
@@ -56,7 +60,7 @@ const MAX_VISUALS_PER_ARTIFACT = 3;
 const OPENAI_REQUEST_TIMEOUT_MS = 540000;
 const OPENAI_BACKGROUND_TIMEOUT_MS = 45000;
 const AI_JOB_TTL_MS = 24 * 60 * 60 * 1000;
-const AGENT_RUN_TIMEOUT_MS = 520000;
+const AGENT_RUN_TIMEOUT_MS = 8 * 60 * 1000;
 const MAX_AGENT_INPUT_BYTES = 32 * 1024 * 1024;
 const MAX_PREPARED_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -601,6 +605,34 @@ function agentFailureMessage(error) {
   return "L’agente preventivi non ha completato la bozza. Puoi riprovare dalla stessa chat.";
 }
 
+function retryInputAvailable(job) {
+  return Boolean(cleanText(job?.inputStoragePath, 600) && Number(job?.inputBytes || 0) > 0);
+}
+
+async function expireStaleAgentJob(jobReference) {
+  let outcome = { expired: false, job: null };
+  await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(jobReference);
+    const job = snapshot.exists ? (snapshot.data() || {}) : null;
+    const timeout = agentJobTimeout(job);
+    if (!job || !timeout) {
+      outcome = { expired: false, job };
+      return;
+    }
+    const failure = {
+      status: "failed",
+      stage: timeout.stage,
+      error: timeout.error,
+      timedOutAtMs: Date.now(),
+      timedOutAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    };
+    transaction.set(jobReference, failure, { merge: true });
+    outcome = { expired: true, job: { ...job, ...failure }, error: timeout.error };
+  });
+  return outcome;
+}
+
 function envelopePayload(snapshot) {
   try { return JSON.parse(snapshot?.data()?.payload || "{}"); }
   catch (_) { return {}; }
@@ -867,6 +899,7 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
     transaction.set(jobReference, {
       status: "working",
       stage: "agent",
+      startedAtMs: Date.now(),
       startedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
@@ -983,6 +1016,34 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       }
     }
   }
+});
+
+exports.recoverStaleQuoteAgentJobs = onSchedule({
+  schedule: "*/5 * * * *",
+  timeZone: "Europe/Rome",
+  region: "europe-west8",
+  timeoutSeconds: 60,
+  memory: "256MiB",
+  retryCount: 0
+}, async () => {
+  const snapshot = await firestore.collection("aiAgentJobs")
+    .where("status", "in", ["queued", "working"])
+    .limit(100)
+    .get();
+  await Promise.all(snapshot.docs.map(async (document) => {
+    const outcome = await expireStaleAgentJob(document.ref);
+    if (!outcome.expired) return;
+    const job = outcome.job || {};
+    await pushSafely({
+      uid: cleanText(job.uid, 160),
+      title: "Preventivo da riprovare",
+      body: outcome.error || "L’elaborazione si è interrotta. Apri EdilKappa AI e premi Riprova.",
+      type: "ai-error",
+      targetType: "ai",
+      targetId: cleanText(job.jobId, 120),
+      url: "./?view=ai"
+    });
+  }));
 });
 
 exports.edilkappaAi = onCall({
@@ -1103,6 +1164,106 @@ exports.edilkappaAi = onCall({
     }, { merge: true });
     return { mode, visual };
   }
+  if (action === "retry_agent_job") {
+    const previousJobId = cleanText(request.data?.jobId, 120);
+    if (!previousJobId.startsWith("agent-")) throw new HttpsError("invalid-argument", "Identificativo del preventivo da riprovare non valido.");
+    const previousReference = aiAgentJobRef(account.uid, previousJobId);
+    let previousSnapshot = await previousReference.get();
+    if (!previousSnapshot.exists) throw new HttpsError("not-found", "Non trovo più questa elaborazione.");
+    let previousJob = previousSnapshot.data() || {};
+    if (previousJob.mode !== mode || conversationId(previousJob.conversationId) !== threadId) {
+      throw new HttpsError("permission-denied", "Questa elaborazione appartiene a un’altra conversazione.");
+    }
+    const existingRetryId = cleanText(previousJob.retriedBy, 120);
+    if (existingRetryId) {
+      return { jobId: existingRetryId, status: "working", stage: "agent", engine: "agents_sdk", agentName: QUOTE_AGENT_NAME, reusedAttachments: true };
+    }
+    if (agentJobTimeout(previousJob)) {
+      const expired = await expireStaleAgentJob(previousReference);
+      previousJob = expired.job || previousJob;
+    }
+    if (!canRetryAgentJob(previousJob)) {
+      throw new HttpsError("failed-precondition", "L’agente sta ancora lavorando. Attendi il completamento oppure il messaggio di interruzione.");
+    }
+    if (!retryInputAvailable(previousJob)) {
+      throw new HttpsError("failed-precondition", "Gli allegati preparati non sono più disponibili. Riapri le foto e avvia una nuova richiesta.");
+    }
+    if (Number(previousJob.retryCount || 0) >= 2) {
+      throw new HttpsError("resource-exhausted", "Sono già stati eseguiti due tentativi automatici. Avvia una nuova richiesta dalla chat.");
+    }
+
+    let input;
+    try {
+      input = await loadAgentInput(account.uid, previousJobId, previousJob.inputStoragePath);
+    } catch (_) {
+      throw new HttpsError("failed-precondition", "Gli allegati preparati non sono più disponibili. Riapri le foto e avvia una nuova richiesta.");
+    }
+    await useDailyAllowance(account.uid);
+    const nextJobId = `agent-${randomUUID()}`;
+    const storedInput = await saveAgentInput(account.uid, nextJobId, input);
+    const nextReference = aiAgentJobRef(account.uid, nextJobId);
+    let selectedJobId = nextJobId;
+    let created = false;
+    try {
+      await firestore.runTransaction(async (transaction) => {
+        previousSnapshot = await transaction.get(previousReference);
+        if (!previousSnapshot.exists) throw new HttpsError("not-found", "Non trovo più questa elaborazione.");
+        const currentJob = previousSnapshot.data() || {};
+        if (currentJob.mode !== mode || conversationId(currentJob.conversationId) !== threadId) {
+          throw new HttpsError("permission-denied", "Questa elaborazione appartiene a un’altra conversazione.");
+        }
+        if (currentJob.retriedBy) {
+          selectedJobId = cleanText(currentJob.retriedBy, 120);
+          return;
+        }
+        if (!canRetryAgentJob(currentJob)) {
+          throw new HttpsError("failed-precondition", "L’elaborazione non può ancora essere riprovata.");
+        }
+        transaction.create(nextReference, {
+          jobId: nextJobId,
+          uid: account.uid,
+          orgId: ORG_ID,
+          mode,
+          conversationId: threadId,
+          taskType: "quote",
+          engine: "agents_sdk",
+          agentName: QUOTE_AGENT_NAME,
+          approvalRequired: true,
+          status: "queued",
+          stage: "agent",
+          message: currentJob.message || "",
+          userText: currentJob.userText || currentJob.message || "Analizza gli allegati.",
+          mediaReferences: currentJob.mediaReferences || [],
+          inputStoragePath: storedInput.storagePath,
+          inputBytes: storedInput.bytes,
+          instructions: currentJob.instructions || "",
+          modelChoice: currentJob.modelChoice || {},
+          useWeb: currentJob.useWeb === true,
+          retryOf: previousJobId,
+          retryCount: Number(currentJob.retryCount || 0) + 1,
+          createdAtMs: Date.now(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        });
+        transaction.set(previousReference, {
+          retriedBy: nextJobId,
+          retriedAtMs: Date.now(),
+          retriedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        created = true;
+      });
+    } catch (error) {
+      await storageBucket.file(storedInput.storagePath).delete({ ignoreNotFound: true }).catch(() => {});
+      throw error;
+    }
+    if (!created) {
+      await storageBucket.file(storedInput.storagePath).delete({ ignoreNotFound: true }).catch(() => {});
+      return { jobId: selectedJobId, status: "working", stage: "agent", engine: "agents_sdk", agentName: QUOTE_AGENT_NAME, reusedAttachments: true };
+    }
+    await storageBucket.file(previousJob.inputStoragePath).delete({ ignoreNotFound: true }).catch(() => {});
+    return { jobId: nextJobId, status: "working", stage: "agent", engine: "agents_sdk", agentName: QUOTE_AGENT_NAME, reusedAttachments: true };
+  }
   if (action === "job_status") {
     const jobId = cleanText(request.data?.jobId, 120);
     if (!jobId) throw new HttpsError("invalid-argument", "Identificativo del lavoro AI mancante.");
@@ -1110,10 +1271,21 @@ exports.edilkappaAi = onCall({
     const jobReference = isAgentJob ? aiAgentJobRef(account.uid, jobId) : aiJobRef(account.uid, jobId);
     const jobSnapshot = await jobReference.get();
     if (!jobSnapshot.exists) throw new HttpsError("not-found", "Non trovo più questa elaborazione. Puoi avviarne una nuova.");
-    const job = jobSnapshot.data() || {};
+    let job = jobSnapshot.data() || {};
     if (job.mode !== mode || conversationId(job.conversationId) !== threadId) throw new HttpsError("permission-denied", "Questa elaborazione appartiene a un’altra conversazione.");
+    if (isAgentJob && agentJobTimeout(job)) {
+      const expired = await expireStaleAgentJob(jobReference);
+      job = expired.job || job;
+    }
     if (job.status === "completed") return { jobId, status: "completed", stage: "completed", result: job.result };
-    if (job.status === "failed") return { jobId, status: "failed", stage: job.stage || "failed", error: job.error || "La generazione non è riuscita.", canRetry: true };
+    if (job.status === "failed") return {
+      jobId,
+      status: "failed",
+      stage: job.stage || "failed",
+      error: job.error || "La generazione non è riuscita.",
+      canRetry: !isAgentJob || retryInputAvailable(job),
+      retryWithoutAttachments: isAgentJob && retryInputAvailable(job)
+    };
     if (Date.now() - Number(job.createdAtMs || 0) > AI_JOB_TTL_MS) {
       await jobReference.set({ status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return { jobId, status: "failed", stage: "expired", error: "La bozza è scaduta. Avvia nuovamente la generazione.", canRetry: true };

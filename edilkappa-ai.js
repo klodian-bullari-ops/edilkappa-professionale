@@ -10,6 +10,7 @@
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
   const MODEL_MODES = new Set(["auto", "sol", "terra"]);
   const PENDING_JOB_KEY = "edilkappa-ai-pending-job-v1";
+  const PENDING_JOB_UI_TIMEOUT_MS = 11 * 60 * 1000;
   const EDILKAPPA_DOCUMENT = Object.freeze({
     legalName: "EDILKAPPA S.A.S. DI BULLARI KLODIAN & C.",
     activity: "Lavori di completamento e finitura degli edifici",
@@ -79,6 +80,10 @@
       if (value?.jobId) globalThis.localStorage?.setItem(PENDING_JOB_KEY, JSON.stringify(value));
       else globalThis.localStorage?.removeItem(PENDING_JOB_KEY);
     } catch (_) {}
+  }
+
+  function pendingJobCanResume(job) {
+    return Boolean(job?.jobId && job.failed !== true && !["failed", "timeout", "expired"].includes(job.stage));
   }
 
   function stageLabel(stage) {
@@ -425,7 +430,7 @@
     const messages = currentMessages();
     if (!state.conversationsLoaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadConversations, 0);
     else if (!state.loaded[state.mode] && !state.loading && Date.now() >= state.nextHistoryAttempt) setTimeout(loadHistory, 0);
-    if (state.pendingJob?.jobId && state.pendingJob.mode === state.mode && state.pendingJob.conversationId === state.activeConversation[state.mode] && !state.sending) setTimeout(() => window.edilkappaAiResumePending?.(), 0);
+    if (pendingJobCanResume(state.pendingJob) && state.pendingJob.mode === state.mode && state.pendingJob.conversationId === state.activeConversation[state.mode] && !state.sending) setTimeout(() => window.edilkappaAiResumePending?.(), 0);
     const modeLabel = state.mode === "work" ? "Lavoro" : "Personale";
     return `<div class="ekAiPage">
       <section class="ekAiHero"><div><h2>EdilKappa AI</h2><p>L’Agente EdilKappa Preventivi applica il Metodo EdilKappa, compone prezzi e controlla la bozza. Relazioni, analisi e chat restano disponibili nello stesso spazio.</p></div><div class="ekAiHeroMark">✦</div></section>
@@ -434,7 +439,7 @@
       <div class="ekAiWorkspace">${threadsHtml()}<div class="ekAiMain"><div class="ekAiChat" id="ekAiChat">${state.loading && !messages.length ? `<div class="ekAiEmpty"><strong>Carico la chat ${modeLabel.toLowerCase()}…</strong></div>` : messages.length ? messages.map(messageHtml).join("") : `<div class="ekAiEmpty"><strong>${state.mode === "work" ? "Allega il sopralluogo e dimmi il risultato finale" : "Questa è la tua area personale"}</strong>${state.mode === "work" ? "Puoi scrivere normalmente come in ChatGPT. Per un risultato più preciso scegli Preventivo, Relazione o Analisi e allega tutto insieme." : "Le conversazioni personali restano separate da quelle aziendali."}</div>`}${state.sending ? `<div class="ekAiMessage assistant"><span class="ekAiTyping"><i></i><i></i><i></i></span></div>` : ""}</div>
       <div class="ekAiQuick">${quickPrompts().map((item, index) => `<button onclick="edilkappaAiUsePrompt(${index})">${escapeHtml(item.label)}</button>`).join("")}${state.mode === "work" ? `<button class="ekAiHoursButton" onclick="openOfficeHoursEntry()">⏱️ Registra ore operaio</button>` : ""}</div>
       ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}${progressStepsHtml(state.pendingJob?.stage || "archive")}</div>` : ""}
-      ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}${state.retryAvailable ? `<button class="ekAiRetry" onclick="edilkappaAiRetry()">Riprova</button>` : ""}</div>` : ""}
+      ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}${state.retryAvailable ? `<button class="ekAiRetry" onclick="edilkappaAiRetry()">${state.pendingJob?.retryWithoutAttachments === true ? "Riprova senza ricaricare le foto" : "Riprova"}</button>` : ""}</div>` : ""}
       <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files,this)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button><div class="ekAiUploadHelp">Fino a 8 file: puoi aggiungerli uno alla volta oppure, su Windows, selezionarne più di uno tenendo premuto Ctrl. Le foto iPhone HEIC vengono convertite automaticamente e inserite anche nel PDF.</div></div></div>
       <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Svuota questa chat</button></div></div></div>
     </div>`;
@@ -1674,6 +1679,10 @@
         return;
       }
       if (status.status === "failed") {
+        state.pendingJob.stage = status.stage || "failed";
+        state.pendingJob.failed = true;
+        state.pendingJob.retryWithoutAttachments = status.retryWithoutAttachments === true;
+        rememberPendingJob(state.pendingJob);
         state.error = status.error || "La generazione non è riuscita. La richiesta resta pronta per essere riprovata.";
         state.retryAvailable = status.canRetry === true;
         state.draft ||= pending.message || "";
@@ -1686,12 +1695,25 @@
       rememberPendingJob(state.pendingJob);
       state.progress = stageLabel(state.pendingJob.stage);
       rerender();
+      if (Number(pending.startedAt || 0) > 0 && Date.now() - Number(pending.startedAt) >= PENDING_JOB_UI_TIMEOUT_MS) {
+        state.pendingJob.stage = "timeout";
+        state.pendingJob.failed = true;
+        state.pendingJob.retryWithoutAttachments = pending.jobId.startsWith("agent-");
+        rememberPendingJob(state.pendingJob);
+        state.error = "L’elaborazione ha superato il tempo massimo. Premi Riprova: le foto sono già archiviate.";
+        state.retryAvailable = true;
+        state.draft ||= pending.message || "";
+        state.sending = false;
+        state.progress = "";
+        rerender();
+        return;
+      }
       await new Promise((resolve) => setTimeout(resolve, 3500));
     }
   }
 
   window.edilkappaAiResumePending = async () => {
-    if (state.sending || !state.pendingJob?.jobId || !window.EdilKappaCloud?.ready) return;
+    if (state.sending || !pendingJobCanResume(state.pendingJob) || !window.EdilKappaCloud?.ready) return;
     state.progress = stageLabel(state.pendingJob.stage || "analysis");
     state.error = "";
     rerender();
@@ -1706,7 +1728,42 @@
     }
   };
 
-  window.edilkappaAiRetry = () => {
+  window.edilkappaAiRetry = async () => {
+    const pending = state.pendingJob;
+    if (pending?.jobId?.startsWith("agent-") && window.EdilKappaCloud?.aiRequest) {
+      state.sending = true;
+      state.error = "";
+      state.retryAvailable = false;
+      state.progress = "Riprendo il preventivo usando le foto già archiviate…";
+      rerender();
+      try {
+        const result = await window.EdilKappaCloud.aiRequest({
+          action: "retry_agent_job",
+          mode: pending.mode,
+          conversationId: pending.conversationId,
+          jobId: pending.jobId
+        });
+        rememberPendingJob({
+          jobId: result.jobId,
+          mode: pending.mode,
+          conversationId: pending.conversationId,
+          stage: result.stage || "agent",
+          message: pending.message || state.draft,
+          startedAt: Date.now(),
+          retryWithoutAttachments: true
+        });
+        state.progress = stageLabel(state.pendingJob.stage);
+        rerender();
+        await pollPendingJob();
+      } catch (error) {
+        state.sending = false;
+        state.error = error?.message || "Non riesco a riavviare il preventivo. Riprova tra poco.";
+        state.retryAvailable = true;
+        state.progress = "";
+        rerender();
+      }
+      return;
+    }
     const message = state.pendingJob?.message || state.draft;
     rememberPendingJob(null);
     state.sending = false;

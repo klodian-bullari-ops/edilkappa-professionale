@@ -75,6 +75,10 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /automatic retry/);
   assert.match(functionSource, /quality repair/);
   assert.match(functionSource, /edilkappaQuoteAgentWorker/);
+  assert.match(functionSource, /recoverStaleQuoteAgentJobs/);
+  assert.match(functionSource, /action === "retry_agent_job"/);
+  assert.match(functionSource, /retryWithoutAttachments/);
+  assert.match(functionSource, /AGENT_RUN_TIMEOUT_MS\s*=\s*8 \* 60 \* 1000/);
   assert.match(functionSource, /engine:\s*"agents_sdk"/);
   assert.match(functionSource, /approvalRequired:\s*true/);
   assert.match(source, /Preventivo · Agente SDK/);
@@ -82,6 +86,9 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /auditArtifact/);
   assert.match(source, /edilkappa-ai-pending-job-v1/);
   assert.match(source, /edilkappaAiResumePending/);
+  assert.match(source, /PENDING_JOB_UI_TIMEOUT_MS\s*=\s*11 \* 60 \* 1000/);
+  assert.match(source, /pendingJobCanResume/);
+  assert.match(source, /Riprova senza ricaricare le foto/);
   assert.match(source, /1\/2 · Analisi tecnica/);
   assert.match(source, /2\/2 · Compongo prezzi/);
   assert.match(source, /edilkappaAiRetry/);
@@ -108,7 +115,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=16/);
+  assert.match(html, /edilkappa-ai\.js\?v=17/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
@@ -146,7 +153,7 @@ test("loads the central operations agents and keeps every action under confirmat
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
   assert.match(html, /operations-center\.js\?v=1/);
-  assert.match(serviceWorker, /v67-memoria-ai-responsive/);
+  assert.match(serviceWorker, /v68-ai-job-recovery/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
