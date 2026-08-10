@@ -125,7 +125,37 @@
   }
 
   function euro(value) {
-    return Number(value || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR" });
+    const number = Number(value || 0);
+    const safe = Number.isFinite(number) ? number : 0;
+    const sign = safe < 0 ? "-" : "";
+    const [integer, decimals] = Math.abs(safe).toFixed(2).split(".");
+    const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return `${sign}${grouped},${decimals} €`;
+  }
+
+  function formatEstimatedDuration(value) {
+    const duration = String(value || "")
+      .replace(/[\u2012\u2013\u2014\u2212]/g, "-")
+      .replace(/(\d)\s*-\s*(\d)/g, "$1-$2")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!duration) return "Da confermare: indica un numero o un intervallo, per esempio 8-12 giorni lavorativi.";
+    const limits = [
+      { pattern: /\b(\d{1,5})\s*(?:giorn\w*|gg)\b/gi, maximum: 365 },
+      { pattern: /\b(\d{1,4})\s*settiman\w*\b/gi, maximum: 104 },
+      { pattern: /\b(\d{1,4})\s*mes\w*\b/gi, maximum: 60 }
+    ];
+    const implausible = limits.some(({ pattern, maximum }) =>
+      [...duration.matchAll(pattern)].some((match) => Number(match[1]) > maximum)
+    );
+    return implausible
+      ? "Da confermare: il valore generato non è plausibile; indica un numero o un intervallo, per esempio 8-12 giorni lavorativi."
+      : duration;
+  }
+
+  function estimatedDurationNeedsConfirmation(value) {
+    const duration = formatEstimatedDuration(value);
+    return /da\s+(?:confermare|definire|verificare)|non\s+[èe]\s+plausibile/i.test(duration);
   }
 
   function humanFileSize(value) {
@@ -302,9 +332,22 @@
     const paymentTerms = String(quote.paymentTerms || "").trim();
     if (!paymentTerms || /da concordare|da confermare|da definire/i.test(paymentTerms)) issues.push("Mancano condizioni di pagamento definitive.");
     if (/50\s*%[^.\n]{0,40}(?:dell['’]?\s*)?imponibile/i.test(paymentTerms) && !/iva|totale\s+complessivo/i.test(paymentTerms)) issues.push("L’acconto del 50% non specifica quando viene corrisposta l’IVA.");
-    const duration = String(quote.estimatedDuration || "").trim();
-    const excessiveDays = [...duration.matchAll(/\b(\d{1,5})\s*(?:giorn\w*|gg)\b/gi)].some((match) => Number(match[1]) > 365);
-    if (!duration || /da\s+(?:confermare|definire|verificare)/i.test(duration) || excessiveDays) issues.push("La durata stimata è mancante, provvisoria o non plausibile.");
+    if (estimatedDurationNeedsConfirmation(quote.estimatedDuration)) issues.push("La durata stimata è mancante, provvisoria o non plausibile: indicare un valore come 8-12 giorni lavorativi.");
+    const completeText = [artifact.title, artifact.subject, artifact.recommendedSolution, ...(quote.lines || []).flatMap((line) => [line.description, line.notes]), ...(quote.includedWorks || []), ...(quote.exclusions || [])].filter(Boolean).join("\n");
+    const principalOptionText = [artifact.title, artifact.subject, artifact.recommendedSolution, recommended?.label, recommended?.title, recommended?.description].filter(Boolean).join("\n");
+    const existingKitchenTransfer = /(?:trasfer|spost|rimont|recuper)[^.\n]{0,120}cucina\s+esistente|cucina\s+esistente[^.\n]{0,120}(?:trasfer|spost|rimont|recuper)/i.test(completeText);
+    const newKitchenExcluded = (quote.exclusions || []).some((item) => /fornitura[^.\n]{0,100}nuova\s+cucina|nuova\s+cucina[^.\n]{0,100}(?:non\s+compres|esclus)/i.test(item));
+    if (/\bnuova\s+cucina\b/i.test(principalOptionText) && existingKitchenTransfer && newKitchenExcluded) {
+      issues.push("La soluzione è descritta come nuova cucina, ma le lavorazioni prevedono soltanto il trasferimento della cucina esistente.");
+    }
+    const scopeText = [...(quote.lines || []).map((line) => `${line.description || ""} ${line.notes || ""}`), ...(quote.includedWorks || [])].join("\n");
+    const genericUtilityClosure = /(?:dismission|scolleg|chiusur)[^.\n]{0,120}(?:utenze|punti?\s+tecnic)/i.test(scopeText);
+    const gasMentioned = /\bgas\b/i.test(completeText);
+    const explicitGasIncluded = /(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)[^.\n]{0,100}\bgas\b|\bgas\b[^.\n]{0,100}(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)/i.test(scopeText);
+    const explicitGasExcluded = (quote.exclusions || []).some((item) => /(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)[^.\n]{0,100}\bgas\b|\bgas\b[^.\n]{0,100}(?:dismission|scolleg|chiusur|messa\s+in\s+sicurezza)/i.test(item));
+    if (gasMentioned && genericUtilityClosure && !explicitGasIncluded && !explicitGasExcluded) {
+      issues.push("Specificare se la chiusura o messa in sicurezza del punto gas è compresa da impresa abilitata oppure esclusa.");
+    }
     if (Number(quote.vatRate || 0) === 0 && (quote.missingInformation || []).some((item) => /\biva\b|aliquota/i.test(item))) issues.push("L’aliquota IVA è ancora da confermare.");
     return { passed: issues.length === 0, issues: Array.from(new Set(issues)), artifact, subtotal, net, fullCost };
   }
@@ -347,7 +390,7 @@
     const options = (quote.options || []).map((option) => `<div class="ekAiOption ${option.recommended ? "recommended" : ""}"><div class="ekAiOptionHead"><b>${escapeHtml(option.label ? `${option.label} · ${option.title}` : option.title)}</b><b>${euro(option.total)} + IVA</b></div>${option.description ? `<div>${escapeHtml(option.description)}</div>` : ""}${scenarioIncludedWorks(option.includedWorks) ? `<small>Comprende: ${escapeHtml(scenarioIncludedWorks(option.includedWorks))}.</small>` : ""}${option.notes ? `<br><small>${escapeHtml(option.notes)}</small>` : ""}</div>`).join("");
     return `${artifact.revisionReason ? `<div class="ekAiArtifactNotice"><b>Revisione:</b> ${escapeHtml(artifact.revisionReason)}</div>` : ""}${artifactMethodHtml(artifact)}${artifactList("Valutazione tecnica", artifact.technicalAssessment)}${artifactList("Fasi operative", artifact.workPhases)}${artifactList("Materiali previsti", artifact.materials)}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th><th>Origine</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit)}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td><td>${priceSourceHtml(line)}<br><small>Affidabilità ${escapeHtml(line.confidence || "bassa")}</small></td></tr>`).join("") || `<tr><td colspan="6">Le voci devono ancora essere definite.</td></tr>`}</tbody></table></div>
       <div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b>${discount > 0.005 ? `<span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b>` : ""}<span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>
-      ${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata stimata</h4><div>${escapeHtml(quote.estimatedDuration)}</div></div>` : ""}${artifactList("Opere comprese", quote.includedWorks)}${artifactList("Esclusioni", quote.exclusions)}${options ? `<div class="ekAiArtifactSection"><h4>Alternative e scenari</h4>${options}</div>` : ""}${pricingAnalysisHtml(artifact)}${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
+      ${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata stimata</h4><div>${escapeHtml(formatEstimatedDuration(quote.estimatedDuration))}</div></div>` : ""}${artifactList("Opere comprese", quote.includedWorks)}${artifactList("Esclusioni", quote.exclusions)}${options ? `<div class="ekAiArtifactSection"><h4>Alternative e scenari</h4>${options}</div>` : ""}${pricingAnalysisHtml(artifact)}${artifactList("Ipotesi usate", quote.assumptions)}${artifactList("Informazioni da confermare", quote.missingInformation)}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4><div>${escapeHtml(quote.notes)}</div></div>` : ""}`;
   }
 
   function reportArtifactHtml(artifact) {
@@ -362,7 +405,7 @@
     const discount = subtotal * Number(quote.discountPct || 0) / 100;
     const net = subtotal - discount;
     const vat = net * Number(quote.vatRate || 0) / 100;
-    return `<div class="ekAiQuotePreview"><div class="ekAiQuoteBrand"><div><h3>EDILKAPPA</h3><small>Anteprima preventivo</small></div><div style="text-align:right"><b>BOZZA</b><small>Da controllare e confermare</small></div></div><h3>${escapeHtml(artifact.subject || artifact.title || "Preventivo")}</h3>${artifact.client ? `<p><b>Cliente:</b> ${escapeHtml(artifact.client)}</p>` : ""}${artifact.summary ? `<div class="ekAiQuoteIntro">${escapeHtml(artifact.summary)}</div>` : ""}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit || "a corpo")}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td></tr>`).join("") || '<tr><td colspan="5">Le voci devono ancora essere definite.</td></tr>'}</tbody></table></div><div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b>${discount > 0.005 ? `<span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b>` : ""}<span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata prevista</h4>${escapeHtml(quote.estimatedDuration)}</div>` : ""}${quote.paymentTerms ? `<div class="ekAiArtifactSection"><h4>Condizioni di pagamento</h4>${escapeHtml(quote.paymentTerms)}</div>` : ""}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4>${escapeHtml(quote.notes)}</div>` : ""}</div>`;
+    return `<div class="ekAiQuotePreview"><div class="ekAiQuoteBrand"><div><h3>EDILKAPPA</h3><small>Anteprima preventivo</small></div><div style="text-align:right"><b>BOZZA</b><small>Da controllare e confermare</small></div></div><h3>${escapeHtml(artifact.subject || artifact.title || "Preventivo")}</h3>${artifact.client ? `<p><b>Cliente:</b> ${escapeHtml(artifact.client)}</p>` : ""}${artifact.summary ? `<div class="ekAiQuoteIntro">${escapeHtml(artifact.summary)}</div>` : ""}<div class="ekAiTableWrap"><table class="ekAiArtifactTable"><thead><tr><th>Lavorazione</th><th>Q.tà</th><th>Unità</th><th class="right">Prezzo</th><th class="right">Totale</th></tr></thead><tbody>${lines.map((line) => `<tr><td><b>${escapeHtml(line.description)}</b>${line.notes ? `<br><small>${escapeHtml(line.notes)}</small>` : ""}</td><td>${Number(line.quantity || 0).toLocaleString("it-IT")}</td><td>${escapeHtml(line.unit || "a corpo")}</td><td class="right">${euro(line.unitPrice)}</td><td class="right">${euro(Number(line.quantity || 0) * Number(line.unitPrice || 0))}</td></tr>`).join("") || '<tr><td colspan="5">Le voci devono ancora essere definite.</td></tr>'}</tbody></table></div><div class="ekAiArtifactTotals"><span>Subtotale</span><b>${euro(subtotal)}</b>${discount > 0.005 ? `<span>Sconto ${Number(quote.discountPct || 0)}%</span><b>− ${euro(discount)}</b>` : ""}<span>Imponibile</span><b>${euro(net)}</b><span>IVA ${Number(quote.vatRate || 0)}%</span><b>${euro(vat)}</b><span>Totale</span><b>${euro(net + vat)}</b></div>${quote.estimatedDuration ? `<div class="ekAiArtifactSection"><h4>Durata prevista</h4>${escapeHtml(formatEstimatedDuration(quote.estimatedDuration))}</div>` : ""}${quote.paymentTerms ? `<div class="ekAiArtifactSection"><h4>Condizioni di pagamento</h4>${escapeHtml(quote.paymentTerms)}</div>` : ""}${quote.notes ? `<div class="ekAiArtifactSection"><h4>Note</h4>${escapeHtml(quote.notes)}</div>` : ""}</div>`;
   }
 
   function quoteTechnicalDetailsHtml(artifact) {
@@ -373,22 +416,30 @@
   function quoteMissingQuestion(value) {
     const text = String(value || "").replace(/\s+/g, " ").replace(/[\s.;:]+$/g, "").trim();
     if (!text) return "";
-    if (text.endsWith("?")) return text;
     const normalized = text.toLocaleLowerCase("it");
-    if (/\biva\b|aliquota/.test(normalized)) return "Quale aliquota IVA definitiva devo applicare (10%, 22%, reverse charge o altra)?";
+    if (/\biva\b|aliquota/.test(normalized)) return "Quale aliquota IVA definitiva devo applicare: 10%, 22%, reverse charge oppure un'altra aliquota?";
     if (/indirizz|ubicazione/.test(normalized)) return "Qual è l’indirizzo completo del cantiere o dell’intervento?";
     if (/pagament|acconto|saldo/.test(normalized)) return "Quali condizioni di pagamento devo indicare, compreso il momento in cui viene corrisposta l’IVA?";
-    if (/gas|induzion/.test(normalized)) return "La nuova cucina userà il gas oppure un piano a induzione?";
-    if (/potenza\s+elettric|quadro\s+elettric/.test(normalized)) return "È stata verificata la potenza elettrica disponibile e l’adeguatezza del quadro per la nuova cucina?";
-    if (/scaric|adduzion|idr|percorso|pendenza|colonna/.test(normalized)) return "Sono stati verificati percorso, distanza, pendenza e punto di collegamento di acqua e scarico? Se no, devo indicarli come verifica da fare in sopralluogo?";
-    if (/misur|dimension|planimetr|lunghezz|superfic|quantit/.test(normalized)) return `Quali misure o quantità sono disponibili per questo punto: “${text}”? Se non le hai, confermi una stima a corpo da verificare in sopralluogo?`;
-    if (/configuraz|finitur|tinteggiatur|paviment|paret|sala/.test(normalized)) return `Quale soluzione definitiva devo considerare per questo punto: “${text}”?`;
-    if (/durata|tempistica|giorn/.test(normalized)) return "Qual è la durata indicativa che vuoi riportare nel preventivo?";
+    if (/apparecchio\s+murale|caldaia|scaldabagno|boiler/.test(normalized)) return "Che apparecchio è quello installato a parete? Puoi inviare una foto ravvicinata dell’etichetta e indicare se deve restare, essere protetto, spostato oppure rimosso?";
+    if (/potenza\s+elettric|quadro\s+elettric/.test(normalized)) return "Qual è la potenza elettrica disponibile in kW e puoi inviare una fotografia leggibile del quadro elettrico?";
+    if (/scaric|adduzion|idr|percorso|pendenza|colonna/.test(normalized)) return "Qual è la distanza tra il punto acqua/scarico esistente e la nuova parete cucina, quale percorso è possibile e a quale quota si trova lo scarico? Se non puoi rilevarlo, autorizzi la verifica in sopralluogo e una stima a corpo provvisoria?";
+    if (/gas|induzion/.test(normalized)) return "La nuova posizione della cucina userà il gas oppure un piano a induzione? Se il gas esistente va chiuso, la chiusura deve essere compresa oppure esclusa?";
+    if ((/sala/.test(normalized) && /paret|misur|riliev|dimension/.test(normalized)) || /parete\s+destinata/.test(normalized)) return "Quali sono lunghezza, larghezza e altezza della sala e quanto misura, da spigolo a spigolo, la parete destinata alla cucina? Indica anche posizione e larghezza di porte, finestre e termosifoni; se non hai le misure, autorizzi una stima a corpo da verificare in sopralluogo?";
+    if (/cucina\s+esistente|mobili|moduli|top|cappa|elettrodomestic/.test(normalized) && /misur|dimension|recuper|stato|compatibil/.test(normalized)) return "Quali sono la lunghezza totale, l’altezza e la profondità della cucina esistente e le misure dei singoli moduli, del top, della cappa e degli elettrodomestici da recuperare?";
+    if (/finitur|tinteggiatur|pittur|rasatur|rivestiment|paviment|soffitto/.test(normalized)) return "Nell’ex cucina vuoi ripristinare soltanto le zone interessate dai lavori oppure tinteggiare completamente pareti e soffitto? Quali eventuali pavimenti o rivestimenti devono essere rimossi o mantenuti?";
+    if (/misur|dimension|planimetr|lunghezz|superfic|quantit/.test(normalized)) return `Quale misura o quantità esatta manca per questo punto: “${text}”? Se non è disponibile, autorizzi una stima a corpo da verificare in sopralluogo?`;
+    if (/configuraz|paret|sala/.test(normalized)) return `Quale configurazione definitiva devo considerare per questo punto: “${text}”?`;
+    if (/durata|tempistica|giorn|valore\s+generato\s+non\s+[èe]\s+plausibile/.test(normalized)) return "Quale durata indicativa devo riportare, espressa come numero o intervallo di giorni lavorativi, per esempio 8-12 giorni?";
+    if (text.endsWith("?")) return text;
     return `Puoi confermare questo dato: “${text}”?`;
   }
 
   function quoteMissingQuestions(artifact) {
-    return Array.from(new Set(customerFacingValues(artifact?.quote?.missingInformation).map(quoteMissingQuestion).filter(Boolean)));
+    const values = [...customerFacingValues(artifact?.quote?.missingInformation)];
+    if (estimatedDurationNeedsConfirmation(artifact?.quote?.estimatedDuration)) {
+      values.push("Durata stimata da confermare");
+    }
+    return Array.from(new Set(values.map(quoteMissingQuestion).filter(Boolean)));
   }
 
   function quoteMissingQuestionsHtml(artifact) {
@@ -911,7 +962,7 @@
     if (artifact.technicalAssessment?.length) blocks.push(`Valutazione tecnica:\n- ${artifact.technicalAssessment.join("\n- ")}`);
     if (artifact.workPhases?.length) blocks.push(`Fasi operative:\n- ${artifact.workPhases.join("\n- ")}`);
     if (artifact.materials?.length) blocks.push(`Materiali previsti:\n- ${artifact.materials.join("\n- ")}`);
-    if (quote.estimatedDuration) blocks.push(`Durata stimata: ${quote.estimatedDuration}`);
+    if (quote.estimatedDuration) blocks.push(`Durata stimata: ${formatEstimatedDuration(quote.estimatedDuration)}`);
     if (quote.includedWorks?.length) blocks.push(`Opere comprese:\n- ${quote.includedWorks.join("\n- ")}`);
     if (quote.exclusions?.length) blocks.push(`Esclusioni:\n- ${quote.exclusions.join("\n- ")}`);
     if (quote.options?.length) blocks.push(`Alternative/scenari:\n${quote.options.map((option) => `- ${option.label ? `${option.label} · ` : ""}${option.title}: ${euro(option.total)} + IVA${option.recommended ? " (raccomandata)" : ""}${option.notes ? ` · ${option.notes}` : ""}`).join("\n")}`);
@@ -1196,6 +1247,11 @@
     return rows.length ? pdfTextSection(doc, context, title, rows.map((value) => `- ${value}`).join("\n"), y) : y;
   }
 
+  function pdfNumberedListSection(doc, context, title, values, y) {
+    const rows = customerFacingValues(values);
+    return rows.length ? pdfTextSection(doc, context, title, rows.map((value, index) => `${index + 1}. ${value}`).join("\n"), y) : y;
+  }
+
   function runDocumentTable(doc, context, options) {
     if (typeof doc.autoTable !== "function") throw new Error("Il modulo tabelle PDF non è disponibile. Ricarica la pagina e riprova.");
     doc.autoTable({
@@ -1232,9 +1288,30 @@
     return y + 7;
   }
 
+  function photoCaptionForPreview(artifact, preview, index) {
+    if (preview?.generated) {
+      return { caption: String(preview.title || "Visualizzazione illustrativa generata da EdilKappa AI"), assessment: "" };
+    }
+    const sourceValues = [preview?.sourceName, preview?.fileName, preview?.name]
+      .map((value) => String(value || "").split("/").pop().replace(/\.(heic|heif|jpe?g|png|webp|gif)$/i, "").toLocaleLowerCase("it"))
+      .filter((value) => value.length >= 5);
+    const numberedReference = new RegExp(`\\b(?:foto|fotografia|immagine)\\s*${index + 1}(?!\\d)`, "i");
+    const findings = Array.isArray(artifact?.report?.evidenceFindings) ? artifact.report.evidenceFindings : [];
+    const finding = findings.find((item) => {
+      const reference = String(item?.reference || "").toLocaleLowerCase("it");
+      const observation = String(item?.observation || "").trim();
+      const assessment = String(item?.assessment || "").trim();
+      const matchesReference = numberedReference.test(reference) || sourceValues.some((token) => reference.includes(token));
+      const nonVisual = /dichiarazione\s+del\s+cliente|pagament|acconto|saldo|\biva\b|aliquota|condizioni\s+commerciali|cliente\s+(?:chiede|dichiara|riferisce)|misur\w*\s+dichiar|durata|tempistic|prezz|importo|totale\s+complessivo/i.test(`${observation}\n${assessment}`);
+      return matchesReference && observation && !nonVisual;
+    });
+    return finding
+      ? { caption: String(finding.observation).slice(0, 260), assessment: String(finding.assessment || "").slice(0, 220) }
+      : { caption: "Stato dei luoghi documentato nella fotografia.", assessment: "" };
+  }
+
   function addPhotoAppendix(doc, context, previews, artifact) {
     const usable = (previews || []).filter((item) => /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl) && !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
-    const findings = artifact.report?.evidenceFindings || [];
     for (let offset = 0; offset < usable.length; offset += 2) {
       newDocumentPage(doc, context);
       doc.setFont(EDILKAPPA_PDF_FONT, "bold");
@@ -1255,15 +1332,16 @@
           doc.setFontSize(8.5);
           doc.text("Anteprima non inseribile; l’originale resta nell’archivio EdilKappa.", 14, top + 8);
         }
-        const finding = findings[index];
-        const caption = finding?.observation || artifact.evidence?.[index] || preview.sourceName || preview.name || `Immagine ${index + 1}`;
+        const photoCaption = photoCaptionForPreview(artifact, preview, index);
         doc.setFont(EDILKAPPA_PDF_FONT, "bold");
         doc.setFontSize(8.2);
-        doc.text(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${String(caption)}`, 14, top + 88, { maxWidth: 180 });
-        if (finding?.assessment) {
+        const captionLines = doc.splitTextToSize(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${photoCaption.caption}`, 180).slice(0, 2);
+        doc.text(captionLines, 14, top + 88);
+        if (photoCaption.assessment) {
           doc.setFont(EDILKAPPA_PDF_FONT, "normal");
           doc.setFontSize(7.6);
-          doc.text(finding.assessment, 14, top + 94, { maxWidth: 180 });
+          const assessmentLines = doc.splitTextToSize(photoCaption.assessment, 180).slice(0, 2);
+          doc.text(assessmentLines, 14, top + 89.5 + captionLines.length * 3.5);
         }
       });
     }
@@ -1359,13 +1437,13 @@
           }
         }
       }) + 7;
-      y = pdfTextSection(doc, context, "Durata stimata", quote.estimatedDuration, y);
-      y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
-      y = pdfListSection(doc, context, "Fasi operative", artifact.workPhases, y);
-      y = pdfListSection(doc, context, "Materiali previsti", artifact.materials, y);
-      y = pdfListSection(doc, context, "Opere comprese", quote.includedWorks, y);
-      y = pdfListSection(doc, context, "Esclusioni", quote.exclusions, y);
-      if ((quote.options || []).length) {
+      y = pdfTextSection(doc, context, "Durata stimata", formatEstimatedDuration(quote.estimatedDuration), y);
+      y = pdfListSection(doc, context, draft ? "Valutazione tecnica essenziale" : "Valutazione tecnica", draft ? (artifact.technicalAssessment || []).slice(0, 4) : artifact.technicalAssessment, y);
+      y = pdfListSection(doc, context, "Fasi operative", draft ? (artifact.workPhases || []).slice(0, 6) : artifact.workPhases, y);
+      if (!draft) y = pdfListSection(doc, context, "Materiali previsti", artifact.materials, y);
+      y = pdfListSection(doc, context, draft ? "Opere comprese principali" : "Opere comprese", draft ? (quote.includedWorks || []).slice(0, 8) : quote.includedWorks, y);
+      y = pdfListSection(doc, context, draft ? "Esclusioni principali" : "Esclusioni", draft ? (quote.exclusions || []).slice(0, 10) : quote.exclusions, y);
+      if ((quote.options || []).length > 1) {
         y = ensureDocumentSpace(doc, context, y, 30);
         y = runDocumentTable(doc, context, {
           startY: y,
@@ -1378,8 +1456,8 @@
           columnStyles: { 0: { cellWidth: 52, fontStyle: "bold" }, 1: { cellWidth: 98 }, 2: { cellWidth: 32, halign: "right", fontStyle: "bold" } }
         }) + 6;
       }
-      y = pdfListSection(doc, context, "Ipotesi di calcolo", quote.assumptions, y);
-      y = pdfListSection(doc, context, "Dati da confermare", quote.missingInformation, y);
+      y = pdfListSection(doc, context, draft ? "Ipotesi provvisorie" : "Ipotesi di calcolo", draft ? (quote.assumptions || []).slice(0, 6) : quote.assumptions, y);
+      y = pdfNumberedListSection(doc, context, "Dati da confermare", quoteMissingQuestions(artifact), y);
       y = pdfTextSection(doc, context, "Condizioni e note", [quote.paymentTerms ? `Pagamento: ${quote.paymentTerms}` : "", quote.notes].filter(Boolean).join("\n"), y);
     } else {
       y = pdfTextSection(doc, context, "Motivazione tecnica", artifact.decisionRationale, y);
@@ -1405,10 +1483,10 @@
       y = pdfListSection(doc, context, "Informazioni da confermare", report.missingInformation, y);
     }
     const signatureY = y + 3;
-    const deferredSignature = signatureY + 26 > 274;
-    if (!deferredSignature) pdfSignatureBlock(doc, context, signatureY);
+    const deferredSignature = !draft && signatureY + 26 > 274;
+    if (!draft && !deferredSignature) pdfSignatureBlock(doc, context, signatureY);
     const appendix = addPhotoAppendix(doc, context, previews, artifact);
-    if (deferredSignature) {
+    if (!draft && deferredSignature) {
       pdfSignatureBlock(doc, context, appendix.signatureY || signatureY);
     }
     const pages = doc.getNumberOfPages();
@@ -1588,7 +1666,7 @@
     const evidenceRows = (report.evidenceFindings || []).map((item) => `<tr><td><b>${escapeHtml(item.reference)}</b></td><td>${escapeHtml(item.observation)}</td><td>${escapeHtml(item.assessment)}</td><td>${escapeHtml(item.verificationNeeded)}</td></tr>`).join("");
     const common = `${artifact.recommendedSolution ? `<h2>Soluzione raccomandata</h2><p>${escapeHtml(artifact.recommendedSolution)}</p>` : ""}${artifact.decisionRationale ? `<h2>Motivazione tecnica</h2><p>${escapeHtml(artifact.decisionRationale)}</p>` : ""}${wordList("Valutazione tecnica", artifact.technicalAssessment)}${wordList("Fasi operative", artifact.workPhases)}${wordList("Materiali previsti", artifact.materials)}`;
     const body = artifact.kind === "quote"
-      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>N.</th><th>Lavorazione</th><th>Q.tà</th><th>U.M.</th><th>Prezzo unit.</th><th>Importo</th></tr></thead><tbody>${quoteRows}</tbody></table><table class="totals"><tbody><tr><td>Subtotale</td><td>${escapeHtml(euro(quoteSubtotal))}</td></tr><tr><td>Imponibile</td><td>${escapeHtml(euro(quoteNet))}</td></tr><tr><td>IVA ${escapeHtml(quote.vatRate || 0)}%</td><td>${escapeHtml(euro(quoteVat))}</td></tr><tr class="grand"><td>TOTALE COMPLESSIVO</td><td>${escapeHtml(euro(quoteNet + quoteVat))}</td></tr></tbody></table>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(quote.estimatedDuration)}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi di calcolo", quote.assumptions)}${quote.notes || quote.paymentTerms ? `<h2>Note e condizioni</h2><p>${quote.paymentTerms ? `<b>Pagamento:</b> ${escapeHtml(quote.paymentTerms)}<br>` : ""}${escapeHtml(quote.notes || "")}</p>` : ""}`
+      ? `<h2>Sintesi</h2><p>${escapeHtml(artifact.summary || "")}</p>${common}<h2>Quadro economico</h2><table><thead><tr><th>N.</th><th>Lavorazione</th><th>Q.tà</th><th>U.M.</th><th>Prezzo unit.</th><th>Importo</th></tr></thead><tbody>${quoteRows}</tbody></table><table class="totals"><tbody><tr><td>Subtotale</td><td>${escapeHtml(euro(quoteSubtotal))}</td></tr><tr><td>Imponibile</td><td>${escapeHtml(euro(quoteNet))}</td></tr><tr><td>IVA ${escapeHtml(quote.vatRate || 0)}%</td><td>${escapeHtml(euro(quoteVat))}</td></tr><tr class="grand"><td>TOTALE COMPLESSIVO</td><td>${escapeHtml(euro(quoteNet + quoteVat))}</td></tr></tbody></table>${quote.estimatedDuration ? `<h2>Durata stimata</h2><p>${escapeHtml(formatEstimatedDuration(quote.estimatedDuration))}</p>` : ""}${wordList("Opere comprese", quote.includedWorks)}${wordList("Esclusioni", quote.exclusions)}${options}${wordList("Ipotesi di calcolo", quote.assumptions)}${quote.notes || quote.paymentTerms ? `<h2>Note e condizioni</h2><p>${quote.paymentTerms ? `<b>Pagamento:</b> ${escapeHtml(quote.paymentTerms)}<br>` : ""}${escapeHtml(quote.notes || "")}</p>` : ""}`
       : `<h2>Sintesi</h2><p>${escapeHtml(report.executiveSummary || artifact.summary || "")}</p>${common}${wordList("Osservazioni", report.observations)}${wordList("Cause probabili", report.probableCauses)}${evidenceRows ? `<h2>Riscontro tra prove e valutazione</h2><table><thead><tr><th>Riferimento</th><th>Osservazione</th><th>Valutazione</th><th>Verifica</th></tr></thead><tbody>${evidenceRows}</tbody></table>` : ""}${wordList("Verifiche consigliate", report.recommendedVerifications)}${wordList("Interventi consigliati", report.recommendedWorks)}${wordList("Sicurezza", report.safetyNotes)}${wordList("Limiti dell’analisi", report.limitations)}<h2>Conclusioni</h2><p>${escapeHtml(report.conclusions || "")}</p>${wordList("Informazioni da confermare", report.missingInformation)}`;
     const documentLabel = documentTypeLabel(artifact);
     const metaRows = [["Destinatario", artifact.client || "Da assegnare"], ["Ubicazione intervento", artifact.address || "Da confermare"], ["Oggetto", artifact.subject || artifact.title || documentLabel], ["Data emissione", new Date().toLocaleDateString("it-IT")], ...(artifact.kind === "quote" ? [["IVA applicata", `${Number(quote.vatRate || 0)}%`], ["Validità", `${Number(quote.validityDays || 30)} giorni`]] : [["Priorità", report.interventionPriority || "Da definire"]])];
@@ -2236,8 +2314,11 @@
     window.EdilKappaAiTest = {
       artifactPdfBlob,
       customerFacingValues,
+      euro,
+      formatEstimatedDuration,
       pdfTextSection,
       pdfPreviewFromCloud,
+      photoCaptionForPreview,
       quoteMissingQuestions,
       quoteMessageReleaseCheck,
       runDocumentTable,
