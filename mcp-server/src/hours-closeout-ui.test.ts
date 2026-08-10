@@ -22,8 +22,8 @@ type AppContext = Record<string, any> & {
 
 function appContext(): AppContext {
   const staff = [
-    { id: 'worker-1', name: 'Ajet', team: 'team-1', reminderTime: '18:00' },
-    { id: 'worker-2', name: 'Ciccio', team: 'team-1', reminderTime: '18:00' }
+    { id: 'worker-1', name: 'Operaio Uno', team: 'team-1', reminderTime: '18:00' },
+    { id: 'worker-2', name: 'Operaio Due', team: 'team-1', reminderTime: '18:00' }
   ];
   const db = {
     sites: [], timesheets: [], roofs: [], drains: [], teams: [{ id: 'team-1', name: 'Squadra A' }], staff
@@ -77,7 +77,7 @@ function appContext(): AppContext {
     filteredIndividualHours: () => db.timesheets,
     teamJobOptions: () => '<option>Magazzino</option>',
     isOffice: () => false,
-    roleName: () => 'Ajet',
+    roleName: () => 'Operaio Uno',
     pageHead: () => '',
     field: () => '',
     badge: () => '',
@@ -108,7 +108,7 @@ function appContext(): AppContext {
 }
 
 test('il modulo ore è caricato dall’app e dalla cache offline', () => {
-  assert.match(indexHtml, /hours-closeout\.js\?v=2/);
+  assert.match(indexHtml, /hours-closeout\.js\?v=3/);
   assert.match(serviceWorker, /hours-closeout\.js/);
   assert.match(source, /L’avviso rimane finché non inserisci le tue ore/);
   assert.match(source, /Ore mancanti sui cantieri conclusi/);
@@ -141,19 +141,19 @@ test('un cantiere concluso resta solo all’operaio con ore mancanti', () => {
     status: 'Completato',
     teamIds: ['team-1'],
     hoursCloseoutDate: '2026-08-06',
-    hoursCloseoutWorkers: [{ id: 'worker-1', name: 'Ajet', team: 'team-1' }]
+    hoursCloseoutWorkers: [{ id: 'worker-1', name: 'Operaio Uno', team: 'team-1' }]
   };
   app.db.sites.push(site);
 
   assert.equal(app.EdilKappaHours?.workerCanSeeSite(site, app.STAFF[0]), true);
-  assert.deepEqual(JSON.parse(JSON.stringify(app.EdilKappaHours?.missingPeopleForSite(site).map((person: any) => person.name))), ['Ajet', 'Ciccio']);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.EdilKappaHours?.missingPeopleForSite(site).map((person: any) => person.name))), ['Operaio Uno', 'Operaio Due']);
   app.openCloseoutHours('site-1');
   app.lastModal.onSave({ get: (name: string) => ({ hours: '9', notes: 'Chiusura completata' })[name] || '' });
   assert.equal(app.db.timesheets[0].ordinaryHours, 8);
   assert.equal(app.db.timesheets[0].overtimeHours, 1);
   assert.equal(app.EdilKappaHours?.workerCanSeeSite(site, app.STAFF[0]), false);
   assert.equal(app.EdilKappaHours?.workerCanSeeSite(site, app.STAFF[1]), true);
-  assert.deepEqual(JSON.parse(JSON.stringify(app.EdilKappaHours?.missingPeopleForSite(site).map((person: any) => person.name))), ['Ciccio']);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.EdilKappaHours?.missingPeopleForSite(site).map((person: any) => person.name))), ['Operaio Due']);
 });
 
 test('alla chiusura fotografa gli operai assegnati e conserva la data del rapportino', () => {
@@ -167,7 +167,7 @@ test('alla chiusura fotografa gli operai assegnati e conserva la data del rappor
 
   assert.equal(site.hoursCloseoutDate, '2026-08-05');
   assert.equal(site.hoursCloseoutWorkers.length, 2);
-  assert.deepEqual(JSON.parse(JSON.stringify(site.hoursCloseoutWorkers.map((person: any) => person.name))), ['Ajet', 'Ciccio']);
+  assert.deepEqual(JSON.parse(JSON.stringify(site.hoursCloseoutWorkers.map((person: any) => person.name))), ['Operaio Uno', 'Operaio Due']);
 });
 
 test('ricerca e selettore cantieri rispettano la visibilità personale', () => {

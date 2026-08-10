@@ -530,7 +530,11 @@
       }));
     const validatedStatuses = new Set(["Accettato", "Approvato", "Completato", "Fatturato"]);
     const validatedQuotes = (database.quotes || [])
-      .filter((item) => validatedStatuses.has(item.status))
+      .filter((item) => {
+        const learningState = String(item.learningStatus || "");
+        if (["Da controllare", "Da riconfermare"].includes(learningState)) return false;
+        return learningState.startsWith("Verificato") || validatedStatuses.has(item.status);
+      })
       .map((item, index) => ({ item, index, score: quoteRelevance(item, requestTokens) }))
       .sort((a, b) => b.score - a.score || b.index - a.index)
       .slice(0, 6)

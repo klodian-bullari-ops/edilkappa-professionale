@@ -13,6 +13,7 @@ type LifecycleContext = {
 };
 
 function loadLifecycleModule() {
+  // Fixture interamente fittizia: etichette volutamente non riconducibili a persone o cantieri reali.
   const archiveOpenings: Array<{ clientId: string; focus: Record<string, string> }> = [];
   let saveCount = 0;
   let sequence = 0;
@@ -26,23 +27,23 @@ function loadLifecycleModule() {
     addEventListener: () => undefined,
     db: {
       leads: [
-        { id: 'danea-1', source: 'Danea Domustudio', client: 'Condominio Alfa', address: 'Via Alfa 1', request: 'Perdita dalla copertura', status: 'Nuovo', daneaStatus: 'Nuovo', receivedAt: '2026-08-04T08:00:00.000Z' },
-        { id: 'lead-1', source: 'Modulo sito', name: 'Cliente Beta', address: 'Via Beta 2', description: 'Ripristino intonaco', status: 'Nuova', createdAt: '2026-08-04T09:00:00.000Z' }
+        { id: 'danea-1', source: 'Danea Test', client: 'CLIENTE_FITTIZIO_A', address: 'INDIRIZZO_FITTIZIO_A', request: 'LAVORO_FITTIZIO_A', status: 'Nuovo', daneaStatus: 'Nuovo', receivedAt: '2026-08-04T08:00:00.000Z' },
+        { id: 'lead-1', source: 'Modulo test', name: 'CLIENTE_FITTIZIO_B', address: 'INDIRIZZO_FITTIZIO_B', description: 'LAVORO_FITTIZIO_B', status: 'Nuova', createdAt: '2026-08-04T09:00:00.000Z' }
       ],
       condomini: [],
       interventions: [],
       inspections: [],
-      sites: [{ id: 'site-danea', daneaRequestId: 'danea-1', title: 'Perdita dalla copertura', client: 'Condominio Alfa', address: 'Via Alfa 1', worker: 'team-1', start: '2026-08-04', status: 'In corso', progress: 10 }],
+      sites: [{ id: 'site-danea', daneaRequestId: 'danea-1', title: 'LAVORO_FITTIZIO_A', client: 'CLIENTE_FITTIZIO_A', address: 'INDIRIZZO_FITTIZIO_A', worker: 'team-1', start: '2026-08-04', status: 'In corso', progress: 10 }],
       reports: [],
-      timesheets: [{ id: 'hours-danea', date: '2026-08-04', worker: 'worker-1', workerName: 'Ajet', team: 'team-1', teamName: 'Squadra A', job: 'Perdita dalla copertura · Condominio Alfa', hours: 7.5 }],
+      timesheets: [{ id: 'hours-danea', date: '2026-08-04', worker: 'worker-1', workerName: 'Operaio Test', team: 'team-1', teamName: 'Squadra Test', job: 'LAVORO_FITTIZIO_A · CLIENTE_FITTIZIO_A', hours: 7.5 }],
       quotes: [],
       documents: [],
       drone: [],
       roofs: [],
       drains: [],
-      teams: [{ id: 'team-1', name: 'Squadra A' }]
+      teams: [{ id: 'team-1', name: 'Squadra Test' }]
     },
-    WORKERS: [{ id: 'team-1', name: 'Squadra A' }],
+    WORKERS: [{ id: 'team-1', name: 'Squadra Test' }],
     save: () => { saveCount += 1; },
     render: () => undefined,
     isOffice: () => true,
@@ -97,6 +98,6 @@ test('il ciclo intervento è caricato e disponibile anche offline', () => {
   assert.ok(indexHtml.includes('./intervention-lifecycle.js?v=3'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
   assert.ok(indexHtml.includes('./sw.js?v=46'));
-  assert.ok(serviceWorker.includes('v54-agents-sdk'));
+  assert.ok(serviceWorker.includes('v62-apprendimento-controllato'));
   assert.ok(serviceWorker.includes('"./intervention-lifecycle.js"'));
 });
