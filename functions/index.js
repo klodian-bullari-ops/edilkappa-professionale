@@ -376,21 +376,36 @@ async function callOpenAI({ instructions, input, useWeb, modelChoice, safetyId }
       user_location: { type: "approximate", country: "IT", city: "Milano", region: "Lombardia" }
     }];
   }
-  try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
-    });
-    if (!response.ok) await openAiFailure(response);
-    return await response.json();
-  } catch (error) {
-    throw openAiTransportFailure(error);
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
+      });
+      if (response.ok) return await response.json();
+      if (response.status >= 500 && attempt < 3) {
+        console.warn("OpenAI temporary server error; retrying", { status: response.status, attempt });
+        await response.arrayBuffer().catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+        continue;
+      }
+      await openAiFailure(response);
+    } catch (error) {
+      const failure = openAiTransportFailure(error);
+      if (String(failure.code || "").includes("unavailable") && attempt < 3) {
+        console.warn("OpenAI temporary transport error; retrying", { attempt });
+        await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+        continue;
+      }
+      throw failure;
+    }
   }
+  throw new HttpsError("unavailable", "Il servizio AI non è disponibile dopo tre tentativi automatici.");
 }
 
 function backgroundHeaders() {
@@ -1218,8 +1233,8 @@ exports.edilkappaAi = onCall({
     if (!retryInputAvailable(previousJob)) {
       throw new HttpsError("failed-precondition", "Gli allegati preparati non sono più disponibili. Riapri le foto e avvia una nuova richiesta.");
     }
-    if (Number(previousJob.retryCount || 0) >= 2) {
-      throw new HttpsError("resource-exhausted", "Sono già stati eseguiti due tentativi automatici. Avvia una nuova richiesta dalla chat.");
+    if (Number(previousJob.retryCount || 0) >= 4) {
+      throw new HttpsError("resource-exhausted", "Sono già stati eseguiti quattro tentativi automatici. Avvia una nuova richiesta dalla chat.");
     }
 
     let input;
