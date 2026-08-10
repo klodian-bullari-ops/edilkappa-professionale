@@ -592,7 +592,7 @@
 
   function openActivityFromUrl() {
     const requestedView = new URL(window.location.href).searchParams.get('view');
-    if (['ai', 'attendance', 'activityView', 'completedView', 'dashboard'].includes(requestedView)) {
+    if (['ai', 'attendance', 'activityView', 'completedView', 'dashboard', 'operationsCenter'].includes(requestedView)) {
       setTimeout(() => go(requestedView), 250);
       history.replaceState({}, '', new URL('./', window.location.href));
     }

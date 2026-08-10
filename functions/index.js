@@ -28,6 +28,11 @@ const {
   QUOTE_AGENT_NAME,
   runQuoteAgent
 } = require("./quote-agent");
+const { buildOperationsSnapshot } = require("./operations-core");
+const {
+  OPERATIONS_AGENT_NAME,
+  runOperationsAgent
+} = require("./operations-agent");
 const {
   convertHeicBuffer,
   ensurePhotoPreview,
@@ -596,6 +601,94 @@ function envelopePayload(snapshot) {
   try { return JSON.parse(snapshot?.data()?.payload || "{}"); }
   catch (_) { return {}; }
 }
+
+async function loadOperationsData() {
+  const names = ["leads", "sites", "quotes", "reports", "timesheets", "absences", "payments", "deadlines"];
+  const snapshots = await Promise.all(names.map((name) => firestore.collection(name).where("orgId", "==", ORG_ID).limit(500).get()));
+  const data = Object.fromEntries(names.map((name, index) => [name, snapshots[index].docs.map((item) => ({ id: item.id, ...envelopePayload(item) }))]));
+  const usersSnapshot = await firestore.collection("users").where("orgId", "==", ORG_ID).limit(200).get();
+  data.users = usersSnapshot.docs.map((item) => ({ uid: item.id, ...item.data() }));
+  return data;
+}
+
+function romeDay() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+async function generateOperationsBriefing({ trigger = "manual", requestedBy = "" } = {}) {
+  const data = await loadOperationsData();
+  const snapshot = buildOperationsSnapshot(data, { today: romeDay() });
+  const result = await runOperationsAgent({
+    apiKey: OPENAI_API_KEY.value(),
+    snapshot,
+    model: process.env.EDILKAPPA_OPERATIONS_MODEL || "gpt-5.6-terra",
+    groupId: `${snapshot.generatedFor}-${trigger}`,
+    signal: AbortSignal.timeout(AGENT_RUN_TIMEOUT_MS)
+  });
+  const stored = {
+    orgId: ORG_ID,
+    trigger,
+    requestedBy: cleanText(requestedBy, 160),
+    agentName: OPERATIONS_AGENT_NAME,
+    snapshot,
+    briefing: result.briefing,
+    responseId: result.responseId,
+    generatedAtMs: Date.now(),
+    generatedAt: FieldValue.serverTimestamp()
+  };
+  await firestore.collection("operationsBriefings").doc("latest").set(stored);
+  return stored;
+}
+
+exports.edilkappaOperations = onCall({
+  region: "europe-west8",
+  secrets: [OPENAI_API_KEY],
+  timeoutSeconds: 540,
+  memory: "1GiB",
+  maxInstances: 1,
+  cors: true
+}, async (request) => {
+  const account = await authorizedUser(request, "work");
+  const action = String(request.data?.action || "latest");
+  if (action === "latest") {
+    const snapshot = await firestore.collection("operationsBriefings").doc("latest").get();
+    if (!snapshot.exists) return { available: false, agentName: OPERATIONS_AGENT_NAME };
+    const data = snapshot.data() || {};
+    return { available: true, agentName: OPERATIONS_AGENT_NAME, generatedAtMs: Number(data.generatedAtMs || 0), trigger: data.trigger || "", snapshot: data.snapshot || null, briefing: data.briefing || null };
+  }
+  if (action !== "refresh") throw new HttpsError("invalid-argument", "Operazione del coordinatore non valida.");
+  if (account.role !== "owner") throw new HttpsError("permission-denied", "Solo il titolare può avviare il coordinamento completo.");
+  await useDailyAllowance(account.uid);
+  try {
+    const result = await generateOperationsBriefing({ trigger: "manual", requestedBy: account.uid });
+    return { available: true, agentName: OPERATIONS_AGENT_NAME, generatedAtMs: result.generatedAtMs, trigger: result.trigger, snapshot: result.snapshot, briefing: result.briefing };
+  } catch (error) {
+    throw openAiTransportFailure(error, "operations agent");
+  }
+});
+
+exports.generateMorningOperationsBriefing = onSchedule({
+  schedule: "0 7 * * 1-6",
+  timeZone: "Europe/Rome",
+  region: "europe-west8",
+  secrets: [OPENAI_API_KEY],
+  timeoutSeconds: 540,
+  memory: "1GiB",
+  retryCount: 0
+}, async () => {
+  try {
+    const result = await generateOperationsBriefing({ trigger: "schedule" });
+    const staffSnapshot = await firestore.collection("users").where("orgId", "==", ORG_ID).limit(200).get();
+    const owner = staffSnapshot.docs.find((document) => {
+      const data = document.data() || {};
+      return data.role === "owner" && data.active === true;
+    });
+    const urgent = Number(result.snapshot?.metrics?.urgent || 0);
+    await pushSafely({ uid: owner?.id || "", staff: !owner, title: urgent ? `EdilKappa: ${urgent} priorità urgenti` : "EdilKappa: riepilogo operativo pronto", body: cleanText(result.briefing?.headline || result.briefing?.summary || "Apri il Centro operativo.", 260), type: "operations", targetType: "operations", targetId: result.snapshot?.generatedFor || romeDay(), url: "./?view=operationsCenter" });
+  } catch (error) {
+    console.error("Morning operations briefing failed", { name: cleanText(error?.name, 120), message: cleanText(error?.message, 500) });
+  }
+});
 
 exports.notifyNewLead = onDocumentCreated({ document: "leads/{leadId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
   const lead = envelopePayload(event.data);

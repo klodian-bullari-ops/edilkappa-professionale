@@ -102,6 +102,6 @@ test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./direct-search.js?v=6'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
   assert.ok(indexHtml.includes('./sw.js?v=46'));
-  assert.ok(serviceWorker.includes('v63-memoria-ai-menu-iniziale'));
+  assert.ok(serviceWorker.includes('v64-agenti-operativi'));
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });

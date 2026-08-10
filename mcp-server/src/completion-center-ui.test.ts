@@ -32,7 +32,7 @@ test('le nuove foto generano un avviso con apertura del punto esatto', () => {
 });
 
 test('il service worker conserva il nuovo modulo e apre gli avvisi cliccati', () => {
-  assert.ok(serviceWorker.includes('v63-memoria-ai-menu-iniziale'));
+  assert.ok(serviceWorker.includes('v64-agenti-operativi'));
   assert.ok(serviceWorker.includes('"./completion-center.js"'));
   assert.ok(serviceWorker.includes('notificationclick'));
   assert.ok(serviceWorker.includes('event.notification.data?.url'));
