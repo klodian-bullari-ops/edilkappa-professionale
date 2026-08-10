@@ -32,7 +32,7 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
 test('il modulo di apprendimento controllato è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./controlled-learning.js?v=2'));
   assert.ok(indexHtml.includes("['learningCenter','🧠','Memoria AI']"));
-  assert.ok(serviceWorker.includes('v67-memoria-ai-responsive'));
+  assert.ok(serviceWorker.includes('v68-ai-job-recovery'));
   assert.ok(serviceWorker.includes('"./controlled-learning.js"'));
 });
 
@@ -82,7 +82,7 @@ test('una correzione dell’ufficio sospende davvero un esempio fino alla riconf
 });
 
 test('una correzione eseguita dal titolare resta un insegnamento verificato e tracciato', () => {
-  const quote = { id: 'q2', status: 'Approvato', learningStatus: 'Verificato dal titolare', subject: 'Ripristino', net: 2000, lines: [{ description: 'Ripristino', quantity: 20, unit: 'm²', unitPrice: 100 }] };
+  const quote = { id: 'q2', status: 'Approvato', learningStatus: 'Verificato dal titolare', subject: 'Ripristino', net: 2000, lines: [{ description: 'Ripristino', quantity: 20, unit: 'm²', unitPrice: 100 }], revisions: [] as Array<{ verified: boolean }> };
   const before = { subject: quote.subject, net: quote.net, status: quote.status, lines: quote.lines.map((line) => ({ ...line, unitCost: 0 })) };
   quote.lines[0].unitPrice = 110;
   const { api } = loadLearning({ quotes: [quote], sites: [], timesheets: [], reports: [], priceList: [] }, 'owner');
