@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const state = { loading: false, refreshing: false, error: "", remote: null };
+  const state = { loading: false, refreshing: false, latestAttempted: false, error: "", remote: null };
   const css = document.createElement("style");
   css.textContent = `
     .opsHero{background:linear-gradient(135deg,#102c22,#21503c);color:#fff;border-radius:20px;padding:22px;display:flex;justify-content:space-between;gap:18px;align-items:center}.opsHero h2{margin:0 0 6px}.opsHero p{margin:0;color:#d9eade;max-width:760px}.opsHero .actions{margin:0;flex:0 0 auto}.opsAgents{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:11px}.opsAgent{border:1px solid #dce6df;border-radius:14px;padding:13px;background:#fff}.opsAgent b{display:block;color:#173d2e;margin-bottom:5px}.opsAgent small{color:#63766d}.opsPriority{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:11px;align-items:center;padding:11px 0;border-bottom:1px solid #e1e8e3}.opsPriority:last-child{border-bottom:0}.opsSeverity{width:10px;height:10px;border-radius:50%;background:#e2ad24}.opsSeverity.high{background:#cf3c34}.opsSeverity.low{background:#5f9b73}.opsPriority b,.opsPriority small{display:block}.opsPriority small{color:#66786f;margin-top:3px}.opsBrief{border-left:5px solid #f4c400;background:#fffbea;border-radius:12px;padding:14px}.opsDraft{border:1px dashed #d1b43e;background:#fffdf2;border-radius:11px;padding:11px;margin-top:9px}.opsError{background:#fff0ef;border:1px solid #efc4c0;color:#8e2d27;border-radius:11px;padding:11px}.opsProfit{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,auto);gap:8px 16px;padding:9px 0;border-bottom:1px solid #e3e9e5}.opsProfit span:not(:first-child){text-align:right;white-space:nowrap}@media(max-width:700px){.opsHero{align-items:flex-start;flex-direction:column}.opsPriority{grid-template-columns:auto minmax(0,1fr)}.opsPriority button{grid-column:2}.opsProfit{grid-template-columns:1fr auto}.opsProfit span:nth-child(3),.opsProfit span:nth-child(4){display:none}}
@@ -77,6 +77,7 @@
 
   async function loadLatest() {
     if (state.loading || !window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.operationsRequest) return;
+    state.latestAttempted = true;
     state.loading = true; state.error = ""; render();
     try { const result = await window.EdilKappaCloud.operationsRequest({ action: "latest" }); state.remote = result?.available ? result : null; }
     catch (error) { state.error = error?.message || "Non riesco a caricare il briefing operativo."; }
@@ -112,7 +113,7 @@
       if (!isOffice()) view = "worker";
       else {
         renderNav(); document.getElementById("avatar").textContent = roleName().charAt(0); document.getElementById("pageTitle").textContent = "Centro operativo"; document.getElementById("app").innerHTML = viewHtml();
-        if (!state.remote && !state.loading) setTimeout(loadLatest, 0);
+        if (!state.remote && !state.loading && !state.latestAttempted) setTimeout(loadLatest, 0);
         return;
       }
     }
