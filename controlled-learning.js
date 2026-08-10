@@ -12,7 +12,12 @@
     .learningDelta{font-variant-numeric:tabular-nums;font-weight:850}.learningPositive{color:#176542}.learningNegative{color:#a0372e}
     .learningKnowledge{border-left:5px solid var(--lime)}.learningKnowledge small{display:block;color:var(--muted);margin-top:4px}
     .learningTimeline{display:grid;gap:8px}.learningEvent{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fafbf9}.learningEvent b,.learningEvent small{display:block}.learningEvent small{color:var(--muted);margin-top:4px}
-    @media(max-width:620px){.learningHero{padding:18px}.learningHero .btn{width:100%}}
+    .learningCenterLayout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}.learningCenterLayout>.card{min-width:0}
+    .learningQuoteRow{min-width:0}.learningQuoteRow>.actions{justify-content:flex-end;min-width:0}.learningQuoteRow.isUnread{border-left:5px solid var(--lime)}
+    .learningReadDot{width:9px;height:9px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 3px #fff4c1;flex:none}
+    .learningToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.learningToolbar .actions{justify-content:flex-end}
+    @media(max-width:900px){.learningQuoteRow{display:grid;grid-template-columns:auto minmax(0,1fr)}.learningQuoteRow>.actions{grid-column:1/-1;justify-content:flex-start}.learningQuoteRow>.actions .btn{flex:1 1 auto}}
+    @media(max-width:620px){.learningHero{padding:18px}.learningHero .btn{width:100%}.learningToolbar{align-items:flex-start;flex-direction:column}.learningToolbar .actions,.learningToolbar .btn{width:100%}.learningQuoteRow>.actions{display:grid;grid-template-columns:1fr 1fr}.learningQuoteRow>.actions .learningStatus{grid-column:1/-1;justify-content:center}.learningQuoteRow>.actions .btn{width:100%}}
   `;
   document.head.appendChild(style);
 
@@ -159,6 +164,16 @@
     persistAndRender();
   };
 
+  window.learningMarkAllRead = function () {
+    if (role !== 'owner') return alert('Solo il titolare può segnare i preventivi come letti.');
+    const unread = (db.quotes || []).filter((item) => !item.learningReadAt);
+    if (!unread.length) return alert('Tutti i preventivi risultano già letti.');
+    if (!confirm(`Segnare come letti tutti i ${unread.length} preventivi? Non verranno approvati per l’AI.`)) return;
+    const readAt = now();
+    unread.forEach((item) => { item.learningReadAt = readAt; });
+    persistAndRender();
+  };
+
   window.openLearningActuals = function (id) {
     if (role !== 'owner') return alert('Solo il titolare può registrare i costi consuntivi.');
     const item = quoteById(id);
@@ -197,14 +212,15 @@
   window.learningCenterView = function () {
     const quotes = (db.quotes || []).slice().sort((a, b) => String(b.updatedAt || b.date || '').localeCompare(String(a.updatedAt || a.date || '')));
     const verified = quotes.filter(isVerified), withActuals = quotes.filter((item) => Number(item.actuals?.total || 0) > 0);
+    const unread = quotes.filter((item) => !item.learningReadAt);
     const corrections = quotes.reduce((sum, item) => sum + (item.revisions || []).filter((revision) => revision.type === 'correction').length, 0);
     const knowledge = lineKnowledge();
     return `<section class="learningHero"><h2>Memoria aziendale EdilKappa</h2><p>Qui decidi quali preventivi sono affidabili. EdilKappa AI usa soltanto esempi approvati, correzioni registrate e consuntivi reali; non modifica autonomamente il listino DEI.</p><div class="actions"><button class="btn lime" onclick="go('quotes')">Apri preventivi</button><button class="btn light" onclick="go('priceListView')">Apri listino</button></div></section>
       <div class="grid stats">${stat('Esempi verificati', verified.length, '✓')}${stat('Correzioni imparate', corrections, '✎')}${stat('Consuntivi reali', withActuals.length, '€')}${stat('Voci prezzo affidabili', knowledge.length, '🧠')}</div>
-      <div class="grid cols"><section class="card"><div class="cardHead"><h3>Preventivi da insegnare</h3><small class="muted">Approva solo quelli controllati</small></div><div class="list">${quotes.map((item) => {
+      <div class="learningCenterLayout"><section class="card"><div class="cardHead learningToolbar"><div><h3>Preventivi da insegnare</h3><small class="muted">${unread.length ? `${unread.length} da leggere` : 'Tutti letti'} · approva solo quelli controllati</small></div><div class="actions"><button class="btn sm light" onclick="learningMarkAllRead()" ${unread.length ? '' : 'disabled'}>✓ Segna tutti come letti</button></div></div><div class="list">${quotes.map((item) => {
         const actual = item.actuals;
         const delta = actual ? Number(item.net || 0) - Number(actual.total || 0) : null;
-        return `<div class="row"><div class="rowIcon">📋</div><div class="rowBody"><b>${esc(item.code || 'Preventivo')} · ${esc(item.subject || '')}</b><small>${esc(item.client || '')} · netto ${euro(item.net)}${actual ? ` · costo reale ${euro(actual.total)}` : ''}</small>${actual ? `<small class="learningDelta ${delta >= 0 ? 'learningPositive' : 'learningNegative'}">Utile reale ${euro(delta)} · ${Number(actual.marginPercent || 0).toFixed(1)}%</small>` : ''}</div><div class="actions"><span class="learningStatus ${statusClass(item)}">${statusClass(item) === 'verified' ? '✓' : '!'} ${esc(learningStatus(item))}</span><button class="btn sm light" onclick="openQuote('${esc(item.id)}')">Modifica</button>${ownerLearningButtons(item)}</div></div>`;
+        return `<div class="row learningQuoteRow ${item.learningReadAt ? '' : 'isUnread'}"><div class="rowIcon">📋</div><div class="rowBody"><b>${esc(item.code || 'Preventivo')} · ${esc(item.subject || '')}</b><small>${esc(item.client || '')} · netto ${euro(item.net)}${actual ? ` · costo reale ${euro(actual.total)}` : ''}</small>${actual ? `<small class="learningDelta ${delta >= 0 ? 'learningPositive' : 'learningNegative'}">Utile reale ${euro(delta)} · ${Number(actual.marginPercent || 0).toFixed(1)}%</small>` : ''}</div><div class="actions">${item.learningReadAt ? '' : '<span class="learningReadDot" title="Da leggere"></span>'}<span class="learningStatus ${statusClass(item)}">${statusClass(item) === 'verified' ? '✓' : '!'} ${esc(learningStatus(item))}</span><button class="btn sm light" onclick="openQuote('${esc(item.id)}')">Modifica</button>${ownerLearningButtons(item)}</div></div>`;
       }).join('') || '<div class="empty">Non ci sono ancora preventivi.</div>'}</div></section>
       <section class="card"><div class="cardHead"><h3>Prezzi appresi</h3><small class="muted">Solo da esempi verificati</small></div><div class="list">${knowledge.slice(0, 30).map((item) => `<div class="row learningKnowledge"><div class="rowBody"><b>${esc(item.description)}</b><small>Valore centrale ${euro(item.median)} / ${esc(item.unit)} · intervallo ${euro(item.min)}–${euro(item.max)}</small></div><span class="learningStatus verified">${item.samples} esempi</span></div>`).join('') || '<div class="empty">Verifica almeno un preventivo con voci dettagliate per costruire la memoria prezzi.</div>'}</div></section></div>
       <div style="height:16px"></div><section class="card"><div class="cardHead"><h3>Ultime correzioni registrate</h3></div>${quotes.map((item) => (item.revisions || []).some((revision) => revision.type === 'correction') ? `<div style="margin-bottom:14px"><b>${esc(item.code || '')} · ${esc(item.subject || '')}</b>${eventRows(item)}</div>` : '').join('') || '<div class="empty">Le prossime modifiche ai preventivi compariranno qui automaticamente.</div>'}</section>`;

@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v66-danea-gmail-bridge`;
+const CACHE = `${CACHE_PREFIX}v67-memoria-ai-responsive`;
 const APP_SHELL = [
   "./",
   "./index.html",

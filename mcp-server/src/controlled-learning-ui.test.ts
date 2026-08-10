@@ -30,9 +30,9 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
 }
 
 test('il modulo di apprendimento controllato è caricato e disponibile offline', () => {
-  assert.ok(indexHtml.includes('./controlled-learning.js?v=1'));
+  assert.ok(indexHtml.includes('./controlled-learning.js?v=2'));
   assert.ok(indexHtml.includes("['learningCenter','🧠','Memoria AI']"));
-  assert.ok(serviceWorker.includes('v66-danea-gmail-bridge'));
+  assert.ok(serviceWorker.includes('v67-memoria-ai-responsive'));
   assert.ok(serviceWorker.includes('"./controlled-learning.js"'));
 });
 
@@ -40,6 +40,14 @@ test('Memoria AI compare nel menu già alla prima apertura', () => {
   const loaded = loadLearning({ quotes: [], sites: [], timesheets: [], reports: [], priceList: [] });
   assert.equal(loaded.renderNavCount, 1);
   assert.ok((loaded.context.ownerNav as Array<string[]>).some((entry) => entry[0] === 'learningCenter'));
+});
+
+test('Memoria AI resta entro lo schermo e consente di segnare tutto come letto', () => {
+  assert.ok(learning.includes('learningCenterLayout'));
+  assert.ok(learning.includes('learningQuoteRow'));
+  assert.ok(learning.includes('window.learningMarkAllRead'));
+  assert.ok(learning.includes('Segna tutti come letti'));
+  assert.ok(learning.includes('Non verranno approvati per l’AI'));
 });
 
 test('le correzioni ai preventivi vengono registrate senza modificare il listino DEI', () => {
