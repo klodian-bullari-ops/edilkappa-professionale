@@ -28,7 +28,7 @@ test('ogni file archiviato offre la scelta del canale senza precaricare i file c
 test('la finestra reale mostra i canali per documenti e tutte le foto del cantiere', () => {
   const data = {
     documents: [{ id: 'doc-1', title: 'Relazione', fileName: 'relazione.xlsx', fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', fileSize: 1200, storagePath: 'documenti/relazione.xlsx' }],
-    sites: [{ id: 'site-1', title: 'Via Padova 213/A' }],
+    sites: [{ id: 'site-1', title: 'Cantiere Prova' }],
     reports: [{ id: 'album-1', site: 'site-1', photos: [
       { fileName: 'tubo-nuovo-1.jpeg', fileType: 'image/jpeg', storagePath: 'foto/1.jpeg' },
       { fileName: 'tubo-nuovo-2.jpeg', fileType: 'image/jpeg', storagePath: 'foto/2.jpeg' }
@@ -69,7 +69,7 @@ test('la finestra reale mostra i canali per documenti e tutte le foto del cantie
   assert.match(modalContent.innerHTML, /WhatsApp/);
 
   windowObject.openSitePhotoShare('site-1');
-  assert.match(modalContent.innerHTML, /Via Padova 213\/A/);
+  assert.match(modalContent.innerHTML, /Cantiere Prova/);
   assert.match(modalContent.innerHTML, /tubo-nuovo-1\.jpeg/);
   assert.match(modalContent.innerHTML, /tubo-nuovo-2\.jpeg/);
   assert.match(modalContent.innerHTML, /2 file selezionati/);
@@ -108,5 +108,5 @@ test('Excel e CSV sono ammessi nell’archivio cloud', () => {
 });
 
 test('la cache viene aggiornata per consegnare la nuova condivisione ai telefoni', () => {
-  assert.ok(serviceWorker.includes('v54-agents-sdk'));
+  assert.ok(serviceWorker.includes('v62-apprendimento-controllato'));
 });

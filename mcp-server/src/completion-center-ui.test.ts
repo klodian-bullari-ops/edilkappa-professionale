@@ -9,7 +9,7 @@ const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf
 
 test('il centro completati è JavaScript valido ed è caricato dal gestionale', () => {
   assert.doesNotThrow(() => new vm.Script(completionUi));
-  assert.ok(indexHtml.includes('./completion-center.js?v=2'));
+  assert.ok(indexHtml.includes('./completion-center.js?v=3'));
   assert.ok(indexHtml.includes("'completedView','activityView'"));
 });
 
@@ -32,7 +32,7 @@ test('le nuove foto generano un avviso con apertura del punto esatto', () => {
 });
 
 test('il service worker conserva il nuovo modulo e apre gli avvisi cliccati', () => {
-  assert.ok(serviceWorker.includes('v54-agents-sdk'));
+  assert.ok(serviceWorker.includes('v62-apprendimento-controllato'));
   assert.ok(serviceWorker.includes('"./completion-center.js"'));
   assert.ok(serviceWorker.includes('notificationclick'));
   assert.ok(serviceWorker.includes('event.notification.data?.url'));
@@ -43,7 +43,7 @@ test('riconosce foto finali e genera un avviso per un caricamento della squadra'
   const elements = new Map<string, Record<string, unknown>>();
   const data = {
     sites: [{ id: 'site-1', title: 'Ripristino tetto', client: 'Condominio Prova', address: 'Via Prova 1', status: 'Completato', progress: 100, updatedAt: '2026-08-04T09:01:00.000Z' }],
-    reports: [{ id: 'report-1', site: 'site-1', client: 'Condominio Prova', status: 'Completato', photoOnly: true, workerUid: 'worker-1', workerName: 'Ajet', date: '2026-08-04T09:00:00.000Z', photoCount: 2, photos: [{ phase: 'Completato', uploadedAt: '2026-08-04T09:00:00.000Z' }, { phase: 'Completato', uploadedAt: '2026-08-04T09:00:00.000Z' }] }],
+    reports: [{ id: 'report-1', site: 'site-1', client: 'Condominio Prova', status: 'Completato', photoOnly: true, workerUid: 'worker-1', workerName: 'Operaio Uno', date: '2026-08-04T09:00:00.000Z', photoCount: 2, photos: [{ phase: 'Completato', uploadedAt: '2026-08-04T09:00:00.000Z' }, { phase: 'Completato', uploadedAt: '2026-08-04T09:00:00.000Z' }] }],
     interventions: [], roofs: [], drains: [], documents: [], condomini: []
   };
   const topActions = { prepend: (element: Record<string, unknown>) => elements.set(String(element.id), element) };

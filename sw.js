@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v61-preventivi-notifiche-assenze`;
+const CACHE = `${CACHE_PREFIX}v62-apprendimento-controllato`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ const APP_SHELL = [
   "./edilconnect.js",
   "./hours-closeout.js",
   "./attendance-center.js",
+  "./controlled-learning.js",
   "./edilkappa-ai.js",
   "./edilkappa-ai-route.js",
   "./firebase-cloud.js",
