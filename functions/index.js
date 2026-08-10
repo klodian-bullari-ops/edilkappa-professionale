@@ -26,7 +26,14 @@ const {
 } = require("./ai-core");
 const {
   QUOTE_AGENT_NAME,
-  runQuoteAgent
+  QUOTE_REVIEW_SCHEMA,
+  QUOTE_REVIEWER_NAME,
+  buildQuoteReviewPrompt,
+  buildQuoteReviewerInstructions,
+  mergeQuoteAudit,
+  normalizeQuoteReview,
+  runQuoteAgent,
+  runQuoteReview
 } = require("./quote-agent");
 const {
   agentJobTimeout,
@@ -46,6 +53,11 @@ const {
   ensurePhotoPreview,
   prepareArchivedHeicPhotos
 } = require("./photo-utils");
+const {
+  buildPdfAuditBody,
+  extractPdfAudit,
+  responseOutputText
+} = require("./pdf-audit");
 
 const adminApp = initializeApp();
 const firestore = getFirestore(adminApp, "edilkappa");
@@ -406,6 +418,99 @@ async function callOpenAI({ instructions, input, useWeb, modelChoice, safetyId }
     }
   }
   throw new HttpsError("unavailable", "Il servizio AI non è disponibile dopo tre tentativi automatici.");
+}
+
+async function callPdfAudit({ pdfDataUrl, artifact, safetyId, model }) {
+  let body;
+  try {
+    body = buildPdfAuditBody({ pdfDataUrl, artifact, safetyId, model });
+  } catch (error) {
+    throw new HttpsError("invalid-argument", error.message);
+  }
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
+      });
+      if (response.ok) return extractPdfAudit(await response.json());
+      if (response.status >= 500 && attempt < 2) {
+        console.warn("OpenAI PDF audit temporary error; retrying", { status: response.status, attempt });
+        await response.arrayBuffer().catch(() => {});
+        continue;
+      }
+      await openAiFailure(response, "PDF audit");
+    } catch (error) {
+      const failure = openAiTransportFailure(error, "PDF audit");
+      if (String(failure.code || "").includes("unavailable") && attempt < 2) continue;
+      throw failure;
+    }
+  }
+  throw new HttpsError("unavailable", "Il controllo del PDF non è disponibile dopo due tentativi automatici.");
+}
+
+async function callQuoteReviewFallback({ instructions, input, draft, initialAudit, modelChoice, safetyId }) {
+  const fallbackChoice = terraFallbackChoice(modelChoice || {});
+  const body = {
+    model: fallbackChoice.model,
+    instructions: buildQuoteReviewerInstructions(instructions),
+    input: [
+      ...(Array.isArray(input) ? input : []),
+      { role: "user", content: [{ type: "input_text", text: buildQuoteReviewPrompt(draft, initialAudit) }] }
+    ],
+    reasoning: { effort: "high" },
+    text: {
+      verbosity: "high",
+      format: {
+        type: "json_schema",
+        name: "edilkappa_quote_review",
+        strict: true,
+        schema: QUOTE_REVIEW_SCHEMA
+      }
+    },
+    max_output_tokens: 16000,
+    store: false,
+    safety_identifier: safetyId
+  };
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${OPENAI_API_KEY.value()}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS)
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        const raw = responseOutputText(payload);
+        if (!raw) throw new Error("Il revisore di recupero non ha restituito un risultato.");
+        return {
+          ...normalizeQuoteReview(JSON.parse(raw)),
+          responseId: cleanText(payload.id, 200),
+          usage: payload.usage || null
+        };
+      }
+      if (response.status >= 500 && attempt < 2) {
+        console.warn("OpenAI quote review fallback temporary error; retrying", { status: response.status, attempt });
+        await response.arrayBuffer().catch(() => {});
+        continue;
+      }
+      await openAiFailure(response, "quote review fallback");
+    } catch (error) {
+      const failure = openAiTransportFailure(error, "quote review fallback");
+      if (String(failure.code || "").includes("unavailable") && attempt < 2) continue;
+      throw failure;
+    }
+  }
+  throw new HttpsError("unavailable", "Il secondo revisore non è disponibile dopo due tentativi automatici.");
 }
 
 function backgroundHeaders() {
@@ -965,7 +1070,73 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       };
       agentFallbackUsed = true;
     }
-    const qualityAudit = auditArtifact(result.artifact, job.message);
+    const generatorResponseId = result.responseId;
+    const generatorUsage = result.usage || null;
+    const generatorSources = result.sources || [];
+    const initialQualityAudit = auditArtifact(result.artifact, job.message);
+    await jobReference.set({
+      stage: "review",
+      generatorResponseId,
+      initialQualityAudit,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+
+    let review;
+    let reviewFallbackUsed = false;
+    try {
+      review = await runQuoteReview({
+        apiKey: OPENAI_API_KEY.value(),
+        instructions: job.instructions,
+        input,
+        draft: result,
+        initialAudit: initialQualityAudit,
+        modelChoice: job.modelChoice,
+        conversationId: job.conversationId,
+        userId: safetyIdentifier(job.uid),
+        signal: AbortSignal.timeout(AGENT_RUN_TIMEOUT_MS)
+      });
+    } catch (reviewError) {
+      console.warn("Agents SDK quote review failed; starting Responses fallback", {
+        jobId: cleanText(job.jobId, 120),
+        name: cleanText(reviewError?.name, 120),
+        message: cleanText(reviewError?.message, 500)
+      });
+      try {
+        review = await callQuoteReviewFallback({
+          instructions: job.instructions,
+          input,
+          draft: result,
+          initialAudit: initialQualityAudit,
+          modelChoice: job.modelChoice,
+          safetyId: safetyIdentifier(job.uid)
+        });
+        reviewFallbackUsed = true;
+      } catch (fallbackError) {
+        console.error("EdilKappa quote review fallback failed; release remains blocked", {
+          jobId: cleanText(job.jobId, 120),
+          name: cleanText(fallbackError?.name, 120),
+          message: cleanText(fallbackError?.message, 500)
+        });
+        review = {
+          verdict: "blocked",
+          corrections: [],
+          blockingIssues: ["Il secondo revisore automatico non ha completato il controllo. Riprova prima di usare il preventivo."],
+          warnings: []
+        };
+      }
+    }
+    if (review?.response) {
+      result = {
+        ...review.response,
+        sources: generatorSources,
+        responseId: generatorResponseId,
+        reviewResponseId: review.responseId,
+        usage: { generation: generatorUsage, review: review.usage || null }
+      };
+    } else {
+      result.usage = { generation: generatorUsage, review: null };
+    }
+    const qualityAudit = mergeQuoteAudit(auditArtifact(result.artifact, job.message), review);
     if (!qualityAudit.passed && result.artifact?.quote) result.artifact.quote.readyToSave = false;
 
     const ref = conversationRef(job.uid, job.mode, job.conversationId);
@@ -996,6 +1167,8 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       reasoningEffort: job.modelChoice?.reasoningEffort,
       engine: "agents_sdk",
       agentName: QUOTE_AGENT_NAME,
+      reviewerName: QUOTE_REVIEWER_NAME,
+      reviewFallbackUsed,
       fallbackUsed: agentFallbackUsed,
       approvalRequired: true,
       qualityAudit,
@@ -1024,6 +1197,8 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       reasoningEffort: job.modelChoice?.reasoningEffort,
       engine: "agents_sdk",
       agentName: QUOTE_AGENT_NAME,
+      reviewerName: QUOTE_REVIEWER_NAME,
+      reviewFallbackUsed,
       fallbackUsed: agentFallbackUsed,
       approvalRequired: true,
       qualityAudit,
@@ -1033,6 +1208,7 @@ exports.edilkappaQuoteAgentWorker = onDocumentCreated({
       status: "completed",
       stage: "completed",
       responseId: result.responseId,
+      reviewResponseId: result.reviewResponseId || "",
       result: completedResult,
       completedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp()
@@ -1160,6 +1336,42 @@ exports.edilkappaAi = onCall({
     } catch (error) {
       throw new HttpsError("invalid-argument", error.message);
     }
+  }
+  if (action === "audit_quote_pdf") {
+    if (mode !== "work") throw new HttpsError("permission-denied", "Il controllo PDF è disponibile soltanto in modalità Lavoro.");
+    const artifactId = cleanText(request.data?.artifactId, 200);
+    if (!artifactId) throw new HttpsError("invalid-argument", "Identificativo del preventivo mancante.");
+    const snapshot = await ref.get();
+    const history = Array.isArray(snapshot.data()?.messages) ? snapshot.data().messages : [];
+    const messageIndex = history.findLastIndex((item) => item?.role === "assistant" && cleanText(item?.artifact?.id, 200) === artifactId);
+    if (messageIndex < 0) throw new HttpsError("not-found", "Non trovo più il preventivo da controllare.");
+    const storedMessage = history[messageIndex];
+    const artifact = normalizeArtifact(storedMessage.artifact);
+    if (artifact?.kind !== "quote") throw new HttpsError("failed-precondition", "Il documento selezionato non è un preventivo valido.");
+    if (storedMessage.qualityAudit?.passed !== true || storedMessage.qualityAudit?.blocking === true) {
+      throw new HttpsError("failed-precondition", "Prima correggi i controlli sul contenuto del preventivo.");
+    }
+    artifact.id = artifactId;
+    await useDailyAllowance(account.uid);
+    const pdfAudit = {
+      ...(await callPdfAudit({
+        pdfDataUrl: request.data?.pdfDataUrl,
+        artifact,
+        safetyId: safetyIdentifier(account.uid),
+        model: storedMessage.model || "gpt-5.6-terra"
+      })),
+      checkedAtMs: Date.now()
+    };
+    history[messageIndex] = { ...storedMessage, pdfAudit };
+    await ref.set({
+      uid: account.uid,
+      orgId: ORG_ID,
+      mode,
+      messages: history.slice(-30),
+      updatedAtMs: Date.now(),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
+    return { mode, artifactId, pdfAudit };
   }
   if (action === "generate_visual") {
     if (mode !== "work") throw new HttpsError("permission-denied", "Le immagini operative sono disponibili soltanto in modalità Lavoro.");

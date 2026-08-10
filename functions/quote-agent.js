@@ -15,11 +15,36 @@ const {
 
 const QUOTE_AGENT_NAME = "EdilKappa Preventivi";
 const QUOTE_AGENT_WORKFLOW = "EdilKappa AI · Preventivi";
+const QUOTE_REVIEWER_NAME = "EdilKappa Revisore Preventivi";
+const QUOTE_REVIEW_WORKFLOW = "EdilKappa AI · Revisione indipendente";
 const QUOTE_OUTPUT_TYPE = Object.freeze({
   type: "json_schema",
   name: "edilkappa_ai_response",
   strict: true,
   schema: AI_RESPONSE_SCHEMA
+});
+const REVIEW_STRING_LIST_SCHEMA = {
+  type: "array",
+  items: { type: "string" },
+  maxItems: 30
+};
+const QUOTE_REVIEW_SCHEMA = Object.freeze({
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    verdict: { type: "string", enum: ["approved", "corrected", "blocked"] },
+    corrections: REVIEW_STRING_LIST_SCHEMA,
+    blockingIssues: REVIEW_STRING_LIST_SCHEMA,
+    warnings: REVIEW_STRING_LIST_SCHEMA,
+    response: AI_RESPONSE_SCHEMA
+  },
+  required: ["verdict", "corrections", "blockingIssues", "warnings", "response"]
+});
+const QUOTE_REVIEW_OUTPUT_TYPE = Object.freeze({
+  type: "json_schema",
+  name: "edilkappa_quote_review",
+  strict: true,
+  schema: QUOTE_REVIEW_SCHEMA
 });
 
 function createQuoteAgent({ instructions, modelChoice, useWeb = false }) {
@@ -55,6 +80,41 @@ function createQuoteAgent({ instructions, modelChoice, useWeb = false }) {
   });
 }
 
+function buildQuoteReviewerInstructions(instructions) {
+  return [
+    cleanText(instructions, 100000),
+    "RUOLO REVISORE INDIPENDENTE: non fidarti della bozza né del suo campo readyToSave. Ricontrolla la richiesta originale, gli allegati e ogni dato del preventivo.",
+    "Esegui un controllo editoriale, tecnico, economico e contrattuale completo. Non limitarti agli errori già segnalati dal primo controllo.",
+    "Verifica almeno: somme, sconti e IVA; durata e intervalli numerici (per esempio 710 invece di 7-10 è un errore bloccante); coerenza fra titolo, opere promesse, voci, opere comprese ed esclusioni; una sola alternativa raccomandata e assenza di contraddizioni fra gas e induzione; misure e fattibilità decisive; caldaia, cappa, scarichi e accessi quando pertinenti; chiarezza di fornitura, posa e adattamenti per top, zoccolo, mobili e cappa; Dichiarazione di Conformità (Di.Co.) per modifiche agli impianti; ambiguità nei pagamenti; refusi e testo destinato al cliente.",
+    "Se il titolo promette una trasformazione completa ma le finiture o le verifiche necessarie sono escluse, riduci correttamente la promessa oppure blocca la bozza. Non presentare come camera abitabile un locale senza le verifiche pertinenti.",
+    "Correggi direttamente soltanto ciò che è sostenuto dai dati. Non inventare misure, aliquote, conformità, autorizzazioni, materiali, prezzi o esiti di sopralluogo.",
+    "Usa verdict=corrected quando hai corretto in sicurezza la risposta. Usa verdict=approved soltanto se non serve alcuna correzione. Usa verdict=blocked quando manca un dato decisivo o resta una contraddizione; in tal caso imposta response.artifact.quote.readyToSave=false e descrivi ogni blocco in blockingIssues.",
+    "Ogni correzione deve comparire sia in corrections sia nella response restituita. warnings contiene soltanto osservazioni non bloccanti.",
+    "Restituisci esclusivamente l'oggetto strutturato richiesto. Non salvare, non condividere e non approvare per conto del titolare."
+  ].filter(Boolean).join("\n\n");
+}
+
+function createQuoteReviewer({ instructions, modelChoice }) {
+  const choice = modelChoice || {};
+  const requestedEffort = cleanText(choice.reasoningEffort, 20);
+  const reasoningEffort = ["high", "xhigh"].includes(requestedEffort) ? requestedEffort : "high";
+  return new Agent({
+    name: QUOTE_REVIEWER_NAME,
+    handoffDescription: "Controlla in modo indipendente e corregge una bozza di preventivo prima del rilascio.",
+    instructions: buildQuoteReviewerInstructions(instructions),
+    model: cleanText(choice.model, 120) || "gpt-5.6-terra",
+    modelSettings: {
+      reasoning: { effort: reasoningEffort },
+      text: { verbosity: "high" },
+      maxTokens: Math.max(4000, Math.min(18000, Number(choice.maxOutputTokens) || 16000)),
+      store: false
+    },
+    outputType: QUOTE_REVIEW_OUTPUT_TYPE,
+    tools: [],
+    handoffs: []
+  });
+}
+
 function normalizeAgentOutput(value) {
   const answer = cleanText(value?.answer, 20000);
   const artifact = normalizeArtifact(value?.artifact);
@@ -62,6 +122,80 @@ function normalizeAgentOutput(value) {
     throw new Error("L'agente preventivi non ha prodotto una bozza strutturata completa.");
   }
   return { answer, artifact, sources: [] };
+}
+
+function normalizeReviewList(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((item) => cleanText(item, 1000))
+    .filter(Boolean)
+    .slice(0, 30);
+}
+
+function normalizeQuoteReview(value) {
+  const response = normalizeAgentOutput(value?.response);
+  const blockingIssues = normalizeReviewList(value?.blockingIssues);
+  const requestedVerdict = ["approved", "corrected", "blocked"].includes(value?.verdict)
+    ? value.verdict
+    : "blocked";
+  const verdict = blockingIssues.length ? "blocked" : requestedVerdict;
+  if (verdict === "blocked") response.artifact.quote.readyToSave = false;
+  return {
+    verdict,
+    corrections: normalizeReviewList(value?.corrections),
+    blockingIssues,
+    warnings: normalizeReviewList(value?.warnings),
+    response
+  };
+}
+
+function buildQuoteReviewPrompt(draft, initialAudit) {
+  return cleanText([
+    "REVISIONE FINALE OBBLIGATORIA DELLA BOZZA SEGUENTE.",
+    "Confrontala con tutta la richiesta originale e con gli allegati presenti nello stesso input.",
+    "BOZZA_STRUTTURATA:",
+    JSON.stringify({ answer: draft?.answer || "", artifact: draft?.artifact || null }),
+    "PRIMO_CONTROLLO_DETERMINISTICO:",
+    JSON.stringify({
+      score: Number(initialAudit?.score || 0),
+      passed: initialAudit?.passed === true,
+      issues: Array.isArray(initialAudit?.issues) ? initialAudit.issues : []
+    }),
+    "Restituisci il preventivo completo corretto nel campo response, anche quando il verdetto è blocked."
+  ].join("\n\n"), 100000);
+}
+
+function mergeQuoteAudit(deterministicAudit, review) {
+  const audit = deterministicAudit || { score: 0, passed: false, blocking: true, checks: [], issues: [], blockingIssues: [] };
+  const reviewerPassed = review?.verdict !== "blocked" && !(review?.blockingIssues || []).length;
+  const reviewerDetail = reviewerPassed
+    ? (review?.verdict === "corrected" ? "bozza corretta e ricontrollata" : "bozza ricontrollata senza correzioni")
+    : ((review?.blockingIssues || ["revisione indipendente non superata"])[0]);
+  const reviewerCheck = {
+    label: "Revisione AI indipendente",
+    passed: reviewerPassed,
+    detail: cleanText(reviewerDetail, 500),
+    blocking: !reviewerPassed
+  };
+  const reviewIssues = reviewerPassed ? [] : (review?.blockingIssues || ["Revisione AI indipendente non completata."])
+    .map((item) => `Revisione AI indipendente: ${cleanText(item, 500)}`);
+  const issues = Array.from(new Set([...(audit.issues || []), ...reviewIssues]));
+  const blockingIssues = Array.from(new Set([...(audit.blockingIssues || []), ...reviewIssues]));
+  const passed = audit.passed === true && reviewerPassed;
+  return {
+    ...audit,
+    score: reviewerPassed ? Number(audit.score || 0) : Math.min(Number(audit.score || 0), 70),
+    passed,
+    blocking: audit.blocking === true || !reviewerPassed,
+    checks: [...(audit.checks || []), reviewerCheck],
+    issues,
+    blockingIssues,
+    reviewer: {
+      verdict: review?.verdict || "blocked",
+      corrections: review?.corrections || [],
+      blockingIssues: review?.blockingIssues || ["Revisore automatico non disponibile."],
+      warnings: review?.warnings || []
+    }
+  };
 }
 
 function toAgentInput(value) {
@@ -130,13 +264,54 @@ async function runQuoteAgent({ apiKey, instructions, input, modelChoice, useWeb,
   };
 }
 
+async function runQuoteReview({ apiKey, instructions, input, draft, initialAudit, modelChoice, conversationId, userId, signal }) {
+  const key = String(apiKey || "").trim();
+  if (!key) throw new Error("OPENAI_API_KEY non disponibile per il revisore preventivi.");
+  setDefaultOpenAIKey(key);
+  setOpenAIAPI("responses");
+
+  const reviewer = createQuoteReviewer({ instructions, modelChoice });
+  const runner = new Runner({
+    workflowName: QUOTE_REVIEW_WORKFLOW,
+    groupId: cleanText(conversationId, 120) || undefined,
+    traceMetadata: {
+      application: "edilkappa-ai",
+      agent: "revisore-preventivi",
+      user: cleanText(userId, 120) || "unknown"
+    },
+    traceIncludeSensitiveData: false,
+    tracingDisabled: false
+  });
+  const reviewInput = toAgentInput(input);
+  if (!reviewInput.length) throw new Error("Input non disponibile per il revisore preventivi.");
+  reviewInput.push({
+    role: "user",
+    content: [{ type: "input_text", text: buildQuoteReviewPrompt(draft, initialAudit) }]
+  });
+  const result = await runner.run(reviewer, reviewInput, { maxTurns: 1, signal });
+  return {
+    ...normalizeQuoteReview(result.finalOutput),
+    responseId: cleanText(result.lastResponseId, 200),
+    usage: serializeUsage(result.state?.usage)
+  };
+}
+
 module.exports = {
   QUOTE_AGENT_NAME,
   QUOTE_AGENT_WORKFLOW,
   QUOTE_OUTPUT_TYPE,
+  QUOTE_REVIEWER_NAME,
+  QUOTE_REVIEW_SCHEMA,
+  QUOTE_REVIEW_OUTPUT_TYPE,
+  buildQuoteReviewPrompt,
+  buildQuoteReviewerInstructions,
   createQuoteAgent,
+  createQuoteReviewer,
+  mergeQuoteAudit,
   normalizeAgentOutput,
+  normalizeQuoteReview,
   runQuoteAgent,
+  runQuoteReview,
   serializeUsage,
   toAgentInput
 };

@@ -8,7 +8,7 @@ const path = require("node:path");
 test("registers the EdilKappa AI browser interface", () => {
   const previousWindow = global.window;
   const previousDocument = global.document;
-  global.window = {};
+  global.window = { __EDILKAPPA_AI_TEST__: true };
   global.document = {
     createElement: () => ({ textContent: "" }),
     head: { appendChild: () => {} }
@@ -21,9 +21,40 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiReset, "function");
   assert.equal(typeof global.window.edilkappaAiSaveArtifact, "function");
   assert.equal(typeof global.window.edilkappaAiDownloadPdf, "function");
+  assert.equal(typeof global.window.edilkappaAiAuditPdf, "function");
   assert.equal(typeof global.window.edilkappaAiDownloadWord, "function");
   assert.equal(typeof global.window.edilkappaAiGenerateVisual, "function");
   assert.equal(typeof global.window.edilkappaAiSetModel, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.pdfTextSection, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.runDocumentTable, "function");
+
+  let fontStyle = "normal";
+  let addedPages = 0;
+  const bodyFonts = [];
+  const fakeDocument = {
+    addPage() { addedPages += 1; },
+    addImage() {},
+    rect() {},
+    setFillColor() {},
+    setFont(_name, style) { fontStyle = style; },
+    setFontSize() {},
+    setTextColor() {},
+    splitTextToSize() { return Array.from({ length: 60 }, (_, index) => `riga-${index + 1}`); },
+    text(value) { if (String(value).startsWith("riga-")) bodyFonts.push(fontStyle); }
+  };
+  const context = { company: { legalName: "EdilKappa", activity: "Edilizia", email: "info@example.com", phone: "000" }, logo: "", label: "PREVENTIVO" };
+  global.window.EdilKappaAiTest.pdfTextSection(fakeDocument, context, "Elenco", "Testo lungo", 100);
+  assert.ok(addedPages > 0);
+  assert.ok(bodyFonts.length > 0);
+  assert.ok(bodyFonts.every((style) => style === "normal"));
+
+  let tableOptions;
+  const fakeTableDocument = {
+    autoTable(options) { tableOptions = options; this.lastAutoTable = { finalY: 80 }; }
+  };
+  global.window.EdilKappaAiTest.runDocumentTable(fakeTableDocument, context, { body: [["Voce"]] });
+  assert.equal(tableOptions.rowPageBreak, "avoid");
+  assert.equal(tableOptions.showHead, "everyPage");
   global.window = previousWindow;
   global.document = previousDocument;
 });
@@ -89,6 +120,10 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /Preventivo · Agente SDK/);
   assert.match(source, /approvazione richiesta/);
   assert.match(functionSource, /auditArtifact/);
+  assert.match(functionSource, /runQuoteReview/);
+  assert.match(functionSource, /callQuoteReviewFallback/);
+  assert.match(functionSource, /action === "audit_quote_pdf"/);
+  assert.match(functionSource, /callPdfAudit/);
   assert.match(source, /edilkappa-ai-pending-job-v1/);
   assert.match(source, /edilkappaAiResumePending/);
   assert.match(source, /PENDING_JOB_UI_TIMEOUT_MS\s*=\s*11 \* 60 \* 1000/);
@@ -98,7 +133,10 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /2\/2 · Compongo prezzi/);
   assert.match(source, /edilkappaAiRetry/);
   assert.match(source, /standardDocumentaleApprovato/);
-  assert.match(source, /Controllo qualità/);
+  assert.match(source, /Contenuto revisionato/);
+  assert.match(source, /Controllo visivo PDF superato/);
+  assert.match(source, /requireMessageQuoteRelease/);
+  assert.match(source, /rowPageBreak:\s*"avoid"/);
   assert.match(source, /function quoteReleaseCheck/);
   assert.match(source, /Preventivo bloccato/);
   assert.match(source, /prezzo unitario mancante o pari a zero/);
@@ -120,7 +158,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=17/);
+  assert.match(html, /edilkappa-ai\.js\?v=18/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
@@ -161,7 +199,7 @@ test("loads the central operations agents and keeps every action under confirmat
   assert.match(center, /latestAttempted: false/);
   assert.match(center, /state\.latestAttempted = true/);
   assert.match(center, /!state\.latestAttempted/);
-  assert.match(serviceWorker, /v69-operations-navigation/);
+  assert.match(serviceWorker, /v70-quote-review/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);

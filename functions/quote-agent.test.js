@@ -5,8 +5,14 @@ const assert = require("node:assert/strict");
 const {
   QUOTE_AGENT_NAME,
   QUOTE_OUTPUT_TYPE,
+  QUOTE_REVIEWER_NAME,
+  QUOTE_REVIEW_SCHEMA,
+  buildQuoteReviewPrompt,
   createQuoteAgent,
+  createQuoteReviewer,
+  mergeQuoteAudit,
   normalizeAgentOutput,
+  normalizeQuoteReview,
   serializeUsage,
   toAgentInput
 } = require("./quote-agent");
@@ -37,6 +43,41 @@ test("configures one bounded Agents SDK quote specialist", () => {
   assert.match(agent.instructions, /alternative soltanto quando sono tecnicamente utili/i);
   const researchAgent = createQuoteAgent({ instructions: "Preventivo.", modelChoice: {}, useWeb: true });
   assert.equal(researchAgent.tools.length, 1);
+});
+
+test("configures a separate strict reviewer with no tools or handoffs", () => {
+  const reviewer = createQuoteReviewer({
+    instructions: "Controlla il preventivo.",
+    modelChoice: { model: "gpt-5.6-terra", reasoningEffort: "medium", maxOutputTokens: 12000 }
+  });
+  assert.equal(reviewer.name, QUOTE_REVIEWER_NAME);
+  assert.equal(reviewer.tools.length, 0);
+  assert.equal(reviewer.handoffs.length, 0);
+  assert.equal(reviewer.modelSettings.store, false);
+  assert.equal(reviewer.modelSettings.reasoning.effort, "high");
+  assert.equal(QUOTE_REVIEW_SCHEMA.additionalProperties, false);
+  assert.deepEqual(QUOTE_REVIEW_SCHEMA.required, ["verdict", "corrections", "blockingIssues", "warnings", "response"]);
+  assert.match(reviewer.instructions, /710 invece di 7-10/i);
+  assert.match(reviewer.instructions, /Dichiarazione di Conformità/i);
+  assert.match(reviewer.instructions, /gas e induzione/i);
+});
+
+test("the reviewer blocks unresolved drafts and the merged audit stays blocking", () => {
+  const review = normalizeQuoteReview({
+    verdict: "approved",
+    corrections: [],
+    blockingIssues: ["Scarico e caldaia da verificare"],
+    warnings: [],
+    response: { answer: "Bozza da completare.", artifact: { kind: "quote", quote: { readyToSave: true } } }
+  });
+  assert.equal(review.verdict, "blocked");
+  assert.equal(review.response.artifact.quote.readyToSave, false);
+  const merged = mergeQuoteAudit({ score: 100, passed: true, blocking: false, checks: [], issues: [], blockingIssues: [] }, review);
+  assert.equal(merged.passed, false);
+  assert.equal(merged.blocking, true);
+  assert.equal(merged.reviewer.verdict, "blocked");
+  assert.match(merged.issues.join("\n"), /Scarico e caldaia/i);
+  assert.match(buildQuoteReviewPrompt(review.response, merged), /BOZZA_STRUTTURATA/);
 });
 
 test("accepts only a structured quote as the final agent output", () => {

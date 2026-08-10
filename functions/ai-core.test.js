@@ -14,6 +14,39 @@ const {
   parseMediaReferences
 } = require("./ai-core");
 
+function releaseReadyQuote() {
+  return {
+    kind: "quote", documentType: "preventivo", title: "Installazione piano a induzione", documentSubtitle: "Preventivo definitivo",
+    client: "Cliente di prova", clientId: "", interventionId: "", address: "Via Roma 1, Milano", subject: "Installazione piano a induzione",
+    summary: "Intervento completo secondo le misure confermate.", currency: "EUR", revisionOf: "", revisionReason: "",
+    evidence: ["Misure confermate dal committente"], uncertainties: ["Colore finale da scegliere"],
+    decisionRationale: "La soluzione a induzione evita la nuova linea gas.", recommendedSolution: "Si raccomanda il piano a induzione.",
+    technicalAssessment: ["Potenza disponibile confermata"], workPhases: ["Preparazione", "Installazione", "Collaudo"],
+    materials: ["Materiali di consumo"], visualBriefs: [],
+    quote: {
+      lines: [
+        { description: "Preparazione area", quantity: 1, unit: "a corpo", unitPrice: 400, priceSource: "stima_ai", priceReference: "", confidence: "media", notes: "" },
+        { description: "Installazione e collaudo", quantity: 1, unit: "a corpo", unitPrice: 600, priceSource: "stima_ai", priceReference: "", confidence: "media", notes: "" }
+      ],
+      discountPct: 0, vatRate: 10, validityDays: 30,
+      paymentTerms: "50% del totale complessivo IVA inclusa all'accettazione; saldo a fine lavori",
+      notes: "Aliquota IVA confermata dal committente.", estimatedDuration: "7-10 giorni lavorativi",
+      includedWorks: ["Preparazione e installazione"], exclusions: ["Opere non descritte"],
+      options: [
+        { label: "A", title: "Piano a induzione", description: "Soluzione raccomandata a induzione", total: 1000, recommended: true, includedWorks: ["Installazione"], notes: "" },
+        { label: "B", title: "Soluzione economica", description: "Riduzione delle finiture", total: 850, recommended: false, includedWorks: ["Installazione essenziale"], notes: "" }
+      ],
+      pricingAnalysis: {
+        laborCost: 300, materialCost: 250, equipmentCost: 0, transportAndDisposalCost: 50, subcontractCost: 0,
+        overheadAndRiskCost: 100, contingencyCost: 50, estimatedDirectCost: 600, targetMarginPct: 25,
+        proposedNetPrice: 1000, rationale: ["Costi verificati"], verificationChecks: ["Somme ricontrollate"]
+      },
+      assumptions: [], missingInformation: [], readyToSave: true
+    },
+    report: { executiveSummary: "", observations: [], probableCauses: [], evidenceFindings: [], recommendedVerifications: [], interventionPriority: "media", recommendedWorks: [], safetyNotes: [], limitations: [], conclusions: "", missingInformation: [], readyToSave: false }
+  };
+}
+
 test("keeps work and personal instructions separate", () => {
   const work = buildInstructions({ mode: "work", displayName: "Klodian", businessContext: { sites: 2 } });
   const personal = buildInstructions({ mode: "personal", displayName: "Klodian" });
@@ -294,4 +327,61 @@ test("quality audit blocks a zero-price labor regression", () => {
   assert.match(audit.issues.join("\n"), /Controllo imponibile/);
   assert.match(audit.issues.join("\n"), /Copertura dei costi/);
   assert.match(audit.issues.join("\n"), /Alternative coerenti/);
+});
+
+test("quality audit approves a coherent release-ready quote", () => {
+  const audit = auditArtifact(releaseReadyQuote(), "Prepara il preventivo definitivo");
+  assert.equal(audit.passed, true);
+  assert.equal(audit.blocking, false);
+  assert.equal(audit.score, 100);
+});
+
+test("quality audit blocks a concatenated 710-day duration", () => {
+  const artifact = releaseReadyQuote();
+  artifact.quote.estimatedDuration = "710 giorni lavorativi";
+  const audit = auditArtifact(artifact, "Prepara il preventivo");
+  assert.equal(audit.passed, false);
+  assert.equal(audit.blocking, true);
+  assert.match(audit.blockingIssues.join("\n"), /Durata plausibile/);
+});
+
+test("quality audit blocks gas versus induction and provisional VAT contradictions", () => {
+  const artifact = releaseReadyQuote();
+  artifact.quote.options[0].title = "Piano cottura a gas";
+  artifact.quote.options[0].description = "Soluzione raccomandata con linea gas";
+  artifact.quote.options[0].includedWorks = ["Collegamento gas"];
+  artifact.quote.notes = "Aliquota IVA da verificare prima della fatturazione.";
+  const audit = auditArtifact(artifact, "Prepara il preventivo");
+  assert.equal(audit.passed, false);
+  assert.match(audit.blockingIssues.join("\n"), /Raccomandazione tecnica coerente/);
+  assert.match(audit.blockingIssues.join("\n"), /IVA coerente/);
+});
+
+test("quality audit requires Di.Co. for system changes", () => {
+  const artifact = releaseReadyQuote();
+  artifact.quote.lines[0].description = "Spostamento impianto idrico e scarico cucina";
+  artifact.workPhases = ["Spostamento impianto idrico", "Collegamento dello scarico", "Collaudo"];
+  artifact.quote.includedWorks = ["Modifica dell'impianto idrico e dello scarico"];
+  const audit = auditArtifact(artifact, "Prepara il preventivo");
+  assert.equal(audit.passed, false);
+  assert.match(audit.blockingIssues.join("\n"), /Conformità degli impianti/);
+});
+
+test("quality audit blocks a 50% payment that leaves VAT timing ambiguous", () => {
+  const artifact = releaseReadyQuote();
+  artifact.quote.paymentTerms = "Acconto 50% dell'imponibile all'accettazione; saldo a fine lavori";
+  const audit = auditArtifact(artifact, "Prepara il preventivo");
+  assert.equal(audit.passed, false);
+  assert.match(audit.blockingIssues.join("\n"), /Pagamento non ambiguo/);
+});
+
+test("quality audit blocks a full room conversion that excludes the core finishes", () => {
+  const artifact = releaseReadyQuote();
+  artifact.title = "Trasformazione locale ex cucina in camera da letto";
+  artifact.subject = artifact.title;
+  artifact.summary = "Trasformazione completa del locale in camera da letto.";
+  artifact.quote.exclusions = ["Tinteggiatura completa", "Nuova pavimentazione", "Rimozione delle piastrelle"];
+  const audit = auditArtifact(artifact, "Prepara il preventivo");
+  assert.equal(audit.passed, false);
+  assert.match(audit.blockingIssues.join("\n"), /Promessa e perimetro coerenti/);
 });
