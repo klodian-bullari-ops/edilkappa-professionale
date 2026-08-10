@@ -35,6 +35,7 @@
     sending: false,
     resetting: false,
     generatingVisual: "",
+    auditingPdf: "",
     attachments: [],
     taskType: "auto",
     modelMode: "auto",
@@ -90,6 +91,7 @@
     return ({
       archive: "Archivio gli allegati originali…",
       agent: "Agente EdilKappa Preventivi · analisi, prezzi e controllo della bozza…",
+      review: "Secondo revisore indipendente · coerenza tecnica, somme, IVA e dati mancanti…",
       analysis: "1/2 · Analisi tecnica, evidenze e incertezze…",
       compose: "2/2 · Compongo prezzi e documento EdilKappa…",
       retry: "La risposta si è interrotta: nuovo tentativo automatico con Sol…",
@@ -102,7 +104,7 @@
   function progressStepsHtml(stage) {
     const stages = ["archive", "analysis", "compose", "check", "completed"];
     const labels = ["Allegati", "Analisi", "Documento", "Controllo", "Pronto"];
-    const normalized = stage === "retry" || stage === "fallback" || stage === "agent" ? "compose" : stage;
+    const normalized = stage === "retry" || stage === "fallback" || stage === "agent" ? "compose" : stage === "review" ? "check" : stage;
     const active = Math.max(0, stages.indexOf(normalized));
     return `<div class="ekAiSteps">${labels.map((label, index) => `<span class="ekAiStep ${index < active ? "done" : index === active ? "active" : ""}">${label}</span>`).join("")}</div>`;
   }
@@ -271,6 +273,7 @@
     const quote = artifact.quote || {};
     const lines = Array.isArray(quote.lines) ? quote.lines : [];
     const issues = [];
+    if (quote.readyToSave !== true) issues.push("Il revisore non ha ancora dichiarato la bozza pronta al rilascio.");
     if (!lines.length) issues.push("Il preventivo non contiene lavorazioni.");
     lines.forEach((line, index) => {
       const label = `Riga ${index + 1} · ${line.description || "lavorazione"}`;
@@ -288,20 +291,48 @@
       pricing.contingencyCost
     ].reduce((sum, value) => sum + Number(value || 0), 0);
     if (fullCost > 0 && net + 0.02 < fullCost) issues.push(`Il prezzo di vendita (${euro(net)}) è inferiore al costo complessivo stimato (${euro(fullCost)}).`);
-    const recommended = (quote.options || []).find((option) => option.recommended);
+    const recommendedOptions = (quote.options || []).filter((option) => option.recommended);
+    const recommended = recommendedOptions[0];
     const economical = (quote.options || []).find((option) => /economic|risparm/i.test(`${option.label || ""} ${option.title || ""}`));
+    if ((quote.options || []).length && recommendedOptions.length !== 1) issues.push("Deve esserci una sola alternativa raccomandata.");
     if (recommended && Math.abs(Number(recommended.total || 0) - net) > 0.02) issues.push("L’alternativa raccomandata non coincide con l’imponibile principale.");
     if (recommended && economical && Number(economical.total || 0) >= Number(recommended.total || 0)) issues.push("L’alternativa economica non costa meno della soluzione raccomandata.");
     const address = String(destination?.client?.address || artifact.address || "").trim();
     if (!address || /da confermare|da definire/i.test(address)) issues.push("Manca l’indirizzo completo del cantiere.");
     const paymentTerms = String(quote.paymentTerms || "").trim();
     if (!paymentTerms || /da concordare|da confermare|da definire/i.test(paymentTerms)) issues.push("Mancano condizioni di pagamento definitive.");
+    if (/50\s*%[^.\n]{0,40}(?:dell['’]?\s*)?imponibile/i.test(paymentTerms) && !/iva|totale\s+complessivo/i.test(paymentTerms)) issues.push("L’acconto del 50% non specifica quando viene corrisposta l’IVA.");
+    const duration = String(quote.estimatedDuration || "").trim();
+    const excessiveDays = [...duration.matchAll(/\b(\d{1,5})\s*(?:giorn\w*|gg)\b/gi)].some((match) => Number(match[1]) > 365);
+    if (!duration || /da\s+(?:confermare|definire|verificare)/i.test(duration) || excessiveDays) issues.push("La durata stimata è mancante, provvisoria o non plausibile.");
     if (Number(quote.vatRate || 0) === 0 && (quote.missingInformation || []).some((item) => /\biva\b|aliquota/i.test(item))) issues.push("L’aliquota IVA è ancora da confermare.");
     return { passed: issues.length === 0, issues: Array.from(new Set(issues)), artifact, subtotal, net, fullCost };
   }
 
   function requireQuoteRelease(rawArtifact, destination = null) {
     const check = quoteReleaseCheck(rawArtifact, destination);
+    if (!check.passed) throw new Error(`Preventivo bloccato: ${check.issues.join(" ")}`);
+    return check.artifact;
+  }
+
+  function quoteMessageReleaseCheck(message, destination = null) {
+    const content = quoteReleaseCheck(message?.artifact, destination);
+    const issues = [...content.issues];
+    const quality = message?.qualityAudit;
+    if (quality?.passed !== true || quality?.blocking === true) {
+      issues.push("La revisione indipendente del contenuto non è stata superata.");
+    }
+    const pdfAudit = message?.pdfAudit;
+    if (pdfAudit?.status !== "passed" || pdfAudit?.passed !== true) {
+      issues.push(pdfAudit?.status === "failed"
+        ? "Il controllo visivo del PDF ha rilevato problemi di impaginazione o coerenza."
+        : "Il controllo visivo del PDF non è ancora completato.");
+    }
+    return { ...content, passed: issues.length === 0, issues: Array.from(new Set(issues)) };
+  }
+
+  function requireMessageQuoteRelease(message, destination = null) {
+    const check = quoteMessageReleaseCheck(message, destination);
     if (!check.passed) throw new Error(`Preventivo bloccato: ${check.issues.join(" ")}`);
     return check.artifact;
   }
@@ -354,22 +385,49 @@
     const missing = checkedArtifact.kind === "quote" ? checkedArtifact.quote?.missingInformation : checkedArtifact.report?.missingInformation;
     const message = artifactMessage(messageIndex);
     const quality = message?.qualityAudit;
+    const isQuote = checkedArtifact.kind === "quote";
+    const contentPassed = !isQuote || (quality?.passed === true && quality?.blocking !== true);
+    const pdfAudit = message?.pdfAudit;
+    const pdfPassed = !isQuote || (pdfAudit?.status === "passed" && pdfAudit?.passed === true);
+    const releaseReady = contentPassed && pdfPassed;
+    const releaseDisabled = isQuote && !releaseReady ? "disabled title=\"Completa prima i controlli automatici\"" : "";
     const qualityBadge = quality
-      ? `<span class="ekAiPriceSource ${quality.passed ? "" : "estimate"}">Controllo qualità ${Number(quality.score || 0)}/100</span>`
+      ? `<span class="ekAiPriceSource ${contentPassed ? "" : "missing"}">${contentPassed ? "Contenuto revisionato" : "Contenuto bloccato"} · ${Number(quality.score || 0)}/100</span>`
       : `<span class="ekAiPriceSource estimate">Da controllare</span>`;
-    const qualityWarnings = quality && !quality.passed && quality.issues?.length
-      ? `<div class="ekAiArtifactNotice"><b>Controlli ancora necessari:</b><br>${quality.issues.slice(0, 5).map(escapeHtml).join("<br>")}</div>`
+    const pdfBadge = isQuote
+      ? `<span class="ekAiPriceSource ${pdfPassed ? "" : pdfAudit?.status === "failed" || pdfAudit?.status === "error" ? "missing" : "estimate"}">${pdfPassed ? `PDF controllato · ${Number(pdfAudit.pagesReviewed || 0)} pag.` : pdfAudit?.status === "checking" ? "Controllo PDF in corso" : "PDF non approvato"}</span>`
       : "";
+    const qualityWarnings = quality && !quality.passed && quality.issues?.length
+      ? `<div class="ekAiArtifactNotice"><b>Controlli bloccanti:</b><br>${quality.issues.slice(0, 10).map(escapeHtml).join("<br>")}</div>`
+      : "";
+    const reviewerCorrections = quality?.reviewer?.corrections?.length
+      ? `<div class="ekAiArtifactNotice"><b>Correzioni applicate dal secondo revisore:</b><br>${quality.reviewer.corrections.slice(0, 10).map(escapeHtml).join("<br>")}</div>`
+      : "";
+    const reviewerWarnings = quality?.reviewer?.warnings?.length
+      ? `<div class="ekAiArtifactNotice"><b>Avvertenze non bloccanti:</b><br>${quality.reviewer.warnings.slice(0, 8).map(escapeHtml).join("<br>")}</div>`
+      : "";
+    const pdfAuditNotice = !isQuote ? "" : pdfPassed
+      ? `<div class="ekAiArtifactNotice"><b>Controllo visivo PDF superato:</b> ${escapeHtml(pdfAudit.summary || "tutte le pagine sono leggibili e correttamente impaginate.")}${pdfAudit.warnings?.length ? `<br>${pdfAudit.warnings.slice(0, 6).map(escapeHtml).join("<br>")}` : ""}</div>`
+      : pdfAudit?.status === "failed"
+        ? `<div class="ekAiArtifactNotice"><b>PDF bloccato:</b><br>${(pdfAudit.issues || []).slice(0, 10).map(escapeHtml).join("<br>") || escapeHtml(pdfAudit.summary || "Correggere l’impaginazione.")}</div>`
+        : pdfAudit?.status === "checking"
+          ? `<div class="ekAiArtifactNotice"><b>Controllo visivo in corso:</b> EdilKappa AI sta esaminando tutte le pagine del PDF già impaginato.</div>`
+          : `<div class="ekAiArtifactNotice"><b>Controllo PDF non completato:</b> ${escapeHtml(pdfAudit?.summary || (contentPassed ? "avvia o riprova il controllo visivo." : "prima va superata la revisione del contenuto."))}</div>`;
     const generatedIndexes = new Set((message?.media || []).filter((item) => item.generated).map((item) => Number(item.briefIndex)));
     const nextBrief = (checkedArtifact.visualBriefs || []).findIndex((_, index) => !generatedIndexes.has(index));
     const visualButton = nextBrief >= 0 ? `<button class="visual" onclick="edilkappaAiGenerateVisual(${messageIndex},${nextBrief})" ${state.generatingVisual ? "disabled" : ""}>${state.generatingVisual === checkedArtifact.id ? "Creo l’immagine…" : `Crea ${nextBrief === 0 ? "fotomontaggio / immagine" : "altra immagine"}`}</button>` : "";
-    const quoteDetails = checkedArtifact.kind === "quote" ? `<details class="ekAiQuoteDetails"><summary>Mostra analisi tecnica e controlli</summary>${quoteTechnicalDetailsHtml(checkedArtifact)}${visualBriefsHtml(checkedArtifact)}${qualityWarnings}</details><div class="ekAiQuoteApproval"><b>Il preventivo non viene salvato finché non premi “Conferma e salva”.</b> Puoi prima chiedere qualsiasi modifica.</div>` : `${visualBriefsHtml(checkedArtifact)}${qualityWarnings}`;
-    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${checkedArtifact.kind === "quote" ? "📋 Anteprima del preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div>${saved ? `<span class="ekAiPriceSource">Salvato</span>` : qualityBadge}</div><div class="ekAiArtifactBody">${detail}${quoteDetails}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})">${checkedArtifact.kind === "quote" ? "✓ Conferma e salva" : "Salva relazione PDF"}</button>`}${checkedArtifact.kind === "quote" && !saved ? `<button class="secondary" onclick="edilkappaAiRequestChange(${messageIndex})">✎ Chiedi una modifica</button>` : ""}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})">Scarica PDF</button>${checkedArtifact.kind === "quote" ? `<button class="secondary" onclick="edilkappaAiSharePdf(${messageIndex})">Condividi</button>` : `<button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>`}${visualButton}</div></div></section>`;
+    const pdfAuditButton = isQuote && contentPassed && !pdfPassed
+      ? `<button class="secondary" onclick="edilkappaAiAuditPdf(${messageIndex})" ${state.auditingPdf === checkedArtifact.id || pdfAudit?.status === "checking" ? "disabled" : ""}>${state.auditingPdf === checkedArtifact.id || pdfAudit?.status === "checking" ? "Controllo PDF…" : "Riprova controllo PDF"}</button>`
+      : "";
+    const quoteDetails = isQuote
+      ? `<details class="ekAiQuoteDetails"><summary>Mostra analisi tecnica e controlli</summary>${quoteTechnicalDetailsHtml(checkedArtifact)}${visualBriefsHtml(checkedArtifact)}${reviewerCorrections}${qualityWarnings}${reviewerWarnings}${pdfAuditNotice}</details><div class="ekAiQuoteApproval"><b>${releaseReady ? "I controlli automatici sono superati; resta obbligatoria la tua approvazione." : "Salvataggio, download e condivisione restano bloccati finché entrambi i controlli non sono superati."}</b> Puoi sempre chiedere una modifica.</div>`
+      : `${visualBriefsHtml(checkedArtifact)}${qualityWarnings}`;
+    return `<section class="ekAiArtifact"><div class="ekAiArtifactHead"><div><strong>${isQuote ? "📋 Anteprima del preventivo" : "📝 Bozza di relazione tecnica"}</strong><small>${escapeHtml(checkedArtifact.title || checkedArtifact.subject || "Documento EdilKappa")}${checkedArtifact.client ? ` · ${escapeHtml(checkedArtifact.client)}` : ""}</small></div><div>${saved ? `<span class="ekAiPriceSource">Salvato</span>` : qualityBadge}${pdfBadge}</div></div><div class="ekAiArtifactBody">${detail}${quoteDetails}${Array.isArray(missing) && missing.length ? `<div class="ekAiArtifactNotice"><b>Prima dell’invio al cliente:</b> controlla le informazioni evidenziate e tutti i prezzi stimati.</div>` : `<div class="ekAiArtifactNotice"><b>Controllo umano obbligatorio:</b> verifica comunque misure, lavorazioni, prezzi e condizioni prima dell’invio.</div>`}<div class="ekAiArtifactActions">${saved ? `<button class="saved" onclick="edilkappaAiOpenSaved(${messageIndex})">✓ Apri nel gestionale</button>` : `<button onclick="edilkappaAiSaveArtifact(${messageIndex})" ${isQuote ? releaseDisabled : ""}>${isQuote ? "✓ Conferma e salva" : "Salva relazione PDF"}</button>`}${isQuote && !saved ? `<button class="secondary" onclick="edilkappaAiRequestChange(${messageIndex})">✎ Chiedi una modifica</button>` : ""}<button class="secondary" onclick="edilkappaAiDownloadPdf(${messageIndex})" ${isQuote ? releaseDisabled : ""}>Scarica PDF</button>${isQuote ? `<button class="secondary" onclick="edilkappaAiSharePdf(${messageIndex})" ${releaseDisabled}>Condividi</button>` : `<button class="secondary" onclick="edilkappaAiDownloadWord(${messageIndex})">Scarica Word</button>`}${pdfAuditButton}${visualButton}</div></div></section>`;
   }
 
   function messageHtml(message, index) {
     const sources = (message.sources || []).map(sourceHtml).join("");
-    const model = message.role === "assistant" && message.modelLabel ? `<div class="ekAiMessageMeta">${message.engine === "agents_sdk" ? `Agente: ${escapeHtml(message.agentName || "EdilKappa Preventivi")} · ` : "Motore: "}${escapeHtml(message.modelLabel)}${message.reasoningEffort ? ` · ragionamento ${escapeHtml(message.reasoningEffort)}` : ""}${message.approvalRequired ? " · approvazione richiesta" : ""}</div>` : "";
+    const model = message.role === "assistant" && message.modelLabel ? `<div class="ekAiMessageMeta">${message.engine === "agents_sdk" ? `Agente: ${escapeHtml(message.agentName || "EdilKappa Preventivi")} · ` : "Motore: "}${escapeHtml(message.modelLabel)}${message.reviewerName ? ` · revisore: ${escapeHtml(message.reviewerName)}` : ""}${message.reviewFallbackUsed ? " · revisione recuperata automaticamente" : ""}${message.reasoningEffort ? ` · ragionamento ${escapeHtml(message.reasoningEffort)}` : ""}${message.approvalRequired ? " · approvazione richiesta" : ""}</div>` : "";
     const mainText = message.role === "assistant" && message.artifact?.kind === "quote" ? "" : `<div class="ekAiText">${escapeHtml(message.text)}</div>`;
     return `<div class="ekAiMessage ${message.role === "user" ? "user" : "assistant"}">${mainText}${model}${mediaHtml(message, index)}${sources ? `<div class="ekAiSources">${sources}</div>` : ""}${message.role === "assistant" ? artifactHtml(message.artifact, index) : ""}</div>`;
   }
@@ -495,6 +553,12 @@
       state.messages[requestedMode] = Array.isArray(result.messages) ? result.messages : [];
       state.loaded[requestedMode] = true;
       state.nextHistoryAttempt = 0;
+      const pendingPdfAudit = [...state.messages[requestedMode]].reverse().find((message) => message?.artifact?.kind === "quote"
+        && message?.qualityAudit?.passed === true
+        && message?.qualityAudit?.blocking !== true
+        && message?.qualityAudit?.reviewer
+        && message?.pdfAudit?.passed !== true);
+      if (pendingPdfAudit) setTimeout(() => auditQuotePdfMessage(pendingPdfAudit, requestedMode), 0);
     } catch (error) {
       state.error = error?.message || "Non riesco a caricare la memoria AI.";
     } finally {
@@ -1053,19 +1117,35 @@
 
   function pdfTextSection(doc, context, title, text, y) {
     if (!text) return y;
-    const lines = doc.splitTextToSize(String(text), 180);
-    y = ensureDocumentSpace(doc, context, y, 14);
+    const paragraphs = String(text).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    if (!paragraphs.length) return y;
+    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
+    doc.setFontSize(8.3);
+    const firstLines = doc.splitTextToSize(paragraphs[0], 180);
+    y = ensureDocumentSpace(doc, context, y, 10 + Math.min(40, firstLines.length * 3.9));
     doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(9.4);
     doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
     doc.text(String(title).toUpperCase(), 14, y);
     y += 5;
-    doc.setFont(EDILKAPPA_PDF_FONT, "normal");
-    doc.setFontSize(8.3);
-    lines.forEach((line) => {
-      y = ensureDocumentSpace(doc, context, y, 5);
-      doc.text(line, 14, y);
-      y += 3.9;
+    paragraphs.forEach((paragraph, paragraphIndex) => {
+      doc.setFont(EDILKAPPA_PDF_FONT, "normal");
+      doc.setFontSize(8.3);
+      doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
+      const lines = doc.splitTextToSize(paragraph, 180);
+      const paragraphHeight = lines.length * 3.9 + (paragraphIndex ? 1.4 : 0);
+      if (paragraphHeight < 220 && y + paragraphHeight > 274) y = newDocumentPage(doc, context);
+      if (paragraphIndex) y += 1.4;
+      lines.forEach((line) => {
+        y = ensureDocumentSpace(doc, context, y, 5);
+        // drawDocumentHeader lascia il font in grassetto: il corpo va sempre
+        // reimpostato dopo un eventuale salto pagina per conservare le misure.
+        doc.setFont(EDILKAPPA_PDF_FONT, "normal");
+        doc.setFontSize(8.3);
+        doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
+        doc.text(line, 14, y);
+        y += 3.9;
+      });
     });
     return y + 2.5;
   }
@@ -1096,6 +1176,8 @@
       styles: { font: EDILKAPPA_PDF_FONT, fontSize: 7.7, cellPadding: 2.1, lineColor: [212, 214, 216], lineWidth: 0.18, textColor: EDILKAPPA_DOCUMENT.dark, overflow: "linebreak" },
       headStyles: { fillColor: EDILKAPPA_DOCUMENT.dark, textColor: [255, 255, 255], fontStyle: "bold" },
       alternateRowStyles: { fillColor: [249, 249, 249] },
+      rowPageBreak: "avoid",
+      showHead: "everyPage",
       theme: "grid",
       ...options
     });
@@ -1624,10 +1706,47 @@
     }
   };
 
+  async function auditQuotePdfMessage(message, requestedMode = "work") {
+    const artifact = message?.artifact;
+    if (artifact?.kind !== "quote" || !artifact.id || message?.qualityAudit?.passed !== true || message?.qualityAudit?.blocking === true) return;
+    if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.aiRequest || state.auditingPdf === artifact.id) return;
+    state.auditingPdf = artifact.id;
+    message.pdfAudit = { status: "checking", passed: false, pagesReviewed: 0, summary: "Controllo visivo del PDF in corso…", issues: [], warnings: [] };
+    rerender();
+    try {
+      const database = window.EdilKappaLocal?.getDB?.() || {};
+      const client = (database.condomini || []).find((item) => item.id === artifact.clientId || item.name === artifact.client)
+        || { name: artifact.client || "Da assegnare", address: artifact.address || "" };
+      const destination = { client, interventionId: artifact.interventionId || "", title: artifact.subject || artifact.title || "Preventivo" };
+      const blob = await artifactPdfBlob(artifact, destination, await previewsForReport(message));
+      const result = await window.EdilKappaCloud.aiRequest({
+        action: "audit_quote_pdf",
+        mode: requestedMode,
+        conversationId: state.activeConversation[requestedMode],
+        artifactId: artifact.id,
+        pdfDataUrl: await fileDataUrl(blob)
+      });
+      if (!result?.pdfAudit) throw new Error("Il revisore PDF non ha restituito il controllo.");
+      message.pdfAudit = result.pdfAudit;
+    } catch (error) {
+      message.pdfAudit = {
+        status: "error",
+        passed: false,
+        pagesReviewed: 0,
+        summary: error?.message || "Il controllo visivo del PDF non è riuscito.",
+        issues: [],
+        warnings: []
+      };
+    } finally {
+      if (state.auditingPdf === artifact.id) state.auditingPdf = "";
+      rerender();
+    }
+  }
+
   function addCompletedAiResult(result, requestedMode, mediaReferences, requestAttachments) {
     const artifactId = result.artifact?.id;
     if (artifactId && state.messages[requestedMode].some((item) => item.artifact?.id === artifactId)) return;
-    state.messages[requestedMode].push({
+    const completedMessage = {
       role: "assistant",
       text: result.answer,
       sources: result.sources || [],
@@ -1639,11 +1758,15 @@
       fallbackUsed: result.fallbackUsed === true,
       engine: result.engine || "",
       agentName: result.agentName || "",
+      reviewerName: result.reviewerName || "",
+      reviewFallbackUsed: result.reviewFallbackUsed === true,
       approvalRequired: result.approvalRequired === true,
       qualityAudit: result.qualityAudit || null,
+      pdfAudit: result.pdfAudit || null,
       previews: (requestAttachments || []).filter((item) => item.mimeType?.startsWith("image/")).slice(0, 6),
       at: Date.now()
-    });
+    };
+    state.messages[requestedMode].push(completedMessage);
     if (result.artifact?.kind === "quote") {
       window.EdilKappaCompletion?.addActivity?.({
         id: `quote-ready-${result.artifact.id || Date.now()}`,
@@ -1653,6 +1776,9 @@
         targetType: "ai",
         targetId: result.artifact.id || ""
       });
+      if (completedMessage.qualityAudit?.passed === true && completedMessage.qualityAudit?.blocking !== true && completedMessage.pdfAudit?.passed !== true) {
+        setTimeout(() => auditQuotePdfMessage(completedMessage, requestedMode), 0);
+      }
     }
     state.loaded[requestedMode] = true;
   }
@@ -1836,10 +1962,22 @@
     const target = select.form?.querySelector('[name="interventionId"]');
     if (target) target.innerHTML = interventionOptions(select.value, "");
   };
+  window.edilkappaAiAuditPdf = (messageIndex) => {
+    const message = artifactMessage(messageIndex);
+    if (message?.artifact?.kind !== "quote") return;
+    auditQuotePdfMessage(message, state.mode);
+  };
   window.edilkappaAiSaveArtifact = (messageIndex) => {
     const message = artifactMessage(messageIndex);
     const artifact = message?.artifact;
     if (!artifact || !["quote", "report"].includes(artifact.kind)) return;
+    if (artifact.kind === "quote") {
+      try {
+        requireMessageQuoteRelease(message);
+      } catch (error) {
+        return alert(error?.message || "Il preventivo non ha superato tutti i controlli.");
+      }
+    }
     const existing = artifactSavedItem(artifact);
     if (existing) return window.edilkappaAiOpenSaved(messageIndex);
     const database = window.EdilKappaLocal?.getDB?.() || {};
@@ -1899,6 +2037,7 @@
       const database = window.EdilKappaLocal?.getDB?.() || {};
       const client = (database.condomini || []).find((item) => item.id === artifact.clientId || item.name === artifact.client) || { name: artifact.client || "Da assegnare", address: artifact.address || "" };
       const destination = { client, interventionId: artifact.interventionId || "", title: artifact.subject || artifact.title || documentTypeLabel(artifact) };
+      if (artifact.kind === "quote") requireMessageQuoteRelease(message, destination);
       const blob = await artifactPdfBlob(artifact, destination, await previewsForReport(message));
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -1924,6 +2063,7 @@
       const database = window.EdilKappaLocal?.getDB?.() || {};
       const client = (database.condomini || []).find((item) => item.id === artifact.clientId || item.name === artifact.client) || { name: artifact.client || "Da assegnare", address: artifact.address || "" };
       const destination = { client, interventionId: artifact.interventionId || "", title: artifact.subject || artifact.title || "Preventivo" };
+      requireMessageQuoteRelease(message, destination);
       const blob = await artifactPdfBlob(artifact, destination, await previewsForReport(message));
       const fileName = `${safeName(artifact.title || artifact.subject, "Preventivo")}.pdf`;
       const file = new File([blob], fileName, { type: "application/pdf" });
@@ -1965,10 +2105,11 @@
     }
   };
   window.edilkappaAiDownloadWord = async (messageIndex) => {
-    const artifact = artifactMessage(messageIndex)?.artifact;
+    const message = artifactMessage(messageIndex);
+    const artifact = message?.artifact;
     if (!["quote", "report"].includes(artifact?.kind)) return;
     try {
-      await downloadArtifactWord(artifact.kind === "quote" ? requireQuoteRelease(artifact) : artifact);
+      await downloadArtifactWord(artifact.kind === "quote" ? requireMessageQuoteRelease(message) : artifact);
     } catch (error) {
       state.error = error?.message || "Non riesco a generare il documento Word.";
       rerender();
@@ -2043,7 +2184,10 @@
     window.EdilKappaAiTest = {
       artifactPdfBlob,
       customerFacingValues,
+      pdfTextSection,
       pdfPreviewFromCloud,
+      quoteMessageReleaseCheck,
+      runDocumentTable,
       scenarioIncludedWorks,
       setDocumentLogoDataUrl(value) { documentLogoDataUrl = String(value || ""); }
     };

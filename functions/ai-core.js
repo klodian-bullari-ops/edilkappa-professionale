@@ -191,16 +191,82 @@ function safeNumber(value, maximum = 100000000) {
   return Math.max(0, Math.min(maximum, number));
 }
 
+function quoteAuditText(artifact) {
+  const quote = artifact?.quote || {};
+  return [
+    artifact?.title,
+    artifact?.documentSubtitle,
+    artifact?.subject,
+    artifact?.summary,
+    artifact?.recommendedSolution,
+    artifact?.decisionRationale,
+    ...(artifact?.technicalAssessment || []),
+    ...(artifact?.workPhases || []),
+    ...(artifact?.materials || []),
+    ...(artifact?.uncertainties || []),
+    ...(quote.lines || []).flatMap((line) => [line.description, line.notes]),
+    ...(quote.includedWorks || []),
+    ...(quote.exclusions || []),
+    ...(quote.assumptions || []),
+    ...(quote.missingInformation || []),
+    quote.paymentTerms,
+    quote.notes
+  ].filter(Boolean).join("\n");
+}
+
+function durationIsPlausible(value, readyToSave) {
+  const duration = cleanText(value, 500);
+  if (!duration) return false;
+  if (readyToSave && /da\s+(?:confermare|definire|verificare)|non\s+definit/i.test(duration)) return false;
+  const limits = [
+    { pattern: /\b(\d{1,5})\s*(?:giorn\w*|gg)\b/gi, maximum: 365 },
+    { pattern: /\b(\d{1,4})\s*settiman\w*\b/gi, maximum: 104 },
+    { pattern: /\b(\d{1,4})\s*mes\w*\b/gi, maximum: 60 }
+  ];
+  return limits.every(({ pattern, maximum }) => {
+    const values = [...duration.matchAll(pattern)].map((match) => Number(match[1]));
+    return values.every((number) => number <= maximum);
+  });
+}
+
+function recommendationFuel(value) {
+  const text = cleanText(value, 12000).toLowerCase();
+  const induction = /\binduzion\w*\b/.test(text);
+  const gas = /\bgas\b|piano\s+cottura\s+a\s+gas/.test(text);
+  if (induction === gas) return "";
+  return induction ? "induzione" : "gas";
+}
+
+function quoteModifiesFixedSystems(artifact) {
+  const quote = artifact?.quote || {};
+  const scope = [
+    ...(artifact?.workPhases || []),
+    ...(quote.lines || []).flatMap((line) => [line.description, line.notes]),
+    ...(quote.includedWorks || [])
+  ].filter(Boolean).join("\n");
+  const action = "(?:spost|modific|prolung|realizz|rifac|nuov|adegu|colleg|install|allacci)";
+  const system = "(?:impiant|linea\\s+elettric|presa|scaric|tubaz|gas|idric|idraul|acqua|sanitari)";
+  return new RegExp(`${action}[^.\\n]{0,120}${system}|${system}[^.\\n]{0,120}${action}`, "i").test(scope);
+}
+
+function hasDeclarationOfConformity(value) {
+  return /dichiarazione\s+di\s+conformit|\bdi\.\s*co\.?\b|\bdico\b|d\.?m\.?\s*37\s*\/?\s*0?8/i.test(value);
+}
+
 function auditArtifact(value, requestMessage = "") {
   const artifact = normalizeArtifact(value);
   const checks = [];
   const issues = [];
-  const addCheck = (label, passed, detail) => {
-    checks.push({ label, passed, detail: cleanText(detail, 500) });
-    if (!passed) issues.push(`${label}: ${cleanText(detail, 500)}`);
+  const blockingIssues = [];
+  const addCheck = (label, passed, detail, options = {}) => {
+    const normalizedDetail = cleanText(detail, 500);
+    const blocking = !passed && options.blocking === true;
+    checks.push({ label, passed, detail: normalizedDetail, blocking });
+    if (!passed) issues.push(`${label}: ${normalizedDetail}`);
+    if (blocking) blockingIssues.push(`${label}: ${normalizedDetail}`);
   };
   if (!artifact || !["quote", "report"].includes(artifact.kind)) {
-    return { score: 100, passed: true, blocking: false, checks, issues };
+    return { score: 100, passed: true, blocking: false, checks, issues, blockingIssues };
   }
 
   addCheck("Identificazione del lavoro", Boolean(artifact.subject && artifact.summary), "oggetto e sintesi devono essere presenti");
@@ -210,6 +276,7 @@ function auditArtifact(value, requestMessage = "") {
 
   if (artifact.kind === "quote") {
     const quote = artifact.quote;
+    const completeText = quoteAuditText(artifact);
     const subtotal = quote.lines.reduce((sum, line) => sum + safeNumber(line.quantity) * safeNumber(line.unitPrice), 0);
     const net = subtotal * (1 - safeNumber(quote.discountPct, 100) / 100);
     const proposed = safeNumber(quote.pricingAnalysis.proposedNetPrice);
@@ -229,12 +296,40 @@ function auditArtifact(value, requestMessage = "") {
     addCheck("Copertura dei costi", fullCost <= 0 || net + 0.02 >= fullCost, `prezzo netto ${net.toFixed(2)}; costo complessivo ${fullCost.toFixed(2)}`);
     addCheck("Perimetro contrattuale", quote.includedWorks.length > 0 && quote.exclusions.length > 0, "indicare opere comprese ed escluse");
     addCheck("Condizioni commerciali", Boolean(quote.paymentTerms && quote.estimatedDuration), "indicare pagamento e durata stimata");
+    addCheck("Durata plausibile", durationIsPlausible(quote.estimatedDuration, quote.readyToSave), `durata indicata: ${quote.estimatedDuration || "mancante"}; usare intervalli espliciti come 7-10 giorni`, { blocking: true });
+    addCheck("Bozza pronta al rilascio", quote.readyToSave === true, "il preventivo resta bloccato finché i dati decisivi non sono confermati", { blocking: true });
     addCheck("Dati da confermare", quote.missingInformation.length > 0 || quote.lines.every((line) => line.confidence !== "bassa"), "le stime a bassa affidabilità richiedono verifiche esplicite");
-    const recommended = quote.options.find((option) => option.recommended);
+    const recommendedOptions = quote.options.filter((option) => option.recommended);
+    const recommended = recommendedOptions[0];
     const economical = quote.options.find((option) => /economic|risparm/i.test(`${option.label} ${option.title}`));
+    addCheck("Una sola soluzione raccomandata", quote.options.length === 0 || recommendedOptions.length === 1, `${recommendedOptions.length} alternative risultano raccomandate; quando esistono scenari deve essercene esattamente una`, { blocking: true });
     addCheck("Alternative coerenti", (!recommended || Math.abs(recommended.total - net) <= Math.max(1, net * 0.005)) && (!recommended || !economical || economical.total < recommended.total), "la raccomandata deve coincidere con l'imponibile e l'economica deve costare meno");
+    const solutionFuel = recommendationFuel(artifact.recommendedSolution);
+    const optionFuel = recommendationFuel(recommended ? `${recommended.label}\n${recommended.title}\n${recommended.description}\n${recommended.includedWorks.join("\n")}\n${recommended.notes}` : "");
+    addCheck("Raccomandazione tecnica coerente", !solutionFuel || !optionFuel || solutionFuel === optionFuel, `la soluzione tecnica indica ${solutionFuel || "nessuna alimentazione univoca"}, mentre l'alternativa marcata come raccomandata indica ${optionFuel || "nessuna alimentazione univoca"}`, { blocking: true });
+
+    const pendingText = [...artifact.uncertainties, ...quote.assumptions, ...quote.missingInformation, quote.notes].filter(Boolean).join("\n");
+    const vatPending = /(?:\biva\b|aliquot\w*)[^.\n]{0,70}(?:da\s+(?:verificare|confermare|definire|valutare)|non\s+definit)|(?:verificare|confermare|definire|valutare)[^.\n]{0,70}(?:\biva\b|aliquot\w*)/i.test(pendingText);
+    addCheck("IVA coerente", !(quote.vatRate > 0 && vatPending), `aliquota ${quote.vatRate}% indicata mentre il testo la dichiara ancora da verificare`, { blocking: true });
+
+    const decisiveMissing = [...artifact.uncertainties, ...quote.missingInformation].some((item) => /misur|dimension|quantit|scaric|gas|caldaia|cappa|fattibil|access|scala|trabattell|piattaforma|ponteggi|urban|catastal|agibil|abitabil|cila|scia|permess|titolo\s+edilizio|potenza\s+elettric|forometr/i.test(item));
+    addCheck("Dati decisivi risolti", !quote.readyToSave || !decisiveMissing, "la bozza non può essere pronta se restano da verificare misure, fattibilità, impianti, accessi o requisiti urbanistici", { blocking: true });
+
+    const modifiesSystems = quoteModifiesFixedSystems(artifact);
+    addCheck("Conformità degli impianti", !modifiesSystems || hasDeclarationOfConformity(completeText), "se vengono modificati impianti fissi, indicare espressamente la Dichiarazione di Conformità (Di.Co.) prevista o la relativa esclusione motivata", { blocking: true });
+
+    const promisedConversion = /(?:trasform|convert|destin)[^.\n]{0,100}(?:camera|locale\s+abitabile)|camera\s+da\s+letto/i.test([artifact.title, artifact.subject, artifact.summary, artifact.recommendedSolution].filter(Boolean).join("\n"));
+    const finishExclusions = [
+      quote.exclusions.some((item) => /tinteggiatur\w*\s+complet|pittur\w*\s+complet/i.test(item)),
+      quote.exclusions.some((item) => /paviment|battiscop/i.test(item)),
+      quote.exclusions.some((item) => /piastrell|rivestiment/i.test(item))
+    ].filter(Boolean).length;
+    addCheck("Promessa e perimetro coerenti", !promisedConversion || finishExclusions < 2, "il titolo promette la trasformazione del locale ma più finiture essenziali risultano escluse; riformulare come ripristino parziale oppure includere le opere", { blocking: true });
+
+    const ambiguousPayment = /50\s*%[^.\n]{0,40}(?:dell['’]?\s*)?imponibile/i.test(quote.paymentTerms) && !/iva|totale\s+complessivo/i.test(quote.paymentTerms);
+    addCheck("Pagamento non ambiguo", !ambiguousPayment, "specificare se l'acconto è calcolato sull'imponibile e quando viene corrisposta l'IVA", { blocking: true });
     if (/iva.{0,30}da\s+definire/i.test(cleanText(requestMessage, 8000))) {
-      addCheck("IVA richiesta da definire", quote.vatRate === 0 && /iva.{0,40}(definire|fattur)/i.test(quote.notes), "non applicare un'aliquota provvisoria quando il titolare chiede IVA da definire");
+      addCheck("IVA richiesta da definire", quote.vatRate === 0 && /iva.{0,40}(definire|fattur)/i.test(quote.notes), "non applicare un'aliquota provvisoria quando il titolare chiede IVA da definire", { blocking: true });
     }
     if (/50\s*%.{0,40}(accett|acconto)/i.test(cleanText(requestMessage, 8000))) {
       addCheck("Pagamento richiesto", /50\s*%/.test(quote.paymentTerms), "riportare il pagamento 50% richiesto dal titolare");
@@ -249,7 +344,8 @@ function auditArtifact(value, requestMessage = "") {
 
   const failed = checks.filter((check) => !check.passed).length;
   const score = Math.max(0, Math.round((checks.length - failed) / Math.max(1, checks.length) * 100));
-  return { score, passed: score >= 90, blocking: score < 75, checks, issues };
+  const blocking = blockingIssues.length > 0 || score < 75;
+  return { score, passed: score >= 90 && !blocking, blocking, checks, issues, blockingIssues };
 }
 
 function parseAttachments(value) {

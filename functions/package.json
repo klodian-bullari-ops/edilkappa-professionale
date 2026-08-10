@@ -7,7 +7,7 @@
     "node": "22"
   },
   "scripts": {
-    "check": "node --check index.js && node --check ai-core.js && node --check ai-job-state.js && node --check quote-agent.js && node --check operations-core.js && node --check operations-agent.js && node --check danea-outlook.js && node --check ../operations-center.js && node --check ../edilkappa-ai.js && node --check ../edilkappa-ai-route.js && node --check ../danea-integration.js",
+    "check": "node --check index.js && node --check ai-core.js && node --check ai-job-state.js && node --check quote-agent.js && node --check pdf-audit.js && node --check operations-core.js && node --check operations-agent.js && node --check danea-outlook.js && node --check ../operations-center.js && node --check ../edilkappa-ai.js && node --check ../edilkappa-ai-route.js && node --check ../danea-integration.js",
     "test": "node --test"
   },
   "dependencies": {
