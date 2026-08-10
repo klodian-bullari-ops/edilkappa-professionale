@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v63-memoria-ai-menu-iniziale`;
+const CACHE = `${CACHE_PREFIX}v64-agenti-operativi`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -20,6 +20,7 @@ const APP_SHELL = [
   "./hours-closeout.js",
   "./attendance-center.js",
   "./controlled-learning.js",
+  "./operations-center.js",
   "./edilkappa-ai.js",
   "./edilkappa-ai-route.js",
   "./firebase-cloud.js",

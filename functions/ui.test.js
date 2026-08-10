@@ -138,3 +138,22 @@ test("loads the final AI route guard after the AI interface", () => {
   assert.match(routeSource, /view === "ai"/);
   assert.match(routeSource, /window\.edilkappaAiView/);
 });
+
+test("loads the central operations agents and keeps every action under confirmation", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const serviceWorker = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+  const center = fs.readFileSync(path.join(__dirname, "..", "operations-center.js"), "utf8");
+  const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
+  const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
+  assert.match(html, /operations-center\.js\?v=1/);
+  assert.match(serviceWorker, /v64-agenti-operativi/);
+  assert.match(serviceWorker, /"\.\/operations-center\.js"/);
+  assert.match(center, /Centro operativo EdilKappa/);
+  assert.match(center, /Non inviata: serve la tua conferma/);
+  assert.match(center, /Guadagno reale/);
+  assert.match(cloud, /callEdilKappaOperations/);
+  assert.match(cloud, /operationsRequest/);
+  assert.match(backend, /generateMorningOperationsBriefing/);
+  assert.match(backend, /schedule:\s*"0 7 \* \* 1-6"/);
+  assert.match(backend, /action !== "refresh"/);
+});

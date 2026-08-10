@@ -60,6 +60,7 @@ const firestore = getFirestore(app, 'edilkappa');
 const storage = getStorage(app);
 const functions = getFunctions(app, 'europe-west8');
 const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 610000 });
+const callEdilKappaOperations = httpsCallable(functions, 'edilkappaOperations', { timeout: 550000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -152,6 +153,10 @@ const api = {
   syncNow,
   async aiRequest(payload) {
     const response = await callEdilKappaAi(payload);
+    return response.data;
+  },
+  async operationsRequest(payload) {
+    const response = await callEdilKappaOperations(payload);
     return response.data;
   },
   restrictView(next) {
@@ -834,262 +839,346 @@ function startDataListeners() {
         scheduleCloudUi({ remoteName: 'teams', localName: 'teams', count: database.teams.length });
       } finally { settleInitialTeamSnapshot(); }
     }, (error) => {
-      settleInitialTeamSnapshot();
-      console.error('Sincronizzazione squadra:', error);
-      setSyncState('Errore sync', '#ad2a2a', errorText(error));
-    }));
-    finishInitialHydrationRegistration();
-    return;
-  }
-  const clientIds = Array.from(new Set(profile.clientIds || [])).slice(0, 10);
-  if (!clientIds.length) {
-    finishInitialHydrationRegistration();
-    return;
-  }
-  const chunks = [];
-  for (let index = 0; index < clientIds.length; index += 10) chunks.push(clientIds.slice(index, index + 10));
-  clientCollections.forEach((remoteName) => chunks.forEach((ids) => listenTo(remoteName, [where('orgId', '==', ORG_ID), where('clientId', 'in', ids)])));
-  finishInitialHydrationRegistration();
-}
+      settleInitialTeamSnº×Mm¢G§²ÚîÆ­yÛ	Ôš\İ]\˜^š[Û™IË	Ô[^šXHÜ›Û™HHÛÛ›ÛÈ]ÉË	Ô[^šXHÜšYÛYKŞ™]HHÛXš[šIË	ÕšY[Ú\Ü^š[Û™H›Û™IË	Õ\™Ù[˜I×NÛ[Ù[
+YÉÓ[ÙYšXØHÛÜ˜[[ÙÛÉÎ‰Ó[İ›ÈÛÜ˜[[ÙÛÉË]ˆÛ\ÜÏH™›Ü›QÜšY‰ÙšY[
+	Ñ]IË	Ù]IË	Ù]IË][K™]J_IÙšY[
+	ÓÜ˜IË	İ[YIË	İ[YIË][K[YJ_O]ˆÛ\ÜÏH™šY[X™[•\È[\™[ÏÛX™[Ù[Xİ˜[YOH\H‰ÜÙ[XİÜ[ÛœÊ\\Ë][K\J_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[ÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[”šXÛÜ™[Y[ÏÛX™[Ù[Xİ˜[YOHœ™[Z[™\ˆÜ[Ûˆ˜[YOHŒMHˆ	Ôİš[™Ê][Kœ™[Z[™\ŠOOOIÌMIÏÉÜÙ[XİY	Î‰ÉßOŒMHZ[]Hš[XOÛÜ[ÛÜ[Ûˆ˜[YOHŒÌˆ	Ôİš[™Ê][Kœ™[Z[™\ŠOOOIÌÌ	ÏÉÜÙ[XİY	Î‰ÉßOŒÌZ[]Hš[XOÛÜ[ÛÜ[Ûˆ˜[YOHŒˆ	Ôİš[™Ê][Kœ™[Z[™\ŸŒ
+OOOIÍŒ	ÏÉÜÙ[XİY	Î‰ÉßOŒHÜ˜Hš[XOÛÜ[ÛÜ[Ûˆ˜[YOHŒLŒˆ	Ôİš[™Ê][Kœ™[Z[™\ŠOOOIÌLŒ	ÏÉÜÙ[XİY	Î‰ÉßOŒˆÜ™Hš[XOÛÜ[ÛÜ[Ûˆ˜[YOHŒMˆ	Ôİš[™Ê][Kœ™[Z[™\ŠOOOIÌM	ÏÉÜÙ[XİY	Î‰ÉßOŒHÚ[Ü››Èš[XOÛÜ[ÛÜÙ[XİÙ]‰ÙšY[
+	Ò[™\š^›ÉË	ØY™\ÜÉË	İ^	Ë][K˜Y™\ÜËYJ_O]ˆÛ\ÜÏH™šY[[X™[”›Ø›[XHÈšXÚY\İOÛX™[^\™XH˜[YOHœ›Ø›[Hˆ™\]Z\™Y‰Ù\ØÊ][Kœ›Ø›[J_Oİ^\™XOÙ]Ù]˜OØÛÛœİ]OSØš™Xİ™œ›ÛQ[šY\ÊŠNÚYŠY
+SØš™Xİ˜\ÜÚYÛŠ][K]JNÙ[ÙH‹š[œÜXİ[ÛœËœ\Ú
+ÚYZY
+	ÜÉÊK‹‹™]Kİ]\Î‰ÑH™]™[]˜\™IßJ_J_B™[˜İ[ÛˆÜ[”Ú]JY
+^ØÛÛœİ][OY‹œÚ]\Ë™š[™
+OšYOOZY
+_İ]N‰ÉËÛY[‰ÉËY™\ÜÎ‰ÉËX[RYÎ•ÓÔ’ÑT”ÖÌOËšYÖÕÓÔ’ÑT”ÖÌKšYN–×KÛÜšÙ\•ÓÔ’ÑT”ÖÌOËšY	ÉËİ\›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+K˜[YNŒÛÜİŒİ]\Î‰ÔX[šYšXØ]ÉË›ÙÜ™\ÜÎŒNÛ[Ù[
+YÉÓ[ÙYšXØHØ[Y\™IÎ‰Ó[İ›ÈØ[Y\™IË]ˆÛ\ÜÏH™›Ü›QÜšY‰ÙšY[
+	Õ]ÛÈ[\™[ÉË	İ]IË	İ^	Ë][K]J_O]ˆÛ\ÜÏH™šY[X™[ÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]‰ÙšY[
+	Ò[™\š^›ÉË	ØY™\ÜÉË	İ^	Ë][K˜Y™\ÜËYJ_IİX[PÚXÚÛ\İ
+][J_IÙšY[
+	Ñ]H[š^š[ÉË	Üİ\	Ë	Ù]IË][Kœİ\
+_IÙšY[
+	Õ˜[Ü™H]›Ü›È8 «	Ë	İ˜[YIË	Û[X™\‰Ë][K˜[YJ_IÙšY[
+	ĞÛÜİH™]š\İH8 «	Ë	ØÛÜİ	Ë	Û[X™\‰Ë][K˜ÛÜİ
+_O]ˆÛ\ÜÏH™šY[X™[”İ]ÏÛX™[Ù[Xİ˜[YOHœİ]\È‰ÜÙ[XİÜ[ÛœÊÉÔX[šYšXØ]ÉË	Ò[ˆÛÜœÛÉË	ĞÛÛ\]]É×K][Kœİ]\Ê_OÜÙ[XİÙ]Ù]˜OØÛÛœİX[RYÏY›Ü›UX[RYÊŠK]OSØš™Xİ™œ›ÛQ[šY\ÊŠNÙ[]H]KX[RYÎÙ]K˜[YOS[X™\Š]K˜[YJNÙ]K˜ÛÜİS[X™\Š]K˜ÛÜİ
+NÚYŠY
+^ÓØš™Xİ˜\ÜÚYÛŠ][K]JNØ\TÚ]UX[\Ê][KX[RYÊ_Y[Ù^ØÛÛœİÜ™X]Y^ÚYZY
+	Û	ÊKÛÙNZY
+	ÑRÉÊK‹‹™]K›ÙÜ™\ÜÎŒNØ\TÚ]UX[\ÊÜ™X]YX[RYÊNÙ‹œÚ]\Ëœ\Ú
+Ü™X]Y
+__J_B™[˜İ[ÛˆÜ[”][İJY
+^ØÛÛœİ][OY‹œ][İ\Ë™š[™
+OšYOOZY
+_ØÛÙN‰Ô‘U‹LŒ‹IÊÔİš[™Ê‹œ][İ\Ë›[™İ
+ÌJKœYİ\
+Ë	Ì	ÊKÛY[‰ÉËİXš™Xİ‰ÉË™]Œ]N›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+Kİ]\Î‰Ğ›Ş˜IßNÛ[Ù[
+YÉÓ[ÙYšXØH™]™[]›ÉÎ‰Ó[İ›È™]™[]›ÉË]ˆÛ\ÜÏH™›Ü›QÜšY‰ÙšY[
+	Ó[Y\›ÉË	ØÛÙIË	İ^	Ë][K˜ÛÙJ_O]ˆÛ\ÜÏH™šY[X™[ÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]‰ÙšY[
+	ÓÙÙÙ]ÉË	ÜİXš™Xİ	Ë	İ^	Ë][KœİXš™XİYJ_IÙšY[
+	Ò[\ÜÈ™]È8 «	Ë	Û™]	Ë	Û[X™\‰Ë][K›™]
+_IÙšY[
+	Ñ]IË	Ù]IË	Ù]IË][K™]J_O]ˆÛ\ÜÏH™šY[X™[”İ]ÏÛX™[Ù[Xİ˜[YOHœİ]\È‰ÜÙ[XİÜ[ÛœÊÉĞ›Ş˜IË	Ò[šX]ÉË	Ò[ˆ]\ØIË	ĞXØÙ]]ÉË	ÔšYš]]]É×K][Kœİ]\Ê_OÜÙ[XİÙ]Ù]˜OØÛÛœİ]OSØš™Xİ™œ›ÛQ[šY\ÊŠNÙ]K›™]S[X™\Š]K›™]
+NÚYŠY
+SØš™Xİ˜\ÜÚYÛŠ][K]JNÙ[ÙH‹œ][İ\Ëœ\Ú
+ÚYZY
+	Ü	ÊK‹‹™]_J_J_B™[˜İ[ÛˆÜ[”•\ØY
 
-function canPush(remoteName) {
-  if (profile?.role === 'owner' || profile?.role === 'office') return true;
-  return profile?.role === 'worker' && workerCollections.has(remoteName) && remoteName !== 'teams';
-}
+^Û[Ù[
+	ĞØ\šXØH™]™[]›È‰Ë]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[[X™[‘š[HÛX™[[œ]˜[YOHœˆˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œˆˆ™\]Z\™YÛX[’[Øİ[Y[ÈšY[™HÛÛœÙ\˜]È™[8 &X\˜Ú]š[ÈÛİY›İ]ËÜÛX[Ù]‰ÙšY[
+	Ó[Y\›È™]™[]›ÉË	ØÛÙIË	İ^	Ë	Ô‘U‹LŒ‹IÊÔİš[™Ê‹œ][İ\Ë›[™İ
+ÌJKœYİ\
+Ë	Ì	ÊJ_O]ˆÛ\ÜÏH™šY[X™[ÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ
+_OÜÙ[XİÙ]‰ÙšY[
+	ÓÙÙÙ]ÉË	ÜİXš™Xİ	Ë	İ^	Ë	Ô™]™[]›ÈØ\šXØ]ÉËYJ_IÙšY[
+	Ò[\ÜÈ™]È8 «
+˜XÛÛ]]›ÊIË	Û™]	Ë	Û[X™\‰Ë	Ì	Ê_IÙšY[
+	Ñ]IË	Ù]IË	Ù]IË™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+J_O]ˆÛ\ÜÏH™šY[X™[”İ]ÏÛX™[Ù[Xİ˜[YOHœİ]\ÈÜ[Û›Ş˜OÛÜ[ÛÜ[Û’[šX]ÏÛÜ[ÛÜ[Û’[ˆ]\ØOÛÜ[ÛÜ[ÛXØÙ]]ÏÛÜ[ÛÜ[Û”šYš]]]ÏÛÜ[ÛÜÙ[XİÙ]Ù]˜\Ş[˜ÈOØÛÛœİš[OY‹™Ù]
+	Ü‰ÊK\OYš[OË\_
+×œ‰ÚK\İ
+š[OË›˜[Y_	ÉÊOÉØ\XØ][Û‹Ü‰Î‰ÉÊNÚYŠYš[_\HOOIØ\XØ][Û‹Ü‰Ê]›İÈ™]È\œ›ÜŠ	ÔÙ[^š[Û˜H[ˆš[Hˆ˜[YÉÊNØÛÛœİY]ZY
+	Ü	ÊKÛY[Y‹™Ù]
+	ØÛY[	ÊNÛ]İÜ™Y^Ü’Ù^NšYš[S˜[YN™š[K›˜[YKš[U\N\Kš[TÚ^™N™š[KœÚ^™_NÚYŠÚ[™İË‘Y[Ø\PÛİYËœ™XYI‰Ú[™İË‘Y[Ø\PÛİY\ØYØİ[Y[
+^ÜİÜ™YX]ØZ]Ú[™İË‘Y[Ø\PÛİY\ØYØİ[Y[
+š[KÙØİ[Y[YšYØ]YÛÜN‰Ô™]™[]›ÉËÛY[J_Y[ÙH]ØZ]İÜ™TŠYš[JNÙ‹œ][İ\Ëœ\Ú
+ÚY‹‹œİÜ™YÛÙN™‹™Ù]
+	ØÛÙIÊKÛY[İXš™Xİ™‹™Ù]
+	ÜİXš™Xİ	ÊK™]“[X™\Š‹™Ù]
+	Û™]	Ê_
+K]N™‹™Ù]
+	Ù]IÊKİ]\Î™‹™Ù]
+	Üİ]\ÉÊ_J_J_B˜\Ş[˜È[˜İ[ÛˆÜ[”][İTŠY
+^ØÛÛœİOY‹œ][İ\Ë™š[™
+OšYOOZY
+NÚYŠ\J\™]\›ÚYŠKœİÜ˜YÙT]	‰Ú[™İË‘Y[Ø\PÛİYË›Ü[‘Øİ[Y[
+^İ^Ü™]\›ˆ]ØZ]Ú[™İË‘Y[Ø\PÛİY›Ü[‘Øİ[Y[
+KœİÜ˜YÙT]
+_XØ]Ú
+\œŠ^Ü™]\›ˆ[\
+\œ‹›Y\ÜØYÙ_	Ò[\ÜÜÚXš[H\š\™H[‰Ê__ZYŠ\Kœ’Ù^J\™]\›ØÛÛœİÜ\]Ú[™İË›Ü[Š	ÉË	×Ø›[šÉÊNİ^ØÛÛœİ›ØX]ØZ]™XYŠKœ’Ù^JNÚYŠX›ØŠ]›İÈ™]È\œ›ÜŠ	Ò[ˆ›Ûˆ0êpîH™\Ù[HİH]Y\İÈ\ÜÜÚ]]›ÉÊNØÛÛœİ\›UT“˜Ü™X]SØš™XİT“
+›ØŠNÚYŠÜ\
+\Ü\›ØØ][Û‹š™Y]\›Ù[Ù^ØÛÛœİOYØİ[Y[˜Ü™X]Q[[Y[
+	ØIÊNØKš™Y]\›ØK\™Ù]I×Ø›[šÉÎØK˜ÛXÚÊ
+_\Ù][Y[İ]
 
-function workerItems(remoteName, items) {
-  if (profile?.role !== 'worker') return items;
-  if (remoteName === 'sites') return items.filter((item) => teamIdsFor(item).includes(profile.teamId));
-  if (['roofs', 'drains'].includes(remoteName)) return items.filter((item) => String(item.worker || item.assignedTeamId) === profile.teamId);
-  if (remoteName === 'absences') return items.filter((item) => item.requestedBy === 'worker' && String(item.ownerUid || user.uid) === user.uid);
-  return items.filter((item) => String(item.workerUid || user.uid) === user.uid);
-}
 
-async function pushCollection(localName, remoteName) {
-  if (!canPush(remoteName)) return;
-  const database = local.getDB();
-  const localItems = remoteName === 'documents'
-    ? [
-        ...(database.documents || []),
-        ...(database.interventions || []).map((item) => ({ ...item, recordType: 'Intervention' }))
-      ]
-    : database[localName] || [];
-  const items = workerItems(remoteName, localItems).filter((item) => item?.id);
-  const known = remoteIds.get(remoteName) || new Set();
-  await Promise.all(items.map((item) => setDoc(doc(firestore, remoteName, String(item.id)), envelope(item, remoteName, !known.has(String(item.id))), { merge: true })));
-  if ((profile.role === 'owner' || profile.role === 'office') && loadedCollections.has(remoteName)) {
-    const localIds = new Set(items.map((item) => String(item.id)));
-    await Promise.all(Array.from(known).filter((id) => !localIds.has(id)).map((id) => deleteDoc(doc(firestore, remoteName, id))));
-  }
-}
+OO•T“œ™]›ÚÙSØš™XİT“
+\›
+KŒ
+_XØ]Ú
+\œŠ^ÚYŠÜ\
+\Ü\˜ÛÜÙJ
+NØ[\
+\œ‹›Y\ÜØYÙ_	Ò[\ÜÜÚXš[H\š\™H[‰Ê__B™[˜İ[ÛˆÜ[‘›Û™JY
+^ØÛÛœİ][OY‹™›Û™K™š[™
+OšYOOZY
+_ØÛY[‰ÉË]N›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+K\™XN‰ĞÛÜ\\˜HH˜XØÚX]IËš[™[™ÜÎ‰ÉËİ]\Î‰ÑH™[^š[Û˜\™IßNÛ[Ù[
+YÉÓ[ÙYšXØHšY[Ú\Ü^š[Û™IÎ‰Ó[İ˜HšY[Ú\Ü^š[Û™IË]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[X™[ÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]‰ÙšY[
+	Ñ]IË	Ù]IË	Ù]IË][K™]J_IÙšY[
+	Ğ\™XH\Ü^š[Û˜]IË	Ø\™XIË	İ^	Ë][K˜\™XKYJ_O]ˆÛ\ÜÏH™šY[[X™[[›ÛX[YHš[]˜]OÛX™[^\™XH˜[YOH™š[™[™ÜÈˆ™\]Z\™Y‰Ù\ØÊ][K™š[™[™ÜÊ_Oİ^\™XOÙ]]ˆÛ\ÜÏH™šY[X™[”İ]ÏÛX™[Ù[Xİ˜[YOHœİ]\È‰ÜÙ[XİÜ[ÛœÊÉÑH™[^š[Û˜\™IË	Ô™[^š[Û™H›ÛIË	ĞÛÛ\]]É×K][Kœİ]\Ê_OÜÙ[XİÙ]Ù]˜OØÛÛœİ]OSØš™Xİ™œ›ÛQ[šY\ÊŠNÚYŠY
+SØš™Xİ˜\ÜÚYÛŠ][K]JNÙ[ÙH‹™›Û™Kœ\Ú
+ÚYZY
+	Ù	ÊK‹‹™]_J_J_B˜\Ş[˜È[˜İ[ÛˆØ]™SY™[[™Qš[\Êš[\Ê^ØÛÛœİİ]V×NÙ›ÜŠÛÛœİš[HÙˆ\œ˜^K™œ›ÛJš[\ß×JJ^ØÛÛœİ\OYš[K\_
+×œ‰ÚK\İ
+š[K›˜[YJOÉØ\XØ][Û‹Ü‰Î‰ÉÊNÚYŠJ\OOOIØ\XØ][Û‹Ü‰ß\Kœİ\ÕÚ]
+	Ú[XYÙKÉÊJJ]›İÈ™]È\œ›ÜŠ	Ô[ÚHØ\šXØ\™HÛÛ[ÈØİ[Y[HˆH›İÙÜ˜YšYIÊNØÛÛœİÙ^O]ZY
+	ÙØÉÊJÉËIÊÓX]œ˜[™ÛJ
+KÔİš[™ÊÍŠKœÛXÙJ‹ÊNØ]ØZ]İÜ™TŠÙ^Kš[JNÛİ]œ\Ú
+ÚÙ^K˜[YN™š[K›˜[YK\KÚ^™N™š[KœÚ^™_J_\™]\›ˆİ]B™[˜İ[ÛˆÜ[“Y™[[™JY
+^ØÛÛœİ][OY‹›Y™[[™\Ë™š[™
+OšYOOZY
+_ØÛY[‰ÉË˜[YN‰Ó[™XHš]HÛÜ\\˜IËY™\ÜÎ‰ÉË[œİ[\‰ÉË[œİ[]N›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+K™^ÚXÚÎ‰ÉË\N‰Ó[™XHš]H\›X[™[IË›İ\Î‰ÉËš[\Î–×_NÛ[Ù[
+YÉÓ[ÙYšXØH[™XHš]IÎ‰Ó[İ˜H[™XHš]IË]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[X™[ÛÛ™ÛZ[š[ÈÈÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]‰ÙšY[
+	Ó›ÛYHÈÛÙXÙH[\X[ÉË	Û˜[YIË	İ^	Ë][K›˜[YJ_IÙšY[
+	Ò[™\š^›ÉË	ØY™\ÜÉË	İ^	Ë][K˜Y™\ÜËYJ_IÙšY[
+	Ò[œİ[]Ü™IË	Ú[œİ[\‰Ë	İ^	Ë][Kš[œİ[\Š_IÙšY[
+	Ñ]H[œİ[^š[Û™IË	Ú[œİ[]IË	Ù]IË][Kš[œİ[]J_IÙšY[
+	Ô›ÜÜÚ[XH™\šYšXØIË	Û™^ÚXÚÉË	Ù]IË][K›™^ÚXÚÊ_O]ˆÛ\ÜÏH™šY[X™[•\ÛÙÚXOÛX™[Ù[Xİ˜[YOH\H‰ÜÙ[XİÜ[ÛœÊÉÓ[™XHš]H\›X[™[IË	Ô[HH[˜ÛÜ˜YÙÚ[ÉË	Ñ\ÜÜÚ]]›È[\Ü˜[™[É×K][K\J_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[[X™[“›İHXÛšXÚOÛX™[^\™XH˜[YOH››İ\ÈˆXÙZÛ\HXØÙ\ÜÛÈ[HÛÜ\\˜KÜÚ^š[Û™K™\ØÜš^š[ÛšK[›ÛX[YK‹‹ˆ‰Ù\ØÊ][K››İ\Ê_Oİ^\™XOÙ]]ˆÛ\ÜÏH™šY[[X™[“[İšHØİ[Y[HH›İÙÜ˜YšYOÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆ][\OÙ]Ù]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊK™š[\ŠOœÚ^™JJK]O^ØÛY[™‹™Ù]
+	ØÛY[	ÊK˜[YN™‹™Ù]
+	Û˜[YIÊKY™\ÜÎ™‹™Ù]
+	ØY™\ÜÉÊK[œİ[\™‹™Ù]
+	Ú[œİ[\‰ÊK[œİ[]N™‹™Ù]
+	Ú[œİ[]IÊK™^ÚXÚÎ™‹™Ù]
+	Û™^ÚXÚÉÊK\N™‹™Ù]
+	İ\IÊK›İ\Î™‹™Ù]
+	Û›İ\ÉÊ_NÚYŠY
+^ÓØš™Xİ˜\ÜÚYÛŠ][K]JNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\Ê_Y[ÙH‹›Y™[[™\Ëœ\Ú
+ÚYZY
+	Û‰ÊK‹‹™]Kš[\ßJ_J_B™[˜İ[ÛˆYY™[[™Qš[\ÊY
+^ØÛÛœİ][OY‹›Y™[[™\Ë™š[™
+OšYOOZY
+NÚYŠZ][J\™]\›Û[Ù[
+	ĞYÙÚ][™ÚHØİ[Y[HÈ›İÙÜ˜YšYIË]ˆÛ\ÜÏH››İXÙH‰Ù\ØÊ][K˜ÛY[
+_OØœ‰Ù\ØÊ][K›˜[YJ_OÙ]]ˆİ[OHšZYÚŒMÙ]]ˆÛ\ÜÏH™šY[X™[”Ù[^š[Û˜Hš[OÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆ][\H™\]Z\™YÛX[Ù\YšXØ^š[ÛšK™\˜˜[KX[X[HH›İÈ[8 &Z[\X[ËÜÛX[Ù]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊJNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\Ê_J_B™[˜İ[ÛˆÜ[”›ÛÙŠY
+^ØÛÛœİ][OY‹œ›ÛÙœË™š[™
+OšYOOZY
+_ØÛY[‰ÉË\N‰Ô[^šXHÜ›Û™IËY™\ÜÎ‰ÉË]N›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+KÛÜšÙ\•ÓÔ’ÑT”ÖÌOËšY	ÉËœ™\]Y[˜ŞN‰Ò[\™[ÈÚ[™ÛÛÉËXØÙ\ÜÎ‰ÑH™\šYšXØ\™IË›İ\Î‰ÉËİ]\Î‰ÔX[šYšXØ]ÉËš[\Î–×K\]\Î–×_K\\ÏVÉÔ[^šXHÜ›Û™IË	Ô[^šXH]ÉË	ĞÛÛ›ÛÈÛÜ\\˜IË	ÔÜ\™ÛÈ]šX[IË	Ôš[[Şš[Û™H›ÙÛYHH]š]IË	Ô[^šXHÜ›Û™HHÛÛ›ÛÈ]É×NÛ[Ù[
+YÉÓ[ÙYšXØH]ÈHÜ›Û™IÎ‰Ó[İ›È[\™[È]ÈHÜ›Û™IË]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[X™[ÛÛ™ÛZ[š[ÈÈÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[•\È[\™[ÏÛX™[Ù[Xİ˜[YOH\H‰ÜÙ[XİÜ[ÛœÊ\\Ë][K\J_OÜÙ[XİÙ]‰ÙšY[
+	Ò[™\š^›ÉË	ØY™\ÜÉË	İ^	Ë][K˜Y™\ÜËYJ_IÙšY[
+	Ñ]H›ÙÜ˜[[X]IË	Ù]IË	Ù]IË][K™]J_O]ˆÛ\ÜÏH™šY[X™[”Ü]XY˜H\ÜÙYÛ˜]OÛX™[Ù[Xİ˜[YOHÛÜšÙ\ˆ‰İX[SÜ[ÛœÊ][KÛÜšÙ\Š_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[”\š[ÙXÚ]0èÛX™[Ù[Xİ˜[YOH™œ™\]Y[˜ŞH‰ÜÙ[XİÜ[ÛœÊÉÒ[\™[ÈÚ[™ÛÛÉË	ÓÙÛšHˆY\ÚIË	Ğ[›X[IË	ÑYH›ÛH8 &X[››É×K][K™œ™\]Y[˜ŞJ_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[“[Ù[]0èHXØÙ\ÜÛÏÛX™[Ù[Xİ˜[YOH˜XØÙ\ÜÈ‰ÜÙ[XİÜ[ÛœÊÉÑHØØ[IË	ÑHÛÜ\\˜IË	ĞÛÛˆX]Y›Ü›XIË	ĞÛÛˆ[™XHš]IË	ÑH™\šYšXØ\™I×K][K˜XØÙ\ÜÊ_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[[X™[’[™XØ^š[ÛšHÜ\˜]]™OÛX™[^\™XH˜[YOH››İ\È‰Ù\ØÊ][K››İ\Ê_Oİ^\™XOÙ]]ˆÛ\ÜÏH™šY[[X™[“[İ™H›İÈHØİ[Y[OÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆ][\OÙ]Ù]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊK™š[\ŠOœÚ^™JJK]O^ØÛY[™‹™Ù]
+	ØÛY[	ÊK\N™‹™Ù]
+	İ\IÊKY™\ÜÎ™‹™Ù]
+	ØY™\ÜÉÊK]N™‹™Ù]
+	Ù]IÊKÛÜšÙ\™‹™Ù]
+	İÛÜšÙ\‰ÊKœ™\]Y[˜ŞN™‹™Ù]
+	Ùœ™\]Y[˜ŞIÊKXØÙ\ÜÎ™‹™Ù]
+	ØXØÙ\ÜÉÊK›İ\Î™‹™Ù]
+	Û›İ\ÉÊ_NÚYŠY
+^ÓØš™Xİ˜\ÜÚYÛŠ][K]JNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\Ê_Y[ÙH‹œ›ÛÙœËœ\Ú
+ÚYZY
+	İÉÊK‹‹™]Kİ]\Î‰ÔX[šYšXØ]ÉËš[\Ë\]\Î–×_J_J_B™[˜İ[ÛˆY›ÛÙ‘š[\ÊY
+^ØÛÛœİ][OY‹œ›ÛÙœË™š[™
+OšYOOZY
+NÚYŠZ][J\™]\›Û[Ù[
+	ĞYÙÚ][™ÚH›İÈÈØİ[Y[IË]ˆÛ\ÜÏH››İXÙH‰Ù\ØÊ][K˜ÛY[
+_OØœ‰Ù\ØÊ][K\J_H0­È	Ù\ØÊ][K˜Y™\ÜÊ_OÙ]]ˆİ[OHšZYÚŒMÙ]]ˆÛ\ÜÏH™šY[X™[‘›İÈš[XKÙÜÈÈØİ[Y[OÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆØ\\™OH™[š\›Û›Y[ˆ][\H™\]Z\™YÙ]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊJNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\Ê_J_B™[˜İ[Ûˆ\]T›ÛÙ•\ÚÊY
+^ØÛÛœİ][OY‹œ›ÛÙœË™š[™
+OšYOOZY
+NÚYŠZ][J\™]\›Û[Ù[
+	ĞYÙÚ[Ü›˜H[\™[È]ÈHÜ›Û™IË]ˆÛ\ÜÏH››İXÙH‰Ù\ØÊ][K˜ÛY[
+_OØœ‰Ù\ØÊ][K\J_H0­È	Ù\ØÊ][K˜Y™\ÜÊ_OÙ]]ˆİ[OHšZYÚŒMÙ]]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[X™[”İ]ÏÛX™[Ù[Xİ˜[YOHœİ]\ÈÜ[Ûˆ	Ú][Kœİ]\ÏOOIÔX[šYšXØ]ÉÏÉÜÙ[XİY	Î‰ÉßO”X[šYšXØ]ÏÛÜ[ÛÜ[Ûˆ	Ú][Kœİ]\ÏOOIÒ[ˆÛÜœÛÉÏÉÜÙ[XİY	Î‰ÉßO’[ˆÛÜœÛÏÛÜ[ÛÜ[Ûˆ	Ú][Kœİ]\ÏOOIĞÛÛ\]]ÉÏÉÜÙ[XİY	Î‰ÉßOÛÛ\]]ÏÛÜ[ÛÜÙ[XİÙ]‰ÙšY[
+	Ñ]H[\™[ÉË	Ù]IË	Ù]IË][K™]J_O]ˆÛ\ÜÏH™šY[[X™[”˜\ÜÈ]]š]0èÛX™[^\™XH˜[YOH\]HˆXÙZÛ\H”[^šXH\ÙYİZ]KÛÛ™^š[ÛšH[HÛÜ\\˜K›Ø›[ZHš[]˜]K‹‹ˆİ^\™XOÙ]]ˆÛ\ÜÏH™šY[[X™[‘›İÈš[XKÙÜÏÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆØ\\™OH™[š\›Û›Y[ˆ][\OÙ]Ù]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊK™š[\ŠOœÚ^™JJNÚ][Kœİ]\ÏY‹™Ù]
+	Üİ]\ÉÊNÚ][K™]OY‹™Ù]
+	Ù]IÊNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\ÊNÚYŠ‹™Ù]
+	İ\]IÊJZ][K\]\ÏJ][K\]\ß×JK˜ÛÛ˜Ø]
+Ù]N›™]È]J
+KÒTÓÔİš[™Ê
+KÛÜšÙ\œ›ÛK›İN™‹™Ù]
+	İ\]IÊ_J_J_B™[˜İ[ÛˆÜ[‘˜Z[ŠY
+^ØÛÛœİ][OY‹™˜Z[œË™š[™
+OšYOOZY
+_ØÛY[‰ÉË\N‰Ô[^šXHÜšYÛYIËY™\ÜÎ‰ÉË\™XN‰ĞÛÜ[HHÛÜœÙ[È›Ş	Ë]X[]NŒK]N›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+KÛÜšÙ\•ÓÔ’ÑT”ÖÌOËšY	ÉËœ™\]Y[˜ŞN‰Ò[\™[ÈÚ[™ÛÛÉË›İ\Î‰ÉËİ]\Î‰ÔX[šYšXØ]ÉËš[\Î–×K\]\Î–×_K\\ÏVÉÔ[^šXHÜšYÛYIË	Ô[^šXHŞ™]IË	Ô[^šXHÛXš[šIË	Ô[^šXHØY]ÚYIË	Ñ\ÛÜİ^š[Û™HØØ\šXÚIË	ÕšY[Ú\Ü^š[Û™HØØ\šXÚIË	Ô[^šXHÛÛ\]HÜšYÛYKŞ™]HHÛXš[šI×NÛ[Ù[
+YÉÓ[ÙYšXØHÜšYÛYHHŞ™]IÎ‰Ó[İ›È[\™[ÈÜšYÛYHHŞ™]IË]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[X™[ÛÛ™ÛZ[š[ÈÈÛY[OÛX™[Ù[Xİ˜[YOH˜ÛY[‰ØÛY[Ü[ÛœÊ][K˜ÛY[
+_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[•\È[\™[ÏÛX™[Ù[Xİ˜[YOH\H‰ÜÙ[XİÜ[ÛœÊ\\Ë][K\J_OÜÙ[XİÙ]‰ÙšY[
+	Ò[™\š^›ÉË	ØY™\ÜÉË	İ^	Ë][K˜Y™\ÜËYJ_IÙšY[
+	Ö›Û˜HÈÜÚ^š[Û™IË	Ø\™XIË	İ^	Ë][K˜\™XJ_IÙšY[
+	Ó[Y\›È[IË	Ü]X[]IË	Û[X™\‰Ë][Kœ]X[]J_IÙšY[
+	Ñ]H›ÙÜ˜[[X]IË	Ù]IË	Ù]IË][K™]J_O]ˆÛ\ÜÏH™šY[X™[”Ü]XY˜H\ÜÙYÛ˜]OÛX™[Ù[Xİ˜[YOHÛÜšÙ\ˆ‰İX[SÜ[ÛœÊ][KÛÜšÙ\Š_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[X™[”\š[ÙXÚ]0èÛX™[Ù[Xİ˜[YOH™œ™\]Y[˜ŞH‰ÜÙ[XİÜ[ÛœÊÉÒ[\™[ÈÚ[™ÛÛÉË	ÓÙÛšHÈY\ÚIË	ÓÙÛšHˆY\ÚIË	Ğ[›X[IË	ÑYH›ÛH8 &X[››É×K][K™œ™\]Y[˜ŞJ_OÜÙ[XİÙ]]ˆÛ\ÜÏH™šY[[X™[’[™XØ^š[ÛšHÜ\˜]]™OÛX™[^\™XH˜[YOH››İ\È‰Ù\ØÊ][K››İ\Ê_Oİ^\™XOÙ]]ˆÛ\ÜÏH™šY[[X™[“[İ™H›İÈHØİ[Y[OÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆ][\OÙ]Ù]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊK™š[\ŠOœÚ^™JJK]O^ØÛY[™‹™Ù]
+	ØÛY[	ÊK\N™‹™Ù]
+	İ\IÊKY™\ÜÎ™‹™Ù]
+	ØY™\ÜÉÊK\™XN™‹™Ù]
+	Ø\™XIÊK]X[]N“[X™\Š‹™Ù]
+	Ü]X[]IÊ_
+K]N™‹™Ù]
+	Ù]IÊKÛÜšÙ\™‹™Ù]
+	İÛÜšÙ\‰ÊKœ™\]Y[˜ŞN™‹™Ù]
+	Ùœ™\]Y[˜ŞIÊK›İ\Î™‹™Ù]
+	Û›İ\ÉÊ_NÚYŠY
+^ÓØš™Xİ˜\ÜÚYÛŠ][K]JNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\Ê_Y[ÙH‹™˜Z[œËœ\Ú
+ÚYZY
+	Ü	ÊK‹‹™]Kİ]\Î‰ÔX[šYšXØ]ÉËš[\Ë\]\Î–×_J_J_B™[˜İ[ÛˆY˜Z[‘š[\ÊY
+^ØÛÛœİ][OY‹™˜Z[œË™š[™
+OšYOOZY
+NÚYŠZ][J\™]\›Û[Ù[
+	ĞYÙÚ][™ÚH›İÈÈØİ[Y[IË]ˆÛ\ÜÏH››İXÙH‰Ù\ØÊ][K˜ÛY[
+_OØœ‰Ù\ØÊ][K\J_H0­È	Ù\ØÊ][K˜\™XJ_OÙ]]ˆİ[OHšZYÚŒMÙ]]ˆÛ\ÜÏH™šY[X™[‘›İÈš[XKÙÜÈÈØİ[Y[OÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆØ\\™OH™[š\›Û›Y[ˆ][\H™\]Z\™YÙ]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊJNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\Ê_J_B™[˜İ[Ûˆ\]Q˜Z[•\ÚÊY
+^ØÛÛœİ][OY‹™˜Z[œË™š[™
+OšYOOZY
+NÚYŠZ][J\™]\›Û[Ù[
+	ĞYÙÚ[Ü›˜HÜšYÛYKŞ™]HHÛXš[šIË]ˆÛ\ÜÏH››İXÙH‰Ù\ØÊ][K˜ÛY[
+_OØœ‰Ù\ØÊ][K\J_H0­È	Ù\ØÊ][K˜Y™\ÜÊ_OÙ]]ˆİ[OHšZYÚŒMÙ]]ˆÛ\ÜÏH™›Ü›QÜšY]ˆÛ\ÜÏH™šY[X™[”İ]ÏÛX™[Ù[Xİ˜[YOHœİ]\ÈÜ[Ûˆ	Ú][Kœİ]\ÏOOIÔX[šYšXØ]ÉÏÉÜÙ[XİY	Î‰ÉßO”X[šYšXØ]ÏÛÜ[ÛÜ[Ûˆ	Ú][Kœİ]\ÏOOIÒ[ˆÛÜœÛÉÏÉÜÙ[XİY	Î‰ÉßO’[ˆÛÜœÛÏÛÜ[ÛÜ[Ûˆ	Ú][Kœİ]\ÏOOIĞÛÛ\]]ÉÏÉÜÙ[XİY	Î‰ÉßOÛÛ\]]ÏÛÜ[ÛÜÙ[XİÙ]‰ÙšY[
+	Ñ]H[\™[ÉË	Ù]IË	Ù]IË][K™]J_O]ˆÛ\ÜÏH™šY[[X™[”˜\ÜÈ]]š]0èÛX™[^\™XH˜[YOH\]HˆXÙZÛ\H”[H[]KX]\šX[Hš[[ÜÜÛËÜİ^š[ÛšHÈ[›šHš[]˜]K‹‹ˆİ^\™XOÙ]]ˆÛ\ÜÏH™šY[[X™[‘›İÈš[XKÙÜÏÛX™[[œ]˜[YOH™š[\Èˆ\OH™š[HˆXØÙ\H˜\XØ][Û‹Ü‹œ‹[XYÙKÊˆˆØ\\™OH™[š\›Û›Y[ˆ][\OÙ]Ù]˜\Ş[˜ÈOØÛÛœİš[\ÏX]ØZ]Ø]™SY™[[™Qš[\Ê‹™Ù][
+	Ùš[\ÉÊK™š[\ŠOœÚ^™JJNÚ][Kœİ]\ÏY‹™Ù]
+	Üİ]\ÉÊNÚ][K™]OY‹™Ù]
+	Ù]IÊNÚ][K™š[\ÏJ][K™š[\ß×JK˜ÛÛ˜Ø]
+š[\ÊNÚYŠ‹™Ù]
+	İ\]IÊJZ][K\]\ÏJ][K\]\ß×JK˜ÛÛ˜Ø]
+Ù]N›™]È]J
+KÒTÓÔİš[™Ê
+KÛÜšÙ\œ›ÛK›İN™‹™Ù]
+	İ\]IÊ_J_J_B˜\Ş[˜È[˜İ[ÛˆÜ[”İÜ™Yš[JÙ^J^ØÛÛœİÜ\]Ú[™İË›Ü[Š	ÉË	×Ø›[šÉÊNİ^ØÛÛœİ›ØX]ØZ]™XYŠÙ^JNÚYŠX›ØŠ]›İÈ™]È\œ›ÜŠ	Ò[š[H›Ûˆ0êpîH™\Ù[HİH]Y\İÈ\ÜÜÚ]]›ÉÊNØÛÛœİ\›UT“˜Ü™X]SØš™XİT“
+›ØŠNÚYŠÜ\
+\Ü\›ØØ][Û‹š™Y]\›Ù[Ù^ØÛÛœİOYØİ[Y[˜Ü™X]Q[[Y[
+	ØIÊNØKš™Y]\›ØK\™Ù]I×Ø›[šÉÎØK˜ÛXÚÊ
+_\Ù][Y[İ]
 
-async function uploadPendingReportPhotos() {
-  const database = local.getDB();
-  let changed = false;
-  for (const report of database.reports || []) {
-    if (profile.role === 'worker' && report.workerUid && report.workerUid !== user.uid) continue;
-    const site = (database.sites || []).find((item) => item.id === report.site) || {};
-    for (const photo of report.photos || []) {
-      if (photo.attachmentId || !photo.key) continue;
-      try {
-        const file = await local.readFile(photo.key);
-        if (!file) continue;
-        const uploaded = await uploadAttachment({ file, reportId: report.id, phase: photo.phase, site });
-        if (uploaded?.attachmentId) { Object.assign(photo, uploaded); changed = true; }
-      } catch (_) {}
-    }
-  }
-  if (changed) local.persist();
-}
 
-function scheduleSync() {
-  if (!ready || !profile || profile.role === 'administrator') return;
-  clearTimeout(syncTimer);
-  setSyncState(navigator.onLine ? 'Da sincronizzare' : 'Offline', '#d69b18');
-  syncTimer = setTimeout(() => { syncNow().catch(() => {}); }, 900);
-}
+OO•T“œ™]›ÚÙSØš™XİT“
+\›
+KŒ
+_XØ]Ú
+\œŠ^ÚYŠÜ\
+\Ü\˜ÛÜÙJ
+NØ[\
+\œ‹›Y\ÜØYÙ_	Ò[\ÜÜÚXš[H\š\™H[Øİ[Y[ÉÊ__B™[˜İ[ÛˆÜ[”™\Ü
+Y
+^ÙÛÊ	Ü™\Ü	ÊNÜÙ][Y[İ]
 
-async function syncNow() {
-  if (!ready || syncing || !navigator.onLine || !profile || profile.role === 'administrator') return syncPromise;
-  syncing = true;
-  syncPromise = (async () => {
-    setSyncState('Sincronizzazioneâ€¦', '#d69b18');
-    await uploadPendingReportPhotos();
-    for (const [localName, remoteName] of mappings) await pushCollection(localName, remoteName);
-    setSyncState('Sincronizzato', '#167448');
-  })().catch((error) => {
-    setSyncState('Errore sync', '#ad2a2a', errorText(error));
-    throw error;
-  }).finally(() => { syncing = false; });
-  return syncPromise;
-}
 
-async function importInitialDataIfNeeded() {
-  const existing = await getDocs(query(collection(firestore, 'clients'), where('orgId', '==', ORG_ID)));
-  const collectionsToImport = existing.empty
-    ? mappings
-    : mappings.filter(([, remoteName]) => ['leads', 'priceList', 'certificates', 'inventory', 'equipment', 'settings'].includes(remoteName));
-  if (!collectionsToImport.length) return;
-  setSyncState(existing.empty ? 'Primo caricamentoâ€¦' : 'Aggiornamento archiviâ€¦', '#d69b18');
-  for (const [localName, remoteName] of collectionsToImport) {
-    if (!existing.empty) {
-      const remote = await getDocs(query(collection(firestore, remoteName), where('orgId', '==', ORG_ID)));
-      if (!remote.empty) continue;
-    }
-    const items = (local.getDB()[localName] || []).filter((item) => item?.id);
-    await Promise.all(items.map((item) => setDoc(doc(firestore, remoteName, String(item.id)), envelope(item, remoteName, true))));
-  }
-}
+OOØÛÛœİÏYØİ[Y[œ]Y\TÙ[XİÜŠ	ÖÛ˜[YO\Ú]WIÊNÚYŠÊ\Ë˜[YOZYK
+_B™[˜İ[ÛˆØ]™T™\Ü
+J^ÙKœ™]™[Y˜][
 
-function blobFromCanvas(canvas, quality) {
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-}
+NØÛÛœİ[™]È›Ü›Q]JK\™Ù]
+KÚ]OY‹œÚ]\Ë™š[™
+ÏOœËšYOOY‹™Ù]
+	ÜÚ]IÊJNÚYŠ\Ú]J\™]\›ÜÚ]Kœ›ÙÜ™\ÜÏS[X™\Š‹™Ù]
+	Ü›ÙÜ™\ÜÉÊ_Ú]Kœ›ÙÜ™\ÜÊNÜÚ]K˜ÛÜİ
+ÏS[X™\Š‹™Ù]
+	ÛX]\šX[	Ê_
+NÙ‹œ™\ÜËœ\Ú
+ÚYZY
+	Ü‰ÊKÚ]NœÚ]KšYÛÜšÙ\œ›ÛK]N›™]È]J
+KÒTÓÔİš[™Ê
+Kİ\œÎ“[X™\Š‹™Ù]
+	Úİ\œÉÊJKX]\šX[“[X™\Š‹™Ù]
+	ÛX]\šX[	ÊJK›İ\Î™‹™Ù]
+	Û›İ\ÉÊKİĞÛİ[™K\™Ù]œİÜË™š[\Ë›[™İJNÜØ]™J
+NØ[\
+	Ô˜\Ü[›ÈØ[˜]Ëˆ[]Û\™HÈ™Y°è™[Ø[Y\™K‰ÊNÙÛÊ	İÛÜšÙ\‰Ê_B™[˜İ[Ûˆš[][İJY
+^ØÛÛœİOY‹œ][İ\Ë™š[™
+OšYOOZY
+NÚYŠ\J\™]\›ÚYŠK˜ZP\Y˜Xİ	‰Ú[™İË™Y[Ø\PZQİÛ›ØYØ]™Y][İJ\™]\›ˆÚ[™İË™Y[Ø\PZQİÛ›ØYØ]™Y][İJJNØÛÛœİÛYØİ[Y[˜›ÙKš[›™\’SÙØİ[Y[˜›ÙKš[›™\’SXXZ[ˆİ[OHœY[™ÎŒÍ\Ù›ÛY˜[Z[N\šX[O‰ĞÓÓTS–K›˜[Y_OÚO‰ĞÓÓTS–K˜Y™\ÜßOœ”’UH	ĞÓÓTS–K˜]Oœ‰ĞÓÓTS–KœÛ™_H0­È	ĞÓÓTS–K™[XZ[OÜ”‘U‘S•U“È	Ù\ØÊK˜ÛÙJ_OÚ‘]Nˆ	Ù\ØÊK™]J_OÜÏ‰Ù\ØÊK˜ÛY[
+_OÚÏ‰Ù\ØÊKœİXš™Xİ
+_OÜˆİ[OH^X[YÛœšYÚ’[\ÛšXš[Nˆ	Ù]\›ÊK›™]
+_OÚİ[OH›X\™Ú[‹]Ü•˜[Y]0èÙ™™\NˆÌÚ[Ü›šOÜÛXZ[˜İÚ[™İËœš[
 
-function dataUrlFromBlob(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Immagine non leggibile.'));
-    reader.readAsDataURL(blob);
-  });
-}
+NÙØİ[Y[˜›ÙKš[›™\’S[ÛÛØØ][Û‹œ™[ØY
 
-async function compressImage(file) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  let blob = null;
-  for (let pass = 0; pass < 4; pass += 1) {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    for (const quality of [0.82, 0.72, 0.62, 0.52]) {
-      blob = await blobFromCanvas(canvas, quality);
-      if (blob && blob.size <= 500000) break;
-    }
-    if (blob && blob.size <= 500000) break;
-    scale *= 0.72;
-  }
-  bitmap.close?.();
-  if (!blob || blob.size > 520000) throw new Error('La fotografia non puÃ² essere compressa abbastanza.');
-  return blob;
-}
+_B™[˜İ[ÛˆØ\\™R[™›Ê
+^Ø[\
+	Ğ\šH[ˆØ[Y\™HH™[ZH8 '[œÙ\š\ØÚHYÙÚ[Ü›˜[Y[ø 'H\ˆ[YØ\™HH›İÈ[˜\Ü[›ÈÛÜœ™]Ë‰Ê_B™[˜İ[ÛˆØ[İÛ™\Š
+^ÚYŠPÓÓTS–KœÛ™J\™]\›ˆ[\
+	Ò[[Y\›È[]Û\™H›Ûˆ0ê[˜ÛÜ˜HÛÛ™šYİ\˜]È™ZH]H^šY[™[K‰ÊNÛØØ][Û‹š™YX[‰ĞÓÓTS–KœÛ™Kœ™\XÙJÖ×—
+×KÙË	ÉÊ_XBš[š]›Û\Ê
+NÜ™[™\Š
+NÜÙ][Y[İ]
 
-async function uploadAttachment({ file, reportId, phase = 'Documento', site = {} }) {
-  if (!user || !profile?.active || !navigator.onLine || !file?.type?.startsWith('image/')) return null;
-  try {
-    const blob = await compressImage(file);
-    const data = await dataUrlFromBlob(blob);
-    const attachmentId = `${reportId}-${String(phase).toLowerCase()}-${Math.random().toString(36).slice(2, 10)}`;
-    const isWorker = profile.role === 'worker';
-    await setDoc(doc(firestore, 'attachments', attachmentId), {
-      id: attachmentId,
-      orgId: ORG_ID,
-      clientId: clientIdFor(site, 'sites'),
-      reportId: String(reportId),
-      assignedTeamId: String((isWorker ? profile.teamId : '') || site.worker || site.assignedTeamId || teamIdsFor(site)[0] || ''),
-      workerUid: isWorker ? user.uid : '',
-      ownerUid: user.uid,
-      name: String(file.name || 'foto.jpg').slice(0, 180),
-      phase: ['Prima', 'Dopo'].includes(phase) ? phase : 'Documento',
-      mimeType: 'image/jpeg',
-      data,
-      size: blob.size,
-      createdAt: serverTimestamp()
-    });
-    return { attachmentId, phase, name: file.name, type: 'image/jpeg', size: blob.size };
-  } catch (error) {
-    console.warn('Foto conservata localmente, sincronizzazione rinviata:', error);
-    return null;
-  }
-}
 
-async function getAttachmentFile(attachmentId) {
-  const snapshot = await getDoc(doc(firestore, 'attachments', attachmentId));
-  if (!snapshot.exists()) throw new Error('Fotografia cloud non trovata.');
-  const data = snapshot.data();
-  const response = await fetch(data.data);
-  const blob = await response.blob();
-  return new File([blob], String(data.name || 'fotografia.jpg'), { type: String(data.mimeType || blob.type || 'image/jpeg') });
-}
+OOØÚXÚÔ™[Z[™\œÊ
+NØÚXÚÒİ\”™[Z[™\œÊ
+_KML
+NÜÙ][\˜[
 
-async function openAttachment(attachmentId) {
-  const snapshot = await getDoc(doc(firestore, 'attachments', attachmentId));
-  if (!snapshot.exists()) throw new Error('Fotografia cloud non trovata.');
-  const popup = window.open('', '_blank');
-  if (popup) popup.location.href = snapshot.data().data;
-  else window.open(snapshot.data().data, '_blank');
-}
 
-function updateAdministratorPortal() {
-  if (profile?.role !== 'administrator') return;
-  const allowed = new Set(profile.clientIds || []);
-  const clients = (local.getDB().condomini || []).filter((item) => allowed.has(item.id));
-  window.__portalPreview = {
-    id: `firebase-${user.uid}`,
-    name: profile.displayName || profile.email,
-    email: profile.email,
-    clients: clients.map((item) => item.name),
-    status: 'Attivo'
-  };
-}
+OOØÚXÚÔ™[Z[™\œÊ
+NØÚXÚÒİ\”™[Z[™\œÊ
+_KŒ
+NÂšYŠ	ÜÙ\šXÙUÛÜšÙ\‰Ú[ˆ˜]šYØ]Ü‰‰›ØØ][Û‹œ›İØÛÛœİ\ÕÚ]
+	Ú	ÊJ[˜]šYØ]Ü‹œÙ\šXÙUÛÜšÙ\‹œ™YÚ\İ\Š	Ë‹ÜİËšœÏİM‰ÊK˜Ø]Ú
 
-function roleOptions(selected, canAssignOwner) {
-  const values = [['pending', 'In attesa'], ['office', 'Ufficio'], ['worker', 'Operaio'], ['administrator', 'Cliente / amministratore']];
-  if (canAssignOwner || selected === 'owner') values.unshift(['owner', 'Titolare']);
-  return values.map(([value, label]) => `<option value="${value}" ${selected === value ? 'selected' : ''}>${label}</option>`).join('');
-}
 
-function cloudUsersPanel() {
-  if (profile?.role !== 'owner') {
-    return `<div class="headline"><div><h2>Portale clienti e amministratori</h2><p>La gestione degli accessi Ã¨ riservata al titolare.</p></div></div><div class="notice">Accedi con lâ€™account titolare per invitare utenti, assegnare squadre e autorizzare i clienti o condomÃ¬ni visibili.</div>`;
-  }
-  const database = local.getDB();
-  const teams = database.teams || [];
-  const clients = database.condomini || [];
-  const canAssignOwner = profile?.role === 'owner';
-  return `<div class="headline"><div><h2>Portale clienti e accessi</h2><p>Assegna a ogni persona soltanto il ruolo e i clienti o condomÃ¬ni necessari.</p></div><button class="btn lime" onclick="cloudCopyAccessLink()">Copia link di accesso</button></div>
-    <div class="notice"><b>Come invitare:</b> copia il link, invialo alla persona e chiedile di creare lâ€™accesso. ComparirÃ  qui â€œIn attesaâ€; poi assegna il ruolo.</div><div style="height:14px"></div>
-    <div class="grid stats"><div class="stat"><div class="statTop"><span>Utenti</span></div><strong>${cloudUsers.length}</strong></div><div class="stat"><div class="statTop"><span>Attivi</span></div><strong>${cloudUsers.filter((item) => item.active).length}</strong></div><div class="stat"><div class="statTop"><span>In attesa</span></div><strong>${cloudUsers.filter((item) => item.role === 'pending').length}</strong></div><div class="stat"><div class="statTop"><span>CondomÃ¬ni</span></div><strong>${clients.length}</strong></div></div>
-    <div class="cloudUserGrid">${cloudUsers.map((item) => {
-      const selfOwner = item.email === OWNER_EMAIL && item.role === 'owner';
-      const uid = escapeHtml(item.uid);
-      return `<section class="cloudUserCard"><div class="row" style="border:0;padding:0"><div class="rowIcon">${item.role === 'worker' ? 'ğŸ‘·' : item.role === 'administrator' ? 'ğŸ¢' : 'ğŸ‘¤'}</div><div class="rowBody"><b>${escapeHtml(item.displayName || item.email)}</b><small>${escapeHtml(item.email)} Â· ${item.active ? 'Attivo' : 'Non attivo'}</small></div><span class="pill ${item.active ? '' : 'orange'}">${escapeHtml(item.role)}</span></div>${selfOwner ? '<div class="sectionNote">Account titolare principale protetto.</div>' : `<div class="cloudUserFields"><label>Ruolo<select id="cloud-role-${uid}">${roleOptions(item.role, canAssignOwner)}</select></label><label>Squadra<select id="cloud-team-${uid}"><option value="">Nessuna</option>${teams.map((team) => `<option value="${escapeHtml(team.id)}" ${item.teamId === team.id ? 'selected' : ''}>${escapeHtml(team.name)}</option>`).join('')}</select></label><div class="cloudClientChecks">${clients.map((client) => `<label><input type="checkbox" data-cloud-client="${uid}" value="${escapeHtml(client.id)}" ${(item.clientIds || []).includes(client.id) ? 'checked' : ''}> ${escapeHtml(client.name)}</label>`).join('') || '<small>Crea prima un cliente per assegnarlo.</small>'}</div><label style="display:flex;align-items:center;gap:8px"><input id="cloud-active-${uid}" type="checkbox" style="width:auto" ${item.active ? 'checked' : ''}> Accesso attivo</label><div class="actions"><button class="btn sm green" onclick="cloudSaveUser('${uid}')">Salva accesso</button></div></div>`}</section>`;
-    }).join('') || '<div class="empty">Nessun utente registrato.</div>'}</div>`;
-}
+OOßJNÂÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ü›Ù™\ÜÚ[Û˜[Y^[œÚ[ÛœËšœÏİLNHÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ø\Ú[™\ÜË\İZ]KšœÏİLNHÜØÜš\‚ØÜš\Ü˜ÏH‹‹ØÛY[X\˜Ú]™KšœÏİLŒÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ù\™Xİ\ÙX\˜ÚšœÏİMˆÜØÜš\‚ØÜš\‚Ú[™İË‘Y[Ø\SØØ[^ÂˆÙ]Š
+OO™‹ˆÙ]›ÛNŠ
+OOœ›ÛKˆÙ]šY]ÎŠ
+OOšY]Ëˆ\œÚ\İŠ
+OOØ\PÛÛ\[TÙ][™ÜÊ
+NÛØØ[İÜ˜YÙKœÙ]][JÑVK”ÓÓ‹œİš[™ÚYJŠJ_Kˆ™[™\Š
+OOœ™[™\Š
+KˆÛÎŠ™^
+OOİšY]Ï[™^Ü™[™\Š
+_Kˆ™XYš[NŠÙ^JOOœ™XYŠÙ^JKˆÙ]›ÛNŠ™^
+OOÜ›ÛO[™^ÛØØ[İÜ˜YÙKœÙ]][J	ÙZ×Ü›ÛIË›ÛJNÚ[š]›Û\Ê
+_KˆÙ]ÛÜšÙ\”›ÛNŠ›Ùš[KZY
+OOÂˆÛÛœİX[RY\›Ùš[KX[RY	ØÛİY]X[IÎÂˆYŠY‹X[\ËœÛÛYJ
+X[JOOX[KšYOO]X[RY
+JY‹X[\Ëœ\Ú
+ÚYX[RY˜[YN‰ÔÜ]XY˜H\ÜÙYÛ˜]IËY[X™\ŒNœ›Ùš[K™\Ü^S˜[YKY[X™\Œ‰ÉËÛ™N‰ÉË™[Z[™\•[YN‰ÌNŒ	ßJNÂˆÓÔ’ÑT”ÏY‹X[\ÎÂˆÛÛœİ\œÛÛ’YIØÛİYIÊİZYÂˆ]\œÛÛY‹œİY™‹™š[™
 
-window.cloudCopyAccessLink = async function () {
-  const link = new URL('./', window.location.href).href;
-  try { await navigator.clipboard.writeText(link); alert('Link di accesso copiato.'); }
-  catch (_) { prompt('Copia questo link:', link); }
-};
+][JOOš][KšYOO\\œÛÛ’Y
+NÂˆYŠ\\œÛÛŠ^Ü\œÛÛ^ÚYœ\œÛÛ’Y˜[YNœ›Ùš[K™\Ü^S˜[Y_›Ùš[K™[XZ[Û™N‰ÉËX[NX[RY™[Z[™\•[YN‰ÌNŒ	ßNÙ‹œİY™‹œ\Ú
+\œÛÛŠ_Bˆ[Ù^Ü\œÛÛ‹›˜[YO\›Ùš[K™\Ü^S˜[Y_›Ùš[K™[XZ[Ü\œÛÛ‹X[O]X[RYBˆÕQ‘Y‹œİY™Ü›ÛO\\œÛÛ’YÛØØ[İÜ˜YÙKœÙ]][J	ÙZ×Ü›ÛIË›ÛJNÚ[š]›Û\Ê
+NÂˆKˆÛX\”™\İšXİY]NŠ
+OOÂˆÉØÛÛ™ÛZ[šIË	Ú[\™[[ÛœÉË	Ú[œÜXİ[ÛœÉË	ÜÚ]\ÉË	Ü][İ\ÉË	Ü™\ÜÉË	İ[Y\ÚY]ÉË	ØXœÙ[˜Ù\ÉË	ÙY[ÛÛ›™Xİ	Ë	Ù›Û™IË	ÛY™[[™\ÉË	Ü›ÛÙœÉË	Ù˜Z[œÉË	Ù^[œÙ\ÉË	ÙXY[™\ÉË	Ü^[Y[ÉË	ÙØİ[Y[ÉË	İX[\ÉË	ÜİY™‰Ë	ÜÜ[\Ù\œÉË	ÛXYÉË	ÜšXÙS\İ	Ë	ØÙ\YšXØ]\ÉË	Ú[™[ÜIË	Ù\]Z\Y[	Ë	ØÛÛ\[TÙ][™ÜÉ×K™›Ü‘XXÚ
 
-window.cloudSaveUser = async function (uid) {
-  const selectedRole = document.getElementById(`cloud-role-${uid}`)?.value;
-  const teamId = document.getElementById(`cloud-team-${uid}`)?.value || '';
-  const active = Boolean(document.getElementById(`cloud-active-${uid}`)?.checked) && selectedRole !== 'pending';
-  const clientIds = Array.from(document.querySelectorAll(`[data-cloud-client="${CSS.escape(uid)}"]:checked`)).map((input) => input.value);
-  if (clientIds.length > 10) return alert('Puoi assegnare al massimo 10 condomÃ¬ni per account.');
-  if (selectedRole === 'worker' && !teamId) return alert('Seleziona una squadra per lâ€™operaio.');
-  if (selectedRole === 'administrator' && !clientIds.length) return alert('Seleziona almeno un cliente o condominio per questo accesso.');
-  try {
-    await setDoc(doc(firestore, 'users', uid), { role: selectedRole, active, teamId: selectedRole === 'worker' ? teamId : '', clientIds: selectedRole === 'administrator' ? clientIds : [], updatedAt: serverTimestamp() }, { merge: true });
-    alert('Accesso aggiornato.');
-  } catch (error) { alert(errorText(error)); }
-};
-
-function startUsersListener() {
-  unsubscribers.push(onSnapshot(query(collection(firestore, 'users'), where('orgId', '==', ORG_ID)), (snapshot) => {
-    cloudUsers = snapshot.docs.map((entry) => ({ uid: entry.id, ...entry.data() })).sort((a, b) => String(a.displayName).localeCompare(String(b.displayName), 'it'));
-    window.dispatchEvent(new CustomEvent('edilkappa:cloud-users-synced'));
-    if (local.getView() === 'portalView') local.render();
-  }, (error) => setSyncState('Errore utenti', '#ad2a2a', errorText(error))));
-}
-
-window.portalView = cloudUsersPanel;
-
-window.addEventListener('online', () => { setSyncState('Da sincronizzare', '#d69b18'); syncNow().catch(() => {}); });
-window.addEventListener('offline', () => setSyncState('Offline', '#d69b18', 'Le modifiche restano sul dispositivo e saranno sincronizzate al ritorno della rete.'));
-
-installCloudStyles();
-loginGate('Controllo accessoâ€¦');
+Ù^JOOÙ–ÚÙ^WOV×_JNÂˆ‹œİY™’[š]X[^™Y]YNÕÓÔ’ÑT”ÏY‹X[\ÎÔÕQ‘Y‹œİY™ÛØØ[İÜ˜YÙKœÙ]][JÑVK”ÓÓ‹œİš[™ÚYJŠJNÂˆKˆÛX\‘]šXÙQ]NŠ
+OO›ØØ[İÜ˜YÙKœ™[[İ™R][JÑVJBŸNÂÜØÜš\‚ØÜš\Ü˜ÏH‹‹Û[™XK]š]Kİ™[™Ü‹ÚœÜ‹[Y›Z[‹šœÈÜØÜš\‚ØÜš\Ü˜ÏH‹‹Û[™XK]š]Kİ™[™Ü‹ÚœÜ‹œYÚ[‹˜]]İX›K›Z[‹šœÈÜØÜš\‚ØÜš\Ü˜ÏH‹‹ÜÛX\[Ü\˜][ÛœËšœÏİLMHÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ù[™XKZ[YÜ˜][Û‹šœÏİLŒÈÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ú[\™[[Û‹[Y™XŞXÛKšœÏİLÈÜØÜš\‚ØÜš\Ü˜ÏH‹‹ØÛÛ\][Û‹XÙ[\‹šœÏİLÈÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ø[Ë\Ú\š[™ËšœÏİMKŒHÜØÜš\‚ØÜš\Ü˜ÏH‹‹ÙY[ÛÛ›™XİšœÏİLˆÜØÜš\‚ØÜš\Ü˜ÏH‹‹Úİ\œËXÛÜÙ[İ]šœÏİLÈÜØÜš\‚ØÜš\Ü˜ÏH‹‹Ø][™[˜ÙKXÙ[\‹šœÏİLHÜØÜš\‚ØÜš\Ü˜ÏH‹‹ØÛÛ›ÛY[X\›š[™ËšœÏİLHÜØÜš\‚ØÜš\Ü˜ÏH‹‹ÛÜ\˜][ÛœËXÙ[\‹šœÏİLHÜØÜš\‚ØÜš\Ü˜ÏH‹‹ÙY[Ø\KXZKšœÏİLMˆÜØÜš\‚ØÜš\Ü˜ÏH‹‹ÙY[Ø\KXZK\›İ]KšœÏİLHÜØÜš\‚ØÜš\\OH›[Ù[HˆÜ˜ÏH‹‹Ùš\™X˜\ÙKXÛİYšœÏİLÜØÜš\‚Ø›ÙO‚
