@@ -378,7 +378,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v91-gestione-foto-sopralluogo/);
+  assert.match(serviceWorker, /v92-avvio-gestione-foto/);
   assert.doesNotMatch(serviceWorker, /ignoreSearch/);
 });
 

@@ -12,7 +12,7 @@ function source(file) {
 test("keeps heavy features out of the initial browser path", () => {
   const html = source("index.html");
   const loader = source("edilkappa-loader.js");
-  assert.match(html, /edilkappa-loader\.js\?v=2/);
+  assert.match(html, /edilkappa-loader\.js\?v=3/);
   assert.doesNotMatch(html, /<script[^>]+(?:jspdf|edilkappa-ai|leaflet|smart-operations|operations-center)/i);
   assert.doesNotMatch(html, /<link[^>]+leaflet/i);
   assert.match(loader, /critical:\s*\[/);
@@ -48,9 +48,9 @@ test("avoids full cloud renders for unrelated data and active forms", () => {
 
 test("keeps the offline shell small while caching daily workflows", () => {
   const worker = source("sw.js");
-  assert.match(worker, /v91-gestione-foto-sopralluogo/);
+  assert.match(worker, /v92-avvio-gestione-foto/);
   assert.match(worker, /"\.\/media-contract\.js\?v=1"/);
-  assert.match(worker, /"\.\/edilkappa-loader\.js\?v=2"/);
+  assert.match(worker, /"\.\/edilkappa-loader\.js\?v=3"/);
   assert.match(worker, /"\.\/danea-integration\.js"/);
   assert.match(worker, /"\.\/inspection-workflow\.js\?v=8"/);
   assert.match(worker, /"\.\/hours-closeout\.js"/);
