@@ -3,6 +3,13 @@
 
   const pendingInspectionMedia = new Map();
 
+  const style = document.createElement('style');
+  style.textContent = `
+    .inspectionMediaFile .inspectionMediaActions{display:flex;gap:6px;flex:0 0 auto}
+    @media(max-width:520px){.inspectionMediaFile{align-items:flex-start;flex-wrap:wrap}.inspectionMediaFile .inspectionMediaActions{width:100%;justify-content:flex-end}}
+  `;
+  document.head.appendChild(style);
+
   function normalize(value) {
     return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('it');
   }
@@ -132,6 +139,103 @@
     return result;
   }
 
+  function inspectionMediaFiles(item) {
+    return Array.isArray(item?.media) ? item.media : [];
+  }
+
+  function inspectionMediaType(file) {
+    const type = String(file?.fileType || '').toLowerCase();
+    if (type.startsWith('video/')) return 'Video';
+    if (type.includes('heic') || type.includes('heif') || /\.(heic|heif)$/i.test(file?.fileName || '')) return 'Foto HEIC';
+    return 'Fotografia';
+  }
+
+  function inspectionMediaSize(file) {
+    const bytes = Number(file?.fileSize || 0);
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  }
+
+  function inspectionMediaListHtml(item) {
+    const files = inspectionMediaFiles(item);
+    if (!files.length) return '<div class="empty">Nessuna foto o video ancora salvato.</div>';
+    return `<div class="mediaFileList">${files.map((file, index) => {
+      const kind = inspectionMediaType(file);
+      const size = inspectionMediaSize(file);
+      const icon = kind === 'Video' ? '🎬' : '📷';
+      return `<div class="mediaFile inspectionMediaFile"><span>${icon}</span><div><b>${esc(file.fileName || `Allegato ${index + 1}`)}</b><small>${kind}${size ? ` · ${size}` : ''}</small></div><span class="inspectionMediaActions"><button class="btn sm light" type="button" onclick="openInspectionMedia('${esc(item.id)}',${index})">Apri</button><button class="btn sm red" type="button" onclick="deleteInspectionMedia('${esc(item.id)}',${index},this)">Elimina</button></span></div>`;
+    }).join('')}</div>`;
+  }
+
+  function refreshInspectionMediaList(id) {
+    const item = (db.inspections || []).find((entry) => entry.id === id);
+    const container = document.getElementById('inspectionSavedMedia');
+    if (item && container) container.innerHTML = inspectionMediaListHtml(item);
+  }
+
+  window.openInspectionMedia = async function (id, index) {
+    const item = (db.inspections || []).find((entry) => entry.id === id);
+    const file = inspectionMediaFiles(item)[index];
+    if (!file?.storagePath) return alert('File multimediale non disponibile.');
+    try {
+      await window.EdilKappaCloud?.openDocument?.(file.storagePath);
+    } catch (error) {
+      alert(error?.message || 'Impossibile aprire il file.');
+    }
+  };
+
+  window.deleteInspectionMedia = async function (id, index, button) {
+    const item = (db.inspections || []).find((entry) => entry.id === id);
+    const files = inspectionMediaFiles(item);
+    const file = files[index];
+    if (!item || !file) return alert('Allegato non trovato. Riapri il sopralluogo e riprova.');
+    const fileName = file.fileName || `allegato ${index + 1}`;
+    if (!confirm(`Eliminare definitivamente “${fileName}”? Le altre foto e i video resteranno salvati.`)) return;
+    const cloud = window.EdilKappaCloud;
+    if (!cloud?.ready || !cloud?.syncRecord || (file.storagePath && !cloud?.deleteDocument)) {
+      return alert('Serve la connessione al cloud per eliminare una foto in sicurezza. Riprova quando compare “Sincronizzato”.');
+    }
+
+    const previousLabel = button?.textContent || 'Elimina';
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Elimino…';
+    }
+
+    let storageDeleted = false;
+    const remainingMedia = files.filter((_, position) => position !== index);
+    const updatedAt = new Date().toISOString();
+    try {
+      if (file.storagePath) {
+        await cloud.deleteDocument(file.storagePath);
+        storageDeleted = true;
+      }
+      const inspectionToSave = structuredClone({ ...item, media: remainingMedia, updatedAt });
+      await cloud.syncRecord('inspections', inspectionToSave);
+      item.media = remainingMedia;
+      item.updatedAt = updatedAt;
+      save();
+      refreshInspectionMediaList(id);
+      inspectionMediaStatus(`${fileName} eliminato. Restano ${remainingMedia.length} file salvati.`, 'success');
+    } catch (error) {
+      if (storageDeleted) {
+        item.media = remainingMedia;
+        item.updatedAt = updatedAt;
+        save();
+        refreshInspectionMediaList(id);
+        inspectionMediaStatus(`${fileName} eliminato. Sincronizzazione della scheda in corso…`);
+        alert('Il file è stato eliminato. La scheda del sopralluogo verrà riallineata automaticamente appena la connessione torna stabile.');
+        return;
+      }
+      if (button) {
+        button.disabled = false;
+        button.textContent = previousLabel;
+      }
+      alert(error?.message || 'Non è stato possibile eliminare il file. Nessun allegato è stato modificato.');
+    }
+  };
+
   window.completeInspection = function (id) {
     const item = (db.inspections || []).find((entry) => entry.id === id);
     if (!item) return alert('Sopralluogo non trovato.');
@@ -143,6 +247,7 @@
       <div class="field full"><label>Misure rilevate</label><textarea name="measurements" placeholder="Metri, superfici, spessori, quantità e altre misure">${esc(item.measurements || '')}</textarea></div>
       <div class="field full"><label>Lavorazioni consigliate</label><textarea name="recommendations" required placeholder="Come consigli di risolvere il problema?">${esc(item.recommendations || '')}</textarea></div>
       <div class="field full"><label>Note tecniche</label><textarea name="technicalNotes" placeholder="Accesso, sicurezza, materiali, difficoltà o richieste del cliente">${esc(item.technicalNotes || '')}</textarea></div>
+      <div class="field full"><label>Foto e video già salvati</label><div id="inspectionSavedMedia">${inspectionMediaListHtml(item)}</div></div>
       <div class="field full"><label>Scegli foto e video</label><input name="media" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" multiple onchange="rememberInspectionMedia('${esc(item.id)}',this)"><small id="inspectionMediaStatus">${mediaCount ? `${mediaCount} file già salvati. ` : ''}HEIC e HEIF vengono riconosciuti automaticamente. Dal telefono puoi usare Fotocamera, Libreria foto o Sfoglia.</small></div>
     </div>`, async (formData) => {
       const selectedMedia = mediaSelection(id, formData);
