@@ -377,7 +377,8 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v89-foto-sopralluogo-heic/);
+  assert.match(serviceWorker, /v90-asset-versionati/);
+  assert.doesNotMatch(serviceWorker, /ignoreSearch/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
