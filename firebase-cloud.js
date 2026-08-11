@@ -161,6 +161,21 @@ const api = {
     if (!ready || !profile || profile.role === 'administrator') throw new Error('Il collegamento cloud non è pronto.');
     await pushCollection(mapping[0], mapping[1]);
   },
+  async syncRecord(localName, record) {
+    const mapping = mappings.find(([name]) => name === localName);
+    if (!mapping) throw new Error('Archivio cloud non riconosciuto.');
+    if (!record?.id) throw new Error('Record cloud non valido.');
+    if (!ready || !profile || profile.role === 'administrator') throw new Error('Il collegamento cloud non è pronto.');
+    const remoteName = mapping[1];
+    if (!canPush(remoteName)) throw new Error('Non hai i permessi per salvare questo record.');
+    const known = remoteIds.get(remoteName) || new Set();
+    const frozenRecord = JSON.parse(safePayload(record));
+    await setDoc(
+      doc(firestore, remoteName, String(frozenRecord.id)),
+      envelope(frozenRecord, remoteName, !known.has(String(frozenRecord.id))),
+      { merge: true }
+    );
+  },
   async aiRequest(payload) {
     const response = await callEdilKappaAi(payload);
     return response.data;
