@@ -344,7 +344,7 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   const bridge = fs.readFileSync(path.join(__dirname, "..", "scripts", "google-apps-script-danea.gs"), "utf8");
   const manifest = fs.readFileSync(path.join(__dirname, "..", "scripts", "appsscript.json"), "utf8");
   assert.match(loader, /danea-integration\.js\?v=25/);
-  assert.match(html, /firebase-cloud\.js\?v=34/);
+  assert.match(html, /firebase-cloud\.js\?v=35/);
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
   assert.match(danea, /controllo Gmail ogni 5 minuti/);
@@ -377,7 +377,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v87-salvataggio-record-sopralluogo/);
+  assert.match(serviceWorker, /v88-stato-sopralluogo-cloud-valido/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
@@ -452,8 +452,8 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
-  assert.match(loader, /inspection-workflow\.js\?v=5/);
-  assert.match(html, /firebase-cloud\.js\?v=34/);
+  assert.match(loader, /inspection-workflow\.js\?v=6/);
+  assert.match(html, /firebase-cloud\.js\?v=35/);
   assert.match(cloud, /async syncCollection\(localName\)/);
   assert.match(cloud, /async syncRecord\(localName, record\)/);
   assert.ok(loader.indexOf("inspection-workflow.js") > loader.indexOf("intervention-lifecycle.js"));
@@ -465,7 +465,8 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(workflow, /Misure rilevate/);
   assert.match(workflow, /Lavorazioni consigliate/);
   assert.match(workflow, /uploadMedia/);
-  assert.match(workflow, /Eseguito · da preventivare/);
+  assert.match(workflow, /item\.status = 'Da preventivare'/);
+  assert.match(html, /Eseguito · da preventivare/);
   assert.match(workflow, /prepareInspectionQuoteAI/);
   assert.match(ai, /edilkappaAiPrepareInspection/);
   assert.match(ai, /seedMediaReferences/);
