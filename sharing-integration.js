@@ -567,6 +567,6 @@ new MutationObserver(queueEnhancement).observe(document.body, { childList: true,
 window.addEventListener('load', queueEnhancement);
 queueEnhancement();
 
-import('./quick-site-photos.js?v=2').catch((error) => {
+import('./quick-site-photos.js?v=3').catch((error) => {
   console.error('Caricamento foto rapido non disponibile:', error);
 });
