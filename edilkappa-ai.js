@@ -45,6 +45,8 @@
     generatingVisual: "",
     auditingPdf: "",
     attachments: [],
+    seedMediaReferences: [],
+    seedDestination: null,
     taskType: "auto",
     modelMode: "auto",
     draft: "",
@@ -780,7 +782,7 @@
       clienti: compact(database.condomini, ["id", "name", "address", "manager"], 40),
       interventi: compact(database.interventions, ["id", "clientId", "client", "title", "category", "status", "notes"], 40),
       cantieri: compact((database.sites || []).filter((item) => item.status !== "Completato"), ["id", "title", "client", "clientId", "interventionId", "address", "start", "status", "progress", "value", "cost", "worker"], 20),
-      sopralluoghi: compact(database.inspections, ["id", "date", "time", "type", "client", "clientId", "interventionId", "address", "problem", "status"], 20),
+      sopralluoghi: compact(database.inspections, ["id", "date", "time", "type", "client", "clientId", "interventionId", "address", "problem", "status", "outcome", "measurements", "recommendations", "technicalNotes"], 20),
       listinoEdilKappa: compact((database.priceList || []).filter((item) => item.status !== "Disattivo"), ["id", "code", "category", "description", "unit", "cost", "salePrice", "status"], 100),
       preventiviRecenti: recentQuotes,
       memoriaPrezziValidati: validatedQuotes.map((item) => ({
@@ -2116,6 +2118,12 @@
   }
 
   function addCompletedAiResult(result, requestedMode, mediaReferences, requestAttachments) {
+    const seededDestination = state.pendingJob?.destination || state.seedDestination;
+    if (result.artifact && seededDestination) {
+      result.artifact.client = result.artifact.client || seededDestination.client;
+      result.artifact.clientId = result.artifact.clientId || seededDestination.clientId;
+      result.artifact.interventionId = result.artifact.interventionId || seededDestination.interventionId;
+    }
     const artifactId = result.artifact?.id;
     if (artifactId && state.messages[requestedMode].some((item) => item.artifact?.id === artifactId)) return;
     const completedMessage = {
@@ -2139,6 +2147,7 @@
       at: Date.now()
     };
     state.messages[requestedMode].push(completedMessage);
+    state.seedDestination = null;
     if (result.artifact?.kind === "quote") {
       window.EdilKappaCompletion?.addActivity?.({
         id: `quote-ready-${result.artifact.id || Date.now()}`,
@@ -2290,7 +2299,7 @@
       if (requestedMode === "personal" && originals.some((item) => item.kind === "video" && !item.frames.length)) {
         throw new Error("Questo video non può essere letto dal browser. Prova a convertirlo in MP4 oppure usalo in modalità Lavoro per tentare la trascrizione audio.");
       }
-      const mediaReferences = [];
+      const mediaReferences = state.seedMediaReferences.slice();
       const archiveWarnings = [];
       if (requestedMode === "work") {
         for (const [index, item] of originals.entries()) {
@@ -2301,6 +2310,7 @@
       }
       const requestAttachments = requestAttachmentsFor(originals, { omitArchivedHeic: requestedMode === "work" });
       userMessage.media = mediaReferences;
+      state.seedMediaReferences = [];
       state.progress = originals.some((item) => item.kind === "video") ? "Trascrivo l’audio, analizzo i fotogrammi e preparo il risultato…" : "Analizzo gli allegati e preparo il risultato…";
       rerender();
       const result = await window.EdilKappaCloud.aiRequest({
@@ -2316,7 +2326,7 @@
         businessContext: requestedMode === "work" ? businessContext(message) : null
       });
       if (!result.jobId) throw new Error("EdilKappa AI non ha restituito l’identificativo della generazione.");
-      rememberPendingJob({ jobId: result.jobId, mode: requestedMode, conversationId: state.activeConversation[requestedMode], stage: result.stage || "analysis", message, startedAt: Date.now() });
+      rememberPendingJob({ jobId: result.jobId, mode: requestedMode, conversationId: state.activeConversation[requestedMode], stage: result.stage || "analysis", message, destination: state.seedDestination, startedAt: Date.now() });
       state.progress = stageLabel(state.pendingJob.stage);
       rerender();
       await pollPendingJob(requestAttachments, mediaReferences);
@@ -2329,6 +2339,49 @@
       if (!state.sending) state.progress = "";
       rerender();
     }
+  };
+  window.edilkappaAiPrepareInspection = async (inspectionId) => {
+    if (state.sending) throw new Error('EdilKappa AI sta già elaborando un documento.');
+    if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.aiRequest) throw new Error('Il collegamento cloud non è ancora pronto.');
+    const database = window.EdilKappaLocal?.getDB?.() || {};
+    const inspection = (database.inspections || []).find((item) => String(item.id) === String(inspectionId));
+    if (!inspection) throw new Error('Sopralluogo non trovato.');
+    const intervention = (database.interventions || []).find((item) => String(item.id) === String(inspection.interventionId || ''));
+    const client = (database.condomini || []).find((item) => String(item.id) === String(inspection.clientId || ''));
+    const conversation = await window.EdilKappaCloud.aiRequest({ action: 'new_conversation', mode: 'work' });
+    if (!conversation.conversation?.id) throw new Error('Non riesco ad aprire la preparazione automatica.');
+    state.mode = 'work';
+    state.conversations.work.unshift(conversation.conversation);
+    state.activeConversation.work = conversation.conversation.id;
+    state.messages.work = [];
+    state.loaded.work = true;
+    state.taskType = 'quote';
+    state.photoOrigin = DEFAULT_PHOTO_ORIGIN;
+    state.attachments = [];
+    state.seedMediaReferences = (inspection.media || []).filter((item) => item?.storagePath).slice(0, MAX_ORIGINAL_ATTACHMENTS).map((item) => ({
+      ...item,
+      kind: item.kind || (String(item.fileType || '').startsWith('video/') ? 'video' : 'image'),
+      photoOrigin: normalizePhotoOrigin(item.photoOrigin || DEFAULT_PHOTO_ORIGIN)
+    }));
+    state.seedDestination = { client: inspection.client || client?.name || '', clientId: inspection.clientId || client?.id || '', interventionId: inspection.interventionId || '' };
+    state.error = '';
+    state.retryAvailable = false;
+    state.draft = [
+      'Prepara un preventivo completo EdilKappa usando esclusivamente i dati di questo sopralluogo e gli allegati archiviati.',
+      `Cliente/condominio: ${inspection.client || client?.name || 'da verificare'}`,
+      `Indirizzo: ${inspection.address || client?.address || 'da verificare'}`,
+      `Intervento ID: ${inspection.interventionId || ''}`,
+      `Titolo intervento: ${intervention?.title || inspection.type || 'Intervento da preventivare'}`,
+      `Richiesta iniziale: ${inspection.problem || 'non indicata'}`,
+      `Esito sopralluogo: ${inspection.outcome || 'non indicato'}`,
+      `Misure rilevate: ${inspection.measurements || 'non indicate'}`,
+      `Lavorazioni consigliate: ${inspection.recommendations || 'non indicate'}`,
+      `Note tecniche: ${inspection.technicalNotes || 'nessuna'}`,
+      `Data sopralluogo: ${inspection.date || ''}`,
+      'Calcola materiali, quantità, manodopera, sicurezza, trasporti e smaltimento. Usa il prezzario privato EdilKappa quando disponibile. Non inventare misure o condizioni fiscali mancanti: evidenziale nell’anteprima e chiedi solo le informazioni indispensabili. Salva la destinazione proposta sul cliente e sull’intervento indicati.'
+    ].join('\n');
+    rerender();
+    setTimeout(() => window.edilkappaAiSend(), 0);
   };
   window.edilkappaAiDestinationChanged = (select) => {
     const target = select.form?.querySelector('[name="interventionId"]');

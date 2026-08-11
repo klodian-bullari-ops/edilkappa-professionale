@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v81-intervento-unico-controllo`;
+const CACHE = `${CACHE_PREFIX}v82-sopralluogo-ai-automatico`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,7 @@ const APP_SHELL = [
   "./direct-search.js",
   "./danea-integration.js",
   "./intervention-lifecycle.js",
+  "./inspection-workflow.js",
   "./completion-center.js",
   "./bulk-sharing.js",
   "./hours-closeout.js",

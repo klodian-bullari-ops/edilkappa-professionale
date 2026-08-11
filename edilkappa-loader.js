@@ -5,10 +5,11 @@
     critical: [
       "./professional-extensions.js?v=19",
       "./business-suite.js?v=19",
-      "./client-archive.js?v=21",
+      "./client-archive.js?v=22",
       "./direct-search.js?v=6",
       "./danea-integration.js?v=25",
       "./intervention-lifecycle.js?v=3",
+      "./inspection-workflow.js?v=1",
       "./completion-center.js?v=3",
       "./bulk-sharing.js?v=5.2",
       "./hours-closeout.js?v=3",
@@ -22,7 +23,7 @@
       "./system-control.js?v=1"
     ],
     ai: [
-      "./edilkappa-ai.js?v=24",
+      "./edilkappa-ai.js?v=25",
       "./edilkappa-ai-route.js?v=1"
     ],
     pdf: [

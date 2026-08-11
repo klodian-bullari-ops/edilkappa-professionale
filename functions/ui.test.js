@@ -279,7 +279,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(loader, /edilkappa-ai\.js\?v=24/);
+  assert.match(loader, /edilkappa-ai\.js\?v=25/);
   assert.doesNotMatch(html, /<script[^>]+edilkappa-ai\.js/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
@@ -377,7 +377,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v81-intervento-unico-controllo/);
+  assert.match(serviceWorker, /v82-sopralluogo-ai-automatico/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
@@ -400,7 +400,7 @@ test("supports a compact desktop navigation and a full-width AI focus mode", () 
 test("guides every intervention through one operational workflow", () => {
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
-  assert.match(loader, /client-archive\.js\?v=21/);
+  assert.match(loader, /client-archive\.js\?v=22/);
   assert.match(archive, /function workflowState/);
   assert.match(archive, /Richiesta.*Sopralluogo.*Preventivo.*Programmazione.*Esecuzione.*Chiusura/s);
   assert.match(archive, /Programma il sopralluogo/);
@@ -431,7 +431,7 @@ test("shows a reserved system control center with sync and integrity checks", ()
 test("makes the AI document approval path explicit", () => {
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
-  assert.match(loader, /edilkappa-ai\.js\?v=24/);
+  assert.match(loader, /edilkappa-ai\.js\?v=25/);
   assert.match(ai, /function documentFlowHtml/);
   assert.match(ai, /Materiale/);
   assert.match(ai, /Anteprima/);
@@ -443,4 +443,28 @@ test("keeps technical TransferNow settings out of the Danea daily page", () => {
   const danea = fs.readFileSync(path.join(__dirname, "..", "danea-integration.js"), "utf8");
   const view = danea.slice(danea.indexOf("window.daneaRequestsView"), danea.indexOf("window.openDaneaRequest"));
   assert.doesNotMatch(view, /openTransferNowSettings/);
+});
+
+test("turns a scheduled inspection into a linked AI quote workflow", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  const workflow = fs.readFileSync(path.join(__dirname, "..", "inspection-workflow.js"), "utf8");
+  const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
+  const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
+  assert.match(loader, /inspection-workflow\.js\?v=1/);
+  assert.ok(loader.indexOf("inspection-workflow.js") > loader.indexOf("intervention-lifecycle.js"));
+  assert.match(html, /Segna eseguito/);
+  assert.match(html, /Prepara preventivo AI/);
+  assert.match(html, /status:'Pianificato'/);
+  assert.match(workflow, /ensureInspectionIntervention/);
+  assert.match(workflow, /Sopralluogo eseguito/);
+  assert.match(workflow, /Misure rilevate/);
+  assert.match(workflow, /Lavorazioni consigliate/);
+  assert.match(workflow, /uploadMedia/);
+  assert.match(workflow, /Eseguito · da preventivare/);
+  assert.match(workflow, /prepareInspectionQuoteAI/);
+  assert.match(ai, /edilkappaAiPrepareInspection/);
+  assert.match(ai, /seedMediaReferences/);
+  assert.match(ai, /setTimeout\(\(\) => window\.edilkappaAiSend\(\), 0\)/);
+  assert.match(archive, /Registra il sopralluogo eseguito/);
 });

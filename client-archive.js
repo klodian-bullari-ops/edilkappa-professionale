@@ -180,7 +180,7 @@
       ${field('Indirizzo', 'address', 'text', client.address || '', true)}
       <div class="field full"><label>Problema / richiesta</label><textarea name="problem" required></textarea></div>
     </div>`, (formData) => {
-      db.inspections.push({id:uid('s'),clientId:client.id,client:client.name,interventionId,date:formData.get('date'),time:formData.get('time'),type:formData.get('type'),address:formData.get('address'),problem:formData.get('problem'),reminder:'60',status:'Da preventivare',createdAt:new Date().toISOString()});
+      db.inspections.push({id:uid('s'),clientId:client.id,client:client.name,interventionId,date:formData.get('date'),time:formData.get('time'),type:formData.get('type'),address:formData.get('address'),problem:formData.get('problem'),reminder:'60',status:'Pianificato',createdAt:new Date().toISOString()});
     });
   };
 
@@ -331,7 +331,8 @@
   }
 
   function workflowState(item, rows) {
-    const hasInspection = rows.inspections.length > 0;
+    const scheduledInspection = rows.inspections.find((inspection) => !inspection.completedAt);
+    const hasInspection = rows.inspections.some((inspection) => Boolean(inspection.completedAt));
     const hasQuote = rows.quotes.length > 0;
     const hasSite = rows.sites.length > 0;
     const hasExecution = rows.sites.some((site) => /in corso|complet/i.test(site.status || '')) || rows.reports.length > 0 || rows.timesheets.length > 0;
@@ -340,6 +341,7 @@
     const labels = [['📥','Richiesta'],['📅','Sopralluogo'],['📄','Preventivo'],['🗓️','Programmazione'],['🏗️','Esecuzione'],['✓','Chiusura']];
     const firstMissing = values.findIndex((value) => !value);
     const steps = labels.map(([icon,label],index) => `<div class="interventionStep ${values[index] ? 'done' : index === firstMissing ? 'current' : ''}"><span>${icon}</span>${label}</div>`).join('');
+    if (!hasInspection && scheduledInspection) return {steps,label:'Registra il sopralluogo eseguito',detail:'Inserisci esito, misure, foto e lavorazioni consigliate.',action:`completeInspection('${scheduledInspection.id}')`};
     if (!hasInspection) return {steps,label:'Programma il sopralluogo',detail:'Inserisci data, ora e problema da verificare.',action:`openInspectionForIntervention('${item.clientId}','${item.id}')`};
     if (!hasQuote) return {steps,label:'Prepara il preventivo',detail:'Apri EdilKappa AI oppure carica un preventivo già pronto.',action:"go('ai')"};
     if (!hasSite) return {steps,label:'Programma il lavoro',detail:'Crea il cantiere, assegna le squadre e indica la data.',action:`openSiteForIntervention('${item.clientId}','${item.id}')`};
