@@ -279,7 +279,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(loader, /edilkappa-ai\.js\?v=22/);
+  assert.match(loader, /edilkappa-ai\.js\?v=23/);
   assert.doesNotMatch(html, /<script[^>]+edilkappa-ai\.js/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
@@ -377,5 +377,22 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v79-home-agenda-mobile/);
+  assert.match(serviceWorker, /v80-sidebar-focus-desktop/);
+});
+
+test("supports a compact desktop navigation and a full-width AI focus mode", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "modern-ui.css"), "utf8");
+  const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
+  assert.match(html, /id="desktopSidebarToggle"/);
+  assert.match(html, /edilkappa-sidebar-collapsed-v1/);
+  assert.match(html, /classList\.toggle\('sidebarCollapsed'/);
+  assert.match(html, /desktopCoreViews=new Set/);
+  assert.match(html, /\['more','•••','Altro'\]/);
+  assert.match(css, /body\.sidebarCollapsed \.main\{margin-left:0/);
+  assert.match(css, /@media\(max-width:980px\)[\s\S]*?\.desktopSidebarToggle\{display:none/);
+  assert.match(ai, /Modalità Focus/);
+  assert.match(ai, /edilkappaAiToggleFocus/);
+  assert.match(ai, /edilkappaAiExitFocus/);
+  assert.match(ai, /\.ekAiPage\.focusMode \.ekAiThreads\{display:none/);
 });

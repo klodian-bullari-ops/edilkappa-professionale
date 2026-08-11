@@ -29,7 +29,7 @@
     .workerHero{background:linear-gradient(135deg,#111111,#22282d);border-bottom:5px solid var(--lime)}.workerHero h2{color:var(--lime)}.notice{background:#fff7cc;border-color:#eed66e;color:#725a00}.mobileNav button.active{background:#fff7cc;color:var(--ink);border-radius:12px;font-weight:850}
     @media print{.sidebar,.topbar,.mobileNav,.actions,.btn{display:none!important}.main{margin:0}.content{padding:0}.card{box-shadow:none;border:0}.printDoc{display:block!important}}
   </style>
-  <link rel="stylesheet" href="./modern-ui.css?v=5">
+  <link rel="stylesheet" href="./modern-ui.css?v=6">
 </head>
 <body>
 <div class="shell">
@@ -39,7 +39,7 @@
     <div class="sidebarFoot" id="companySidebar">EDILKAPPA<br>Gestionale riservato</div>
   </aside>
   <section class="main">
-    <header class="topbar"><div class="mobileBrand"><img src="assets/icona-edilkappa.svg" alt=""><div><b>EDILKAPPA</b><small id="mobileBrandSubtitle">Gestionale operativo</small></div></div><h1 id="pageTitle">Panoramica</h1><div class="mobileHeaderActions"><button aria-label="Cerca" onclick="openMobileSearch()">⌕</button><button aria-label="Notifiche" onclick="go('activityView')">♟<i id="mobileNotificationBadge"></i></button></div><div class="topActions"><div class="topSearch"><input id="globalSearch" type="search" placeholder="Cerca cliente, indirizzo, lavoro…" oninput="runSearch(this.value)" onkeydown="if(event.key==='Escape')closeMobileSearch()"></div><div class="role"><label class="hideMobile">Visualizza come</label><select id="roleSelect"></select><div class="avatar" id="avatar">K</div></div></div></header>
+    <header class="topbar"><div class="mobileBrand"><img src="assets/icona-edilkappa.svg" alt=""><div><b>EDILKAPPA</b><small id="mobileBrandSubtitle">Gestionale operativo</small></div></div><button id="desktopSidebarToggle" class="desktopSidebarToggle" type="button" aria-label="Apri o chiudi il menu" aria-expanded="true" title="Chiudi menu" onclick="toggleDesktopSidebar()">☰</button><h1 id="pageTitle">Panoramica</h1><div class="mobileHeaderActions"><button aria-label="Cerca" onclick="openMobileSearch()">⌕</button><button aria-label="Notifiche" onclick="go('activityView')">♟<i id="mobileNotificationBadge"></i></button></div><div class="topActions"><div class="topSearch"><input id="globalSearch" type="search" placeholder="Cerca cliente, indirizzo, lavoro…" oninput="runSearch(this.value)" onkeydown="if(event.key==='Escape')closeMobileSearch()"></div><div class="role"><label class="hideMobile">Visualizza come</label><select id="roleSelect"></select><div class="avatar" id="avatar">K</div></div></div></header>
     <main class="content" id="app"></main>
   </section>
   <nav class="mobileNav" id="mobileNav"></nav>
@@ -81,7 +81,10 @@ function roleName(){return role==='owner'?'Titolare':role==='secretary'?'Ufficio
 function nav(){return isOffice()?ownerNav:workerNav}
 function initRoles(){const s=document.getElementById('roleSelect');if(!isOffice()&&!STAFF.some(w=>w.id===role)){role='owner';localStorage.setItem('ek_role',role)}s.innerHTML='<option value="owner">Titolare</option><option value="secretary">Ufficio</option>'+STAFF.map(w=>{const team=WORKERS.find(t=>t.id===w.team);return`<option value="${w.id}">${esc(w.name)} · ${esc(team?.name||'Senza squadra')}</option>`}).join('');s.value=role;s.onchange=()=>{role=s.value;searchQuery='';document.getElementById('globalSearch').value='';localStorage.setItem('ek_role',role);view=isOffice()?'dashboard':'worker';window.EdilKappaLoader?.allowNextRender?.();render();checkHourReminders()}}
 function renderNav(){
-  const html=nav().map(n=>`<button class="${view===n[0]?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');
+  const desktopCoreViews=new Set(['dashboard','ai','operationsCenter','agenda','condomini','inspections','daneaRequestsView','quotes','sites','completedView']);
+  const desktopNav=isOffice()?[...ownerNav.filter(n=>desktopCoreViews.has(n[0])),['more','•••','Altro']]:nav();
+  const desktopMoreActive=isOffice()&&!desktopCoreViews.has(view)&&view!=='search';
+  const html=desktopNav.map(n=>`<button title="${esc(n[2])}" class="${view===n[0]||(n[0]==='more'&&desktopMoreActive)?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');
   document.getElementById('desktopNav').innerHTML=html;
   const moreViews=['condomini','quotes','learningCenter','workMap','hours','teamsView','portalView','daneaRequestsView','completedView','activityView','drone','lifeline','roofs','drains','companySettingsView','finance'];
   const mobile=isOffice()
@@ -89,7 +92,12 @@ function renderNav(){
     :[['worker','▣','Lavori',"go('worker')",'jobs'],['hours','◷','Ore',"go('hours')",'hours'],['quickPhoto','📷','Foto','captureInfo()','photo'],['attendance','▦','Assenze',"go('attendance')",'attendance'],['workerProfile','●','Profilo',"go('workerProfile')",'profile']];
   document.getElementById('mobileNav').innerHTML=mobile.map(n=>`<button data-action="${n[4]}" class="${view===n[0]||(n[0]==='more'&&moreViews.includes(view))?'active':''}" onclick="${n[3]}"><span>${n[1]}</span>${n[2]}</button>`).join('');
 }
-function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;const loading=window.EdilKappaLoader?.ensureView?.(view);window.EdilKappaLoader?.allowNextRender?.();render();loading?.catch?.(error=>window.EdilKappaLoader?.showError?.(error,view))}
+const SIDEBAR_STATE_KEY='edilkappa-sidebar-collapsed-v1';
+function setDesktopSidebarCollapsed(collapsed,{persist=true}={}){const value=Boolean(collapsed);document.body.classList.toggle('sidebarCollapsed',value);const button=document.getElementById('desktopSidebarToggle');if(button){button.setAttribute('aria-expanded',String(!value));button.title=value?'Apri menu':'Chiudi menu'}if(persist)localStorage.setItem(SIDEBAR_STATE_KEY,value?'1':'0')}
+function applyDesktopSidebarState(){setDesktopSidebarCollapsed(localStorage.getItem(SIDEBAR_STATE_KEY)==='1',{persist:false})}
+function toggleDesktopSidebar(){setDesktopSidebarCollapsed(!document.body.classList.contains('sidebarCollapsed'))}
+document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='b'&&matchMedia('(min-width:981px)').matches){event.preventDefault();toggleDesktopSidebar()}});
+function go(v){if(view==='ai'&&v!=='ai')window.edilkappaAiExitFocus?.();view=window.EdilKappaCloud?.restrictView?.(v)||v;const loading=window.EdilKappaLoader?.ensureView?.(view);window.EdilKappaLoader?.allowNextRender?.();render();loading?.catch?.(error=>window.EdilKappaLoader?.showError?.(error,view))}
 function openMobileSearch(){document.body.classList.add('mobileSearchOpen');setTimeout(()=>document.getElementById('globalSearch')?.focus(),30)}
 function closeMobileSearch(){document.body.classList.remove('mobileSearchOpen');document.getElementById('globalSearch')?.blur()}
 let searchRenderTimer=0;
@@ -247,8 +255,8 @@ function saveReport(e){e.preventDefault();const f=new FormData(e.target),site=db
 async function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.aiArtifact){try{const loading=window.EdilKappaLoader?.ensureView?.('ai');if(loading)await loading;if(window.edilkappaAiDownloadSavedQuote)return window.edilkappaAiDownloadSavedQuote(q)}catch(error){return alert(error?.message||'Non riesco a caricare il generatore del preventivo.')}}const old=document.body.innerHTML;document.body.innerHTML=`<main style="padding:35px;font-family:Arial"><h1>${COMPANY.name}</h1><p>${COMPANY.address}<br>P.IVA ${COMPANY.vat}<br>${COMPANY.phone} · ${COMPANY.email}</p><hr><h2>PREVENTIVO ${esc(q.code)}</h2><p>Data: ${esc(q.date)}</p><h3>${esc(q.client)}</h3><p>${esc(q.subject)}</p><h2 style="text-align:right">Imponibile: ${euro(q.net)}</h2><p style="margin-top:80px">Validità offerta: 30 giorni</p></main>`;window.print();document.body.innerHTML=old;location.reload()}
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
-initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=54').catch(()=>{});
+applyDesktopSidebarState();initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=55').catch(()=>{});
 </script>
 <script>
 window.EdilKappaLocal={
