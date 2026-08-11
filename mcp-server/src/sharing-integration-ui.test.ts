@@ -9,6 +9,7 @@ const cloudUi = readFileSync(new URL('../../firebase-cloud.js', import.meta.url)
 const documentsUi = readFileSync(new URL('../../professional-extensions.js', import.meta.url), 'utf8');
 const storageRules = readFileSync(new URL('../../storage.rules', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
+const bulkSharingUi = readFileSync(new URL('../../bulk-sharing.js', import.meta.url), 'utf8');
 
 test('il modulo di condivisione è sintatticamente valido', () => {
   assert.doesNotThrow(() => new vm.Script(sharingUi));
@@ -109,4 +110,8 @@ test('Excel e CSV sono ammessi nell’archivio cloud', () => {
 
 test('la cache viene aggiornata per consegnare la nuova condivisione ai telefoni', () => {
   assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
+});
+
+test('Condividi non viene aggiunto alle priorità compatte della Home', () => {
+  assert.match(bulkSharingUi, /button\.closest\('\[data-home-priority\]'\)/);
 });
