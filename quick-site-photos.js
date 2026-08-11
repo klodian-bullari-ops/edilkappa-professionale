@@ -278,6 +278,7 @@
     document.querySelectorAll('button[onclick*="openSite("], button[onclick*="openReport("]').forEach((source) => {
       if (source.dataset.quickPhotoChecked) return;
       source.dataset.quickPhotoChecked = 'true';
+      if (source.closest('[data-home-priority]')) return;
       const action = source.getAttribute('onclick') || '';
       const match = action.match(/(?:openSite|openReport)\('([^']+)'\)/);
       if (!match) return;

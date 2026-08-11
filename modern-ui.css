@@ -206,7 +206,8 @@ body[data-role="worker"] .sidebarFoot{display:none}
   body[data-role="office"] .dashboardPriority .rowIcon{width:48px;height:48px;font-size:22px}
   body[data-role="office"] .dashboardPriority .rowBody small{display:none}
   body[data-role="office"] .dashboardPriority .rowBody b{font-size:16px}
-  body[data-role="office"] .dashboardPriority .row>.btn{min-width:0;width:30px;height:38px;min-height:38px;padding:0;border:0;background:transparent;font-size:29px}
+  body[data-role="office"] .dashboardPriority .row>.priorityOpen{min-width:0;width:30px;height:38px;min-height:38px;padding:0;border:0;background:transparent;font-size:29px}
+  body[data-role="office"] .dashboardPriority [data-quick-site],body[data-role="office"] .dashboardPriority [data-bulk-share]{display:none!important}
   body[data-role="office"] .aiLaunchCard{display:grid;grid-template-columns:104px minmax(0,1fr);gap:16px;margin-top:20px;padding:18px;background:linear-gradient(125deg,#f8fcff,#eaf5ff)}
   body[data-role="office"] .aiLaunchLogo{width:96px;height:96px}
   body[data-role="office"] .aiLaunchLogo img{width:72px;height:72px}

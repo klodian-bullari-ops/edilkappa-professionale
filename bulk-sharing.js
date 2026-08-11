@@ -767,6 +767,7 @@
       if (match) addShareButton(button.closest('.actions') || button.parentElement, match[1], match[2], match[1] === 'site' ? siteShareLabel(match[2], '📦 Condividi / ZIP') : '📦 Condividi / ZIP');
     });
     document.querySelectorAll('button[data-quick-site]').forEach((button) => {
+      if (button.closest('[data-home-priority]')) return;
       addShareButton(button.closest('.actions') || button.parentElement, 'site', button.dataset.quickSite, siteShareLabel(button.dataset.quickSite, '↗ Condividi'));
     });
     document.querySelectorAll('section[id^="intervention-"]').forEach((section) => {

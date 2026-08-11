@@ -4,8 +4,10 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const quickSitePhotos = readFileSync(new URL('../../quick-site-photos.js', import.meta.url), 'utf8');
+const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+const modernUi = readFileSync(new URL('../../modern-ui.css', import.meta.url), 'utf8');
 
-function testContext() {
+function testContext(siteButtons: Array<Record<string, any>> = []) {
   const openedReports: Array<[string, number]> = [];
   const modalContent = { innerHTML: '' };
   const dialog = { opened: false, showModal() { this.opened = true; } };
@@ -29,10 +31,10 @@ function testContext() {
     window: windowObject,
     document: {
       head: { appendChild: () => undefined }, body: {},
-      createElement: () => ({ textContent: '' }),
+      createElement: () => ({ textContent: '', dataset: {}, addEventListener: () => undefined }),
       getElementById: (id: string) => id === 'modal' ? dialog : id === 'modalContent' ? modalContent : null,
       querySelector: () => null,
-      querySelectorAll: () => []
+      querySelectorAll: (selector: string) => selector.startsWith('button[onclick*="openSite("]') ? siteButtons : []
     },
     MutationObserver: class { observe() {} },
     requestAnimationFrame: (callback: () => void) => callback(),
@@ -65,4 +67,32 @@ test('una foto di un vecchio rapportino usa l’apertura fotografica già esiste
   const openPhoto = windowObject.openQuickSitePhoto as (albumId: string, photoIndex: number) => Promise<void>;
   await openPhoto('report-1', 1);
   assert.deepEqual(openedReports, [['report-1', 1]]);
+});
+
+test('la Home mobile mantiene le priorità compatte senza aggiungere i comandi Foto', () => {
+  let inserted = 0;
+  const source = {
+    dataset: {},
+    getAttribute: () => "openSite('site-1')",
+    closest: (selector: string) => selector === '[data-home-priority]' ? {} : null,
+    parentElement: { querySelector: () => null },
+    insertAdjacentElement: () => { inserted += 1; }
+  };
+  testContext([source]);
+  assert.equal(inserted, 0);
+
+  let detailInserted = 0;
+  const detailSource = {
+    dataset: {},
+    getAttribute: () => "openSite('site-1')",
+    closest: () => null,
+    parentElement: { querySelector: () => null },
+    insertAdjacentElement: () => { detailInserted += 1; }
+  };
+  testContext([detailSource]);
+  assert.equal(detailInserted, 1);
+  assert.match(indexHtml, /data-home-priority/);
+  assert.match(indexHtml, /class="btn sm light priorityOpen"/);
+  assert.match(quickSitePhotos, /source\.closest\('\[data-home-priority\]'\)/);
+  assert.match(modernUi, /dashboardPriority \[data-quick-site\]/);
 });

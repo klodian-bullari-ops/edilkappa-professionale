@@ -30,7 +30,7 @@
     .workerHero{background:linear-gradient(135deg,#111111,#22282d);border-bottom:5px solid var(--lime)}.workerHero h2{color:var(--lime)}.notice{background:#fff7cc;border-color:#eed66e;color:#725a00}.mobileNav button.active{background:#fff7cc;color:var(--ink);border-radius:12px;font-weight:850}
     @media print{.sidebar,.topbar,.mobileNav,.actions,.btn{display:none!important}.main{margin:0}.content{padding:0}.card{box-shadow:none;border:0}.printDoc{display:block!important}}
   </style>
-  <link rel="stylesheet" href="./modern-ui.css?v=3">
+  <link rel="stylesheet" href="./modern-ui.css?v=4">
 </head>
 <body>
 <div class="shell">
@@ -136,7 +136,7 @@ function dashboard(){
   return `<div class="dashboardHero"><div><span class="eyebrow">Buongiorno, ${esc(displayName)}</span><h2>Centro operativo</h2><p>Le attività importanti sono ordinate e apribili direttamente.</p></div><div class="actions"><button class="btn light" onclick="openInspection()">＋ Sopralluogo</button><button class="btn lime" onclick="openSite()">＋ Nuovo intervento</button></div></div>
   <div class="grid stats dashboardStats">${stat('Da fare oggi',newRequests.length+active.length,'🛠️','richieste e lavori attivi','mobileEssential')}${stat('Preventivi da controllare',openQuotes.length,'📄','bozze e risposte aperte','mobileExtra')}${stat('Cantieri attivi',active.length,'🏗️','lavori in esecuzione','mobileExtra')}${stat('Ore mancanti',missingHours.length,'◷','operai senza registrazione oggi','mobileEssential')}</div>
   <div class="mobileDailyActions"><button class="mobilePrimaryAction" onclick="openSite()"><span>＋</span><b>Nuovo intervento</b><small>Apri subito un nuovo lavoro</small></button><button onclick="go('ai')"><span>✦</span><b>Crea preventivo</b></button></div>
-  <div class="dashboardGrid"><section class="card dashboardPriority"><div class="cardHead"><h3>Priorità di oggi</h3><button class="btn sm light" onclick="go('sites')">Vedi lavori</button></div><div class="list">${priorities.slice(0,5).map(item=>`<div class="row"><div class="rowIcon">${item.icon}</div><div class="rowBody"><b>${esc(item.title)}</b><small>${esc(item.meta)}</small></div>${badge(item.status)}<button class="btn sm light" onclick="${item.action}">›</button></div>`).join('')||'<div class="empty">Nessuna priorità urgente.</div>'}</div></section><section class="card dashboardAgenda"><div class="cardHead"><h3>Agenda di oggi</h3><button class="btn sm light" onclick="go('agenda')">Apri agenda</button></div><div class="agenda">${agendaItems.map(item=>`<div class="event"><time>${esc(item.time||'—')}</time><b>${esc(item.client||'Appuntamento')}</b><small>${esc(item.type||'Sopralluogo')} · ${esc(item.address||'')}</small></div>`).join('')||'<div class="empty">Nessun appuntamento.</div>'}</div></section></div>
+  <div class="dashboardGrid"><section class="card dashboardPriority"><div class="cardHead"><h3>Priorità di oggi</h3><button class="btn sm light" onclick="go('sites')">Vedi lavori</button></div><div class="list">${priorities.slice(0,5).map(item=>`<div class="row" data-home-priority><div class="rowIcon">${item.icon}</div><div class="rowBody"><b>${esc(item.title)}</b><small>${esc(item.meta)}</small></div>${badge(item.status)}<button class="btn sm light priorityOpen" aria-label="Apri ${esc(item.title)}" onclick="${item.action}">›</button></div>`).join('')||'<div class="empty">Nessuna priorità urgente.</div>'}</div></section><section class="card dashboardAgenda"><div class="cardHead"><h3>Agenda di oggi</h3><button class="btn sm light" onclick="go('agenda')">Apri agenda</button></div><div class="agenda">${agendaItems.map(item=>`<div class="event"><time>${esc(item.time||'—')}</time><b>${esc(item.client||'Appuntamento')}</b><small>${esc(item.type||'Sopralluogo')} · ${esc(item.address||'')}</small></div>`).join('')||'<div class="empty">Nessun appuntamento.</div>'}</div></section></div>
   <section class="card aiLaunchCard"><div class="aiLaunchLogo"><img src="assets/icona-edilkappa.svg" alt=""></div><div class="aiLaunchBody"><h3>EdilKappa AI</h3><p>Il tuo assistente intelligente per preventivi e gestione lavori.</p><button class="btn" onclick="go('ai')">✦ Crea preventivo</button></div></section><div class="company">${esc(companySummary())}</div>`;
 }
 function agenda(){const items=db.inspections.slice().sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));return pageHead('Agenda operativa','Sopralluoghi e controlli programmati',`<button class="btn light" onclick="requestNotifications()">🔔 Attiva notifiche</button><button class="btn lime" onclick="openInspection()">＋ Appuntamento</button>`)+`<div class="notice"><b>Promemoria affidabile su iPhone:</b> dopo aver programmato il sopralluogo premi “Calendario iPhone”. L’avviso funzionerà anche con l’app chiusa.</div><div style="height:14px"></div><div class="card"><div class="list">${items.map(x=>`<div class="row"><div class="rowIcon">📅</div><div class="rowBody"><b>${esc(x.client)}</b><small>${esc(x.date)} alle ${esc(x.time)} · ${esc(x.type)}<br>${esc(x.address)} · avviso ${reminderLabel(x.reminder)}</small></div><div class="actions">${badge(x.status)}<button class="btn sm green" onclick="downloadInspectionCalendar('${x.id}')">Calendario iPhone</button><button class="btn sm light" onclick="openInspection('${x.id}')">Modifica</button><button class="btn sm red" onclick="deleteItem('inspections','${x.id}','questo sopralluogo')">Elimina</button></div></div>`).join('')||'<div class="empty">Agenda vuota</div>'}</div></div>`}
@@ -239,7 +239,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.a
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=52').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=53').catch(()=>{});
 </script>
 <script src="./professional-extensions.js?v=19"></script>
 <script src="./business-suite.js?v=19"></script>
@@ -278,7 +278,7 @@ window.EdilKappaLocal={
 <script src="./danea-integration.js?v=25"></script>
 <script src="./intervention-lifecycle.js?v=3"></script>
 <script src="./completion-center.js?v=3"></script>
-<script src="./bulk-sharing.js?v=5.1"></script>
+<script src="./bulk-sharing.js?v=5.2"></script>
 <script src="./edilconnect.js?v=2"></script>
 <script src="./hours-closeout.js?v=3"></script>
 <script src="./attendance-center.js?v=1"></script>

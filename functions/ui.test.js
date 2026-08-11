@@ -319,7 +319,7 @@ test("loads the central operations agents and keeps every action under confirmat
   assert.match(center, /latestAttempted: false/);
   assert.match(center, /state\.latestAttempted = true/);
   assert.match(center, /!state\.latestAttempted/);
-  assert.match(serviceWorker, /v75-documenti-edilkappa/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
