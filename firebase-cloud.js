@@ -155,6 +155,12 @@ let initialHydrationRegistrationComplete = false;
 const api = {
   scheduleSync,
   syncNow,
+  async syncCollection(localName) {
+    const mapping = mappings.find(([name]) => name === localName);
+    if (!mapping) throw new Error('Archivio cloud non riconosciuto.');
+    if (!ready || !profile || profile.role === 'administrator') throw new Error('Il collegamento cloud non è pronto.');
+    await pushCollection(mapping[0], mapping[1]);
+  },
   async aiRequest(payload) {
     const response = await callEdilKappaAi(payload);
     return response.data;
