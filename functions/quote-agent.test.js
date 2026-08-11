@@ -45,6 +45,8 @@ test("configures one bounded Agents SDK quote specialist", () => {
   assert.match(agent.instructions, /trasferimento della cucina esistente/i);
   assert.match(agent.instructions, /punto gas/i);
   assert.match(agent.instructions, /didascalie.*fotografiche/i);
+  assert.match(agent.instructions, /origine dichiarata delle immagini/i);
+  assert.match(agent.instructions, /non inserire AI/i);
   assert.match(agent.instructions, /scala, trabattello o piattaforma/i);
   assert.match(agent.instructions, /alternative soltanto quando sono tecnicamente utili/i);
   const researchAgent = createQuoteAgent({ instructions: "Preventivo.", modelChoice: {}, useWeb: true });
@@ -68,6 +70,7 @@ test("configures a separate strict reviewer with no tools or handoffs", () => {
   assert.match(reviewer.instructions, /gas e induzione/i);
   assert.match(reviewer.instructions, /nuova cucina e trasferimento della cucina esistente/i);
   assert.match(reviewer.instructions, /osservazioni fotografiche/i);
+  assert.match(reviewer.instructions, /non contengano riferimenti ad AI/i);
 });
 
 test("the reviewer blocks unresolved drafts and the merged audit stays blocking", () => {

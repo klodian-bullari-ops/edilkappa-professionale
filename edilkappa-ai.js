@@ -12,6 +12,8 @@
   const PDF_PHOTO_RETRY_DELAYS = [0, 450, 1200];
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
   const MODEL_MODES = new Set(["auto", "sol", "terra"]);
+  const PHOTO_ORIGINS = new Set(["sopralluogo_edilkappa", "cliente", "da_confermare"]);
+  const DEFAULT_PHOTO_ORIGIN = "sopralluogo_edilkappa";
   const PENDING_JOB_KEY = "edilkappa-ai-pending-job-v1";
   const PENDING_JOB_UI_TIMEOUT_MS = 11 * 60 * 1000;
   const EDILKAPPA_DOCUMENT = Object.freeze({
@@ -46,6 +48,7 @@
     draft: "",
     progress: "",
     useWeb: false,
+    photoOrigin: DEFAULT_PHOTO_ORIGIN,
     error: "",
     pendingJob: null,
     retryAvailable: false,
@@ -65,7 +68,7 @@
     .ekAiQuotePreview{background:#fff;border:1px solid #d8d8d2;border-radius:4px;padding:clamp(18px,4vw,38px);box-shadow:0 10px 30px rgba(31,42,36,.10);max-width:820px;margin:0 auto}.ekAiQuoteBrand{display:flex;justify-content:space-between;gap:14px;border-bottom:5px solid #f4c400;padding-bottom:14px;margin-bottom:20px}.ekAiQuoteBrand h3{margin:0;color:#173d2e}.ekAiQuoteBrand small{display:block;color:#64766e}.ekAiQuoteBrand b{font-size:18px}.ekAiQuoteIntro{font-size:14px;margin-bottom:18px}.ekAiQuotePreview .ekAiArtifactTable{min-width:560px}.ekAiQuoteDetails{max-width:820px;margin:14px auto 0;border:1px solid #dce4df;border-radius:11px;background:#f8faf8;padding:10px 12px}.ekAiQuoteDetails summary{cursor:pointer;font-weight:850;color:#284c3d}.ekAiQuoteDetails[open] summary{margin-bottom:10px}.ekAiQuoteApproval{max-width:820px;margin:12px auto 0;background:#eef8f1;border:1px solid #bcdcc7;border-radius:11px;padding:11px;color:#185d38;font-size:12px}.ekAiMissingQuestions{max-width:820px;margin:12px auto 0;background:#fff8dc;border:1px solid #e6cf6a;border-radius:11px;padding:12px;color:#5e4b00}.ekAiMissingQuestions h4{margin:0 0 7px;color:#493b00}.ekAiMissingQuestions ol{margin:0;padding-left:21px}.ekAiMissingQuestions li{margin:6px 0}.ekAiMissingQuestions small{display:block;margin-top:8px;color:#6d5d1f}
     .ekAiQuick{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.ekAiQuick button{border:1px solid #d6e2da;background:#fff;color:#244a3a;border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer}.ekAiQuick button:hover{border-color:#6da482}
     .ekAiWorkspace{display:grid;grid-template-columns:255px minmax(0,1fr);gap:13px}.ekAiThreads{border:1px solid #dce7e0;border-radius:18px;background:#fff;padding:10px;min-height:440px;max-height:60vh;overflow:auto}.ekAiNewThread{width:100%;border:0;border-radius:11px;background:#f4c400;color:#173d2e;padding:11px;font-weight:900;cursor:pointer;margin-bottom:9px}.ekAiThread{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center;border-radius:11px;padding:7px;color:#315345}.ekAiThread.active{background:#eaf3ee;color:#173d2e}.ekAiThreadMain{border:0;background:transparent;text-align:left;min-width:0;cursor:pointer;color:inherit}.ekAiThreadMain b,.ekAiThreadMain small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ekAiThreadMain small{font-size:10px;color:#75867e;margin-top:3px}.ekAiThreadActions{display:flex;gap:2px}.ekAiThreadAction{width:30px;height:30px;border:0;border-radius:8px;background:transparent;cursor:pointer;color:#526b60;font-size:14px}.ekAiThreadAction:hover{background:#dcebe2}.ekAiThreadAction.delete{color:#9b2f2f}.ekAiThreadAction.delete:hover{background:#ffe8e6}.ekAiMain{min-width:0}.ekAiHoursButton{border:1px solid #d6e2da;background:#fff;border-radius:11px;padding:9px 12px;color:#173d2e;font-weight:850;cursor:pointer}
-    .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:8px;background:#edf4ef;color:#355246;border-radius:11px;padding:6px 8px;font-size:12px;max-width:min(100%,300px)}.ekAiFileThumb{width:42px;height:42px;object-fit:cover;border-radius:8px;background:#dce8e0;flex:0 0 auto}.ekAiFileIcon{width:42px;height:42px;border-radius:8px;background:#dce8e0;display:grid;place-items:center;font-size:20px;flex:0 0 auto}.ekAiFileBody{min-width:0;flex:1}.ekAiFileBody b,.ekAiFileBody small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ekAiFileBody small{color:#62766c;margin-top:2px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer;font-size:18px}.ekAiUploadHelp{width:100%;font-size:11px;color:#667970;margin-top:7px}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:12px;font-size:13px}.ekAiSteps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:9px}.ekAiStep{padding:7px 5px;border-radius:8px;background:#dce9e1;color:#61736a;text-align:center;font-size:10px;font-weight:800}.ekAiStep.done{background:#bfe3ca;color:#175c35}.ekAiStep.active{background:#f4c400;color:#292300}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiRetry{margin-left:9px;border:1px solid #c65d57;background:#fff;color:#8f2929;border-radius:8px;padding:6px 9px;font-weight:800}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
+    .ekAiComposer{background:#fff;border:1px solid #d8e3dc;border-radius:18px;padding:12px;box-shadow:0 8px 28px rgba(17,56,41,.08)}.ekAiComposer textarea{border:0!important;box-shadow:none!important;resize:vertical;min-height:82px;width:100%;padding:7px;font:inherit;outline:0;background:transparent}.ekAiComposeBar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.ekAiActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.ekAiFileBtn,.ekAiWeb,.ekAiPhotoOrigin{display:inline-flex;align-items:center;gap:7px;border:1px solid #d7e2db;background:#f8faf9;border-radius:10px;padding:9px 11px;font-weight:700;color:#365749;cursor:pointer;font-size:13px}.ekAiWeb input{width:auto}.ekAiPhotoOrigin select{border:0;background:transparent;color:#365749;font:inherit;font-weight:800;max-width:210px;outline:0}.ekAiSend{border:0;background:#f4c400;color:#143528;border-radius:11px;padding:11px 18px;font-weight:900;cursor:pointer}.ekAiSend:disabled{opacity:.55;cursor:wait}.ekAiFiles{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 9px}.ekAiFile{display:flex;align-items:center;gap:8px;background:#edf4ef;color:#355246;border-radius:11px;padding:6px 8px;font-size:12px;max-width:min(100%,300px)}.ekAiFileThumb{width:42px;height:42px;object-fit:cover;border-radius:8px;background:#dce8e0;flex:0 0 auto}.ekAiFileIcon{width:42px;height:42px;border-radius:8px;background:#dce8e0;display:grid;place-items:center;font-size:20px;flex:0 0 auto}.ekAiFileBody{min-width:0;flex:1}.ekAiFileBody b,.ekAiFileBody small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ekAiFileBody small{color:#62766c;margin-top:2px}.ekAiFile button{border:0;background:transparent;color:#9b2f2f;font-weight:900;cursor:pointer;font-size:18px}.ekAiUploadHelp{width:100%;font-size:11px;color:#667970;margin-top:7px}.ekAiProgress{margin:10px 0;background:#edf6f0;border:1px solid #c7ddcf;color:#24543f;border-radius:11px;padding:12px;font-size:13px}.ekAiSteps{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:9px}.ekAiStep{padding:7px 5px;border-radius:8px;background:#dce9e1;color:#61736a;text-align:center;font-size:10px;font-weight:800}.ekAiStep.done{background:#bfe3ca;color:#175c35}.ekAiStep.active{background:#f4c400;color:#292300}.ekAiError{margin:10px 0;background:#fff0f0;border:1px solid #f1c8c8;color:#8f2929;border-radius:11px;padding:10px 12px}.ekAiRetry{margin-left:9px;border:1px solid #c65d57;background:#fff;color:#8f2929;border-radius:8px;padding:6px 9px;font-weight:800}.ekAiPrivacy{font-size:12px;color:#64766e;margin:10px 2px 0}.ekAiReset{border:0;background:transparent;color:#7b3c3c;text-decoration:underline;cursor:pointer;font-size:12px}
     @media(max-width:700px){.ekAiHero{padding:18px}.ekAiHeroMark{width:48px;height:48px}.ekAiToolbar{align-items:flex-start}.ekAiStatus{display:none}.ekAiWorkspace{grid-template-columns:1fr}.ekAiThreads{min-height:0;max-height:170px}.ekAiModel{width:100%;margin-left:0}.ekAiModel select{flex:1}.ekAiChat{min-height:360px;max-height:54vh;padding:12px}.ekAiMessage,.ekAiMessage.user{max-width:96%}.ekAiComposer{padding:10px}.ekAiComposeBar,.ekAiActions{align-items:stretch}.ekAiSend{flex:1}.ekAiWeb{justify-content:center}.ekAiArtifactHead{flex-direction:column}.ekAiArtifactActions button{flex:1}}
   `;
   document.head.appendChild(css);
@@ -126,6 +129,54 @@
       .replace(/[^a-zA-Z0-9._-]+/g, "-")
       .replace(/^[.-]+|[.-]+$/g, "")
       .slice(0, 120) || fallback;
+  }
+
+  function normalizePhotoOrigin(value, fallback = "da_confermare") {
+    const normalized = String(value || "").trim().toLowerCase();
+    const safeFallback = PHOTO_ORIGINS.has(fallback) ? fallback : "da_confermare";
+    return PHOTO_ORIGINS.has(normalized) ? normalized : safeFallback;
+  }
+
+  function photoOriginDescription(value) {
+    return ({
+      sopralluogo_edilkappa: "acquisita da EdilKappa durante il sopralluogo",
+      cliente: "ricevuta dal committente",
+      da_confermare: "con origine da confermare"
+    })[normalizePhotoOrigin(value)];
+  }
+
+  function customerFacingText(value) {
+    return String(value ?? "")
+      .replace(/\bbozza\s+parametrica\b/gi, "bozza preliminare")
+      .replace(/\b(?:bozza(?:\s+preliminare)?|documento|relazione|preventivo)\s+(?:generat[oa]|creat[oa]|prodott[oa]|elaborat[oa])\s+(?:con|tramite|da(?:ll[’']?)?)\s*(?:EdilKappa\s*)?(?:AI|intelligenza\s+artificiale|OpenAI)\b/gi, (match) => {
+        const phrase = /^bozza/i.test(match)
+          ? "bozza preliminare predisposta da EdilKappa"
+          : /^relazione/i.test(match)
+            ? "relazione predisposta da EdilKappa"
+            : /^preventivo/i.test(match)
+              ? "preventivo predisposto da EdilKappa"
+              : "documento predisposto da EdilKappa";
+        return /^[A-ZÀ-Ý]/.test(match) ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : phrase;
+      })
+      .replace(/\b(?:immagine|visualizzazione)\s+illustrativa\s+(?:generat[ao]|creat[ao])\s+(?:con|tramite|da(?:ll[’']?)?)\s*(?:EdilKappa\s*)?(?:AI|intelligenza\s+artificiale|OpenAI)\b/gi, "visualizzazione illustrativa della soluzione proposta")
+      .replace(/\bEdilKappa\s+AI\b/gi, "EdilKappa")
+      .replace(/\b(?:OpenAI|ChatGPT|GPT(?:-[\w.]+)?)\b/gi, "EdilKappa")
+      .replace(/\bintelligenza\s+artificiale\b/gi, "procedura tecnica EdilKappa")
+      .replace(/\bstima\s+AI\b/gi, "stima tecnica")
+      .replace(/\brevisione\s+AI\s+indipendente\b/gi, "verifica documentale indipendente")
+      .replace(/\bAI\b/gi, "EdilKappa")
+      .replace(/\bEdilKappa(?:\s+EdilKappa)+\b/gi, "EdilKappa")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/\s+([,.;:!?])/g, "$1")
+      .trim();
+  }
+
+  function customerFacingDocumentValue(value) {
+    if (Array.isArray(value)) return value.map(customerFacingDocumentValue);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, customerFacingDocumentValue(entry)]));
+    }
+    return typeof value === "string" ? customerFacingText(value) : value;
   }
 
   function euro(value) {
@@ -430,6 +481,9 @@
     if (/gas|induzion/.test(normalized)) return "La nuova posizione della cucina userà il gas oppure un piano a induzione? Se il gas esistente va chiuso, la chiusura deve essere compresa oppure esclusa?";
     if ((/sala/.test(normalized) && /paret|misur|riliev|dimension/.test(normalized)) || /parete\s+destinata/.test(normalized)) return "Quali sono lunghezza, larghezza e altezza della sala e quanto misura, da spigolo a spigolo, la parete destinata alla cucina? Indica anche posizione e larghezza di porte, finestre e termosifoni; se non hai le misure, autorizzi una stima a corpo da verificare in sopralluogo?";
     if (/cucina\s+esistente|mobili|moduli|top|cappa|elettrodomestic/.test(normalized) && /misur|dimension|recuper|stato|compatibil/.test(normalized)) return "Quali sono la lunghezza totale, l’altezza e la profondità della cucina esistente e le misure dei singoli moduli, del top, della cappa e degli elettrodomestici da recuperare?";
+    if (/cappa|condotto\s+di\s+espulsione|ricircolo/.test(normalized)) return "La cappa sarà filtrante a ricircolo oppure collegata a un condotto di espulsione esistente? Se il condotto esiste, invia una fotografia e indica posizione e diametro; altrimenti autorizzi la soluzione filtrante da verificare?";
+    if (/piano\s+(?:dell[’']?)?appartament|ascensor|trasporto|macer|accesso\s+al\s+cantiere/.test(normalized)) return "A quale piano si trova l’appartamento? L’ascensore è utilizzabile per materiali e attrezzature e quali sono larghezza e altezza del percorso di accesso? Puoi indicare inoltre dove possono sostare il mezzo e i contenitori per i materiali di risulta?";
+    if (/altezza\s+(?:dei\s+)?local|superfic\w*\s+(?:rivestit|da\s+tinteggi)|pareti\s+e\s+soffitt/.test(normalized)) return "Qual è l’altezza netta dei due locali? Misura inoltre lunghezza e altezza delle pareti rivestite e indica quali pareti e soffitti devono essere tinteggiati; se non riesci a rilevarle, autorizzi una stima a corpo da verificare in sopralluogo?";
     if (/finitur|tinteggiatur|pittur|rasatur|rivestiment|paviment|soffitto/.test(normalized)) return "Nell’ex cucina vuoi ripristinare soltanto le zone interessate dai lavori oppure tinteggiare completamente pareti e soffitto? Quali eventuali pavimenti o rivestimenti devono essere rimossi o mantenuti?";
     if (/misur|dimension|planimetr|lunghezz|superfic|quantit/.test(normalized)) return `Quale misura o quantità esatta manca per questo punto: “${text}”? Se non è disponibile, autorizzi una stima a corpo da verificare in sopralluogo?`;
     if (/configuraz|paret|sala/.test(normalized)) return `Quale configurazione definitiva devo considerare per questo punto: “${text}”?`;
@@ -581,7 +635,7 @@
       <div class="ekAiQuick">${quickPrompts().map((item, index) => `<button onclick="edilkappaAiUsePrompt(${index})">${escapeHtml(item.label)}</button>`).join("")}${state.mode === "work" ? `<button class="ekAiHoursButton" onclick="openOfficeHoursEntry()">⏱️ Registra ore operaio</button>` : ""}</div>
       ${state.progress ? `<div class="ekAiProgress">⏳ ${escapeHtml(state.progress)}${progressStepsHtml(state.pendingJob?.stage || "archive")}</div>` : ""}
       ${state.error ? `<div class="ekAiError">${escapeHtml(state.error)}${state.retryAvailable ? `<button class="ekAiRetry" onclick="edilkappaAiRetry()">${state.pendingJob?.retryWithoutAttachments === true ? "Riprova senza ricaricare le foto" : "Riprova"}</button>` : ""}</div>` : ""}
-      <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files,this)"></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button><div class="ekAiUploadHelp">Fino a 8 file: puoi aggiungerli uno alla volta oppure, su Windows, selezionarne più di uno tenendo premuto Ctrl. Le foto iPhone HEIC vengono convertite automaticamente e inserite anche nel PDF.</div></div></div>
+      <div class="ekAiComposer"><div class="ekAiFiles">${renderAttachments()}</div><textarea id="ekAiInput" maxlength="8000" placeholder="Descrivi il lavoro, le misure conosciute e il risultato che vuoi…" oninput="edilkappaAiDraft(this.value)" onkeydown="edilkappaAiKeydown(event)">${escapeHtml(state.draft)}</textarea><div class="ekAiComposeBar"><div class="ekAiActions"><label class="ekAiFileBtn">📎 Foto, video e file<input id="ekAiFiles" type="file" hidden multiple accept="image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/heic,image/heif,.heic,.heif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm,application/pdf,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv" onchange="edilkappaAiAddFiles(this.files,this)"></label><label class="ekAiPhotoOrigin">📍 Origine foto<select onchange="edilkappaAiSetPhotoOrigin(this.value)"><option value="sopralluogo_edilkappa" ${state.photoOrigin === "sopralluogo_edilkappa" ? "selected" : ""}>Sopralluogo EdilKappa</option><option value="cliente" ${state.photoOrigin === "cliente" ? "selected" : ""}>Ricevute dal cliente</option><option value="da_confermare" ${state.photoOrigin === "da_confermare" ? "selected" : ""}>Da confermare</option></select></label><label class="ekAiWeb"><input type="checkbox" ${state.useWeb ? "checked" : ""} onchange="edilkappaAiToggleWeb(this.checked)"> 🌐 Ricerca web</label></div><button class="ekAiSend" onclick="edilkappaAiSend()" ${state.sending ? "disabled" : ""}>${state.sending ? "Sto lavorando…" : "Invia ✦"}</button><div class="ekAiUploadHelp">Fino a 8 file: puoi aggiungerli uno alla volta oppure, su Windows, selezionarne più di uno tenendo premuto Ctrl. Prima dell’invio controlla l’origine delle foto: verrà riportata correttamente nell’allegato fotografico. Le foto iPhone HEIC vengono convertite automaticamente e inserite anche nel PDF.</div></div></div>
       <div class="ekAiPrivacy">Gli originali di lavoro vengono archiviati nel cloud protetto. I video sono analizzati tramite fotogrammi e, fino a 25 MB, anche tramite trascrizione dell’audio. Le immagini illustrative vengono create solo quando premi il relativo pulsante, così mantieni il controllo dei costi. Controlla sempre misure, prezzi e conclusioni tecniche. <button class="ekAiReset" onclick="edilkappaAiReset()" ${state.resetting ? "disabled" : ""}>Svuota questa chat</button></div></div></div>
     </div>`;
   }
@@ -893,14 +947,24 @@
             ? `${item.name} deve essere archiviata nel cloud prima della conversione. Riprova con una connessione stabile.`
             : `Non riesco a preparare ${item.name}.`);
         }
-        fixed.push({ name: item.name, sourceName: item.name, mimeType: item.mimeType, dataUrl: item.dataUrl, kind: item.kind });
+        fixed.push({
+          name: item.name,
+          sourceName: item.name,
+          mimeType: item.mimeType,
+          dataUrl: item.dataUrl,
+          kind: item.kind,
+          photoOrigin: item.kind === "image" ? normalizePhotoOrigin(item.photoOrigin || options.photoOrigin || state.photoOrigin) : undefined
+        });
       }
     });
     const frameSlots = Math.max(0, MAX_REQUEST_ATTACHMENTS - fixed.length);
     const selectedFrames = videoFrames.length <= frameSlots
       ? videoFrames
       : Array.from({ length: frameSlots }, (_, index) => videoFrames[Math.min(videoFrames.length - 1, Math.floor(index * videoFrames.length / frameSlots))]);
-    const output = fixed.concat(selectedFrames);
+    const output = fixed.concat(selectedFrames.map((item) => ({
+      ...item,
+      photoOrigin: normalizePhotoOrigin(item.photoOrigin || options.photoOrigin || state.photoOrigin)
+    })));
     const total = output.reduce((sum, item) => sum + payloadBytes(item.dataUrl), 0);
     if (total > MAX_REQUEST_BYTES) throw new Error("Foto, fotogrammi e documenti elaborati superano 15 MB. Rimuovi un allegato e riprova.");
     return output;
@@ -919,7 +983,8 @@
       item.stored = {
         ...stored,
         kind: item.kind,
-        durationSeconds: Number(item.durationSeconds || 0)
+        durationSeconds: Number(item.durationSeconds || 0),
+        photoOrigin: ["image", "video"].includes(item.kind) ? normalizePhotoOrigin(item.photoOrigin || state.photoOrigin) : undefined
       };
       return item.stored;
     } catch (error) {
@@ -997,6 +1062,7 @@
       source: item.generated ? "EdilKappa AI · visualizzazione illustrativa" : "EdilKappa AI",
       generated: item.generated === true,
       illustrative: item.illustrative === true,
+      photoOrigin: item.generated ? "da_confermare" : normalizePhotoOrigin(item.photoOrigin),
       title: item.title || ""
     }));
   }
@@ -1200,7 +1266,7 @@
 
   function pdfTextSection(doc, context, title, text, y) {
     if (!text) return y;
-    const paragraphs = String(text).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const paragraphs = customerFacingText(text).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     if (!paragraphs.length) return y;
     doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     doc.setFontSize(8.3);
@@ -1235,7 +1301,7 @@
 
   function customerFacingValues(values) {
     return (Array.isArray(values) ? values : [])
-      .map((value) => String(value || "").trim())
+      .map((value) => customerFacingText(value))
       .filter((value) => value && !/\bgestionale\b|\bclientid\b|\binterventionid\b|selezionare\s+o\s+creare.{0,100}\bintervento\b/i.test(value));
   }
 
@@ -1292,9 +1358,29 @@
     return y + 7;
   }
 
+  function defaultPhotoCaption(preview) {
+    const origin = normalizePhotoOrigin(preview?.photoOrigin);
+    if (origin === "sopralluogo_edilkappa") return "Stato dei luoghi rilevato durante il sopralluogo EdilKappa.";
+    if (origin === "cliente") return "Stato dei luoghi rappresentato nella fotografia ricevuta dal committente.";
+    return "Stato dei luoghi documentato nella fotografia; origine da confermare.";
+  }
+
+  function photoAppendixSourceLine(entries) {
+    const originals = (entries || []).filter((item) => !item?.generated);
+    const origins = new Set(originals.map((item) => normalizePhotoOrigin(item?.photoOrigin)));
+    if (!originals.length) return "Visualizzazioni illustrative della soluzione proposta.";
+    if (origins.size === 1 && origins.has("sopralluogo_edilkappa")) return "Documentazione fotografica acquisita da EdilKappa durante il sopralluogo.";
+    if (origins.size === 1 && origins.has("cliente")) return "Documentazione fotografica ricevuta dal committente e utilizzata come supporto preliminare.";
+    if (origins.size === 1 && origins.has("da_confermare")) return "Documentazione fotografica disponibile; origine da confermare prima dell’emissione definitiva.";
+    return "Documentazione fotografica proveniente da fonti diverse, indicate nelle singole didascalie.";
+  }
+
   function photoCaptionForPreview(artifact, preview, index) {
     if (preview?.generated) {
-      return { caption: String(preview.title || "Visualizzazione illustrativa generata da EdilKappa AI"), assessment: "" };
+      return {
+        caption: customerFacingText(preview.title || "Soluzione proposta"),
+        assessment: "Rappresentazione indicativa: non costituisce progetto esecutivo né verifica strutturale."
+      };
     }
     const sourceValues = [preview?.sourceName, preview?.fileName, preview?.name]
       .map((value) => String(value || "").split("/").pop().replace(/\.(heic|heif|jpe?g|png|webp|gif)$/i, "").toLocaleLowerCase("it"))
@@ -1310,21 +1396,26 @@
       return matchesReference && observation && !nonVisual;
     });
     return finding
-      ? { caption: String(finding.observation).slice(0, 260), assessment: String(finding.assessment || "").slice(0, 220) }
-      : { caption: "Stato dei luoghi documentato nella fotografia.", assessment: "" };
+      ? { caption: customerFacingText(finding.observation).slice(0, 260), assessment: customerFacingText(finding.assessment || "").slice(0, 220) }
+      : { caption: defaultPhotoCaption(preview), assessment: "" };
   }
 
   function addPhotoAppendix(doc, context, previews, artifact) {
     const entries = (previews || []).filter((item) => (item?.unavailable === true || /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl)) && !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
     for (let offset = 0; offset < entries.length; offset += 2) {
+      const pageEntries = entries.slice(offset, offset + 2);
       newDocumentPage(doc, context);
       doc.setFont(EDILKAPPA_PDF_FONT, "bold");
       doc.setFontSize(12);
       doc.text("ALLEGATO FOTOGRAFICO", 14, 49);
-      entries.slice(offset, offset + 2).forEach((preview, localIndex) => {
+      doc.setFont(EDILKAPPA_PDF_FONT, "normal");
+      doc.setFontSize(7.8);
+      doc.setTextColor(85, 85, 85);
+      doc.text(doc.splitTextToSize(photoAppendixSourceLine(pageEntries), 180).slice(0, 2), 14, 54);
+      pageEntries.forEach((preview, localIndex) => {
         const index = offset + localIndex;
-        const top = localIndex === 0 ? 57 : 164;
-        const maxHeight = 82;
+        const top = localIndex === 0 ? 61 : 166;
+        const maxHeight = 78;
         if (preview.unavailable) {
           doc.setFillColor(247, 247, 247);
           doc.setDrawColor(185, 185, 185);
@@ -1356,7 +1447,12 @@
         doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
         doc.setFont(EDILKAPPA_PDF_FONT, "bold");
         doc.setFontSize(8.2);
-        const captionLines = doc.splitTextToSize(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${photoCaption.caption}`, 180).slice(0, 2);
+        const originSuffix = !preview.generated
+          && normalizePhotoOrigin(preview.photoOrigin) !== "sopralluogo_edilkappa"
+          && !/committente|origine\s+da\s+confermare/i.test(photoCaption.caption)
+          ? ` · ${photoOriginDescription(preview.photoOrigin)}`
+          : "";
+        const captionLines = doc.splitTextToSize(customerFacingText(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA" : `FOTO ${index + 1}`} · ${photoCaption.caption}${originSuffix}`), 180).slice(0, 2);
         doc.text(captionLines, 14, top + 88);
         if (photoCaption.assessment) {
           doc.setFont(EDILKAPPA_PDF_FONT, "normal");
@@ -1375,9 +1471,10 @@
   async function artifactPdfBlob(rawArtifact, destination, previews, options = {}) {
     if (!window.jspdf?.jsPDF) throw new Error("Il generatore PDF non è disponibile. Ricarica la pagina e riprova.");
     const draft = rawArtifact?.kind === "quote" && options?.draft === true;
-    const artifact = rawArtifact?.kind === "quote"
+    const verifiedArtifact = rawArtifact?.kind === "quote"
       ? (draft ? verifiedArtifactPrices(rawArtifact) : requireQuoteRelease(rawArtifact, destination))
       : rawArtifact;
+    const artifact = customerFacingDocumentValue(verifiedArtifact);
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4", compress: true, putOnlyUsedFonts: true });
     await loadDocumentFonts(doc);
@@ -1388,7 +1485,7 @@
     doc.setFont(EDILKAPPA_PDF_FONT, "bold");
     doc.setFontSize(15.5);
     doc.text(context.label, 105, 50, { align: "center" });
-    const subtitle = artifact.documentSubtitle || artifact.title || artifact.subject || destination.title;
+    const subtitle = customerFacingText(artifact.documentSubtitle || artifact.title || artifact.subject || destination.title);
     doc.setFont(EDILKAPPA_PDF_FONT, "normal");
     doc.setFontSize(9.3);
     doc.setTextColor(95, 95, 95);
@@ -1399,9 +1496,9 @@
       startY: 63,
       body: [
         ...(destination.code ? [["Numero", destination.code]] : []),
-        ["Destinatario", destination.client.name || artifact.client || "Da assegnare"],
-        ["Ubicazione intervento", destination.client.address || artifact.address || "Da confermare"],
-        ["Oggetto", destination.title || artifact.subject || artifact.title || context.label],
+        ["Destinatario", customerFacingText(destination.client.name || artifact.client || "Da assegnare")],
+        ["Ubicazione intervento", customerFacingText(destination.client.address || artifact.address || "Da confermare")],
+        ["Oggetto", customerFacingText(destination.title || artifact.subject || artifact.title || context.label)],
         ["Data emissione", new Date().toLocaleDateString("it-IT")],
         ...(artifact.kind === "quote" ? [["IVA applicata", `${vatRate}%`], ["Validità", `${Number(artifact.quote?.validityDays || 30)} giorni`]] : [["Priorità", artifact.report?.interventionPriority || "Da definire"]])
       ],
@@ -1478,8 +1575,8 @@
         }) + 6;
       }
       y = pdfListSection(doc, context, draft ? "Ipotesi provvisorie" : "Ipotesi di calcolo", draft ? (quote.assumptions || []).slice(0, 6) : quote.assumptions, y);
-      y = pdfNumberedListSection(doc, context, "Dati da confermare", quoteMissingQuestions(artifact), y);
       y = pdfTextSection(doc, context, "Condizioni e note", [quote.paymentTerms ? `Pagamento: ${quote.paymentTerms}` : "", quote.notes].filter(Boolean).join("\n"), y);
+      y = pdfNumberedListSection(doc, context, "Dati da confermare", quoteMissingQuestions(artifact), y);
     } else {
       y = pdfTextSection(doc, context, "Motivazione tecnica", artifact.decisionRationale, y);
       y = pdfListSection(doc, context, "Valutazione tecnica", artifact.technicalAssessment, y);
@@ -1662,7 +1759,8 @@
       mimeType: prepared.mimeType,
       sourceName: reference.title || reference.fileName,
       name: reference.previewFileName || reference.fileName,
-      generated: reference.generated === true
+      generated: reference.generated === true,
+      photoOrigin: reference.generated === true ? "da_confermare" : normalizePhotoOrigin(reference.photoOrigin)
     };
     const cacheKey = photoCacheKey(reference);
     if (cacheKey) {
@@ -1697,12 +1795,12 @@
         previews.push(preview);
         if (key) seen.add(key);
       } catch (error) {
-        if (!item.generated) failedOriginals.push({ name: item.fileName || "fotografia", reason: error?.message || "Conversione non disponibile." });
+        if (!item.generated) failedOriginals.push({ name: item.fileName || "fotografia", reason: error?.message || "Conversione non disponibile.", photoOrigin: normalizePhotoOrigin(item.photoOrigin) });
         console.warn("Anteprima fotografica non disponibile", { fileName: item.fileName, message: error?.message });
       }
     }
     localHeic.forEach((item) => {
-      if (!seen.has(photoPreviewKey(item))) failedOriginals.push({ name: item.sourceName || item.name || "fotografia HEIC", reason: "L’originale non risulta archiviato nel cloud." });
+      if (!seen.has(photoPreviewKey(item))) failedOriginals.push({ name: item.sourceName || item.name || "fotografia HEIC", reason: "L’originale non risulta archiviato nel cloud.", photoOrigin: normalizePhotoOrigin(item.photoOrigin) });
     });
     if (failedOriginals.length) {
       const names = Array.from(new Set(failedOriginals.map((item) => item.name)));
@@ -1715,7 +1813,8 @@
         unavailable: true,
         sourceName: item.name,
         name: item.name,
-        failureReason: item.reason
+        failureReason: item.reason,
+        photoOrigin: item.photoOrigin
       }));
     }
     return previews.filter((item) => !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
@@ -1767,7 +1866,7 @@
   }
 
   async function downloadArtifactWord(artifact) {
-    artifact = verifiedArtifactPrices(artifact);
+    artifact = customerFacingDocumentValue(verifiedArtifactPrices(artifact));
     const report = artifact.report || {};
     const quote = artifact.quote || {};
     const company = documentCompany();
@@ -1835,6 +1934,14 @@
   };
   window.edilkappaAiDraft = (value) => { state.draft = String(value || ""); };
   window.edilkappaAiToggleWeb = (checked) => { state.useWeb = checked === true; };
+  window.edilkappaAiSetPhotoOrigin = (value) => {
+    if (state.sending) return;
+    state.photoOrigin = normalizePhotoOrigin(value, DEFAULT_PHOTO_ORIGIN);
+    state.attachments.forEach((item) => {
+      if (["image", "video"].includes(item.kind)) item.photoOrigin = state.photoOrigin;
+    });
+    rerender();
+  };
   window.edilkappaAiKeydown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); window.edilkappaAiSend(); }
   };
@@ -1865,18 +1972,19 @@
             thumbnailDataUrl: prepared.thumbnailDataUrl || "",
             serverConversion: prepared.serverConversion === true,
             kind: "image",
+            photoOrigin: state.photoOrigin,
             file
           });
         } else if (isVideo) {
           if (file.size > VIDEO_MAX_BYTES) throw new Error(`${file.name} supera 500 MB. Riduci il video prima di allegarlo.`);
-          const item = { name: file.name, mimeType, kind: "video", file, frames: [], durationSeconds: 0, warning: "" };
+          const item = { name: file.name, mimeType, kind: "video", photoOrigin: state.photoOrigin, file, frames: [], durationSeconds: 0, warning: "" };
           state.attachments.push(item);
           try {
             const prepared = await extractVideoFrames(file, (current, total) => {
               state.progress = `Estraggo i fotogrammi da ${file.name}: ${current}/${total}`;
               rerender();
             });
-            item.frames = prepared.frames;
+            item.frames = prepared.frames.map((frame) => ({ ...frame, photoOrigin: item.photoOrigin }));
             item.durationSeconds = prepared.durationSeconds;
           } catch (error) {
             item.warning = error?.message || "Fotogrammi non disponibili.";
@@ -2293,7 +2401,7 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${draft ? "BOZZA-" : ""}${safeName(artifact.title || artifact.subject, artifact.kind === "quote" ? "Preventivo" : "Relazione-tecnica")}.pdf`;
+      link.download = `${draft ? "BOZZA-" : ""}${safeName(customerFacingText(artifact.title || artifact.subject), artifact.kind === "quote" ? "Preventivo" : "Relazione-tecnica")}.pdf`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
@@ -2316,7 +2424,7 @@
       const destination = { client, interventionId: artifact.interventionId || "", title: artifact.subject || artifact.title || "Preventivo" };
       requireMessageQuoteRelease(message, destination);
       const blob = await artifactPdfBlob(artifact, destination, await previewsForReport(message));
-      const fileName = `${safeName(artifact.title || artifact.subject, "Preventivo")}.pdf`;
+      const fileName = `${safeName(customerFacingText(artifact.title || artifact.subject), "Preventivo")}.pdf`;
       const file = new File([blob], fileName, { type: "application/pdf" });
       if (navigator.share && navigator.canShare?.({ files: [file] })) await navigator.share({ title: fileName, text: "Preventivo EdilKappa", files: [file] });
       else {
@@ -2348,7 +2456,7 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${safeName(quote.code ? `${quote.code}-${quote.subject || "Preventivo"}` : quote.subject, "Preventivo")}.pdf`;
+      link.download = `${safeName(customerFacingText(quote.code ? `${quote.code}-${quote.subject || "Preventivo"}` : quote.subject), "Preventivo")}.pdf`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
@@ -2435,6 +2543,8 @@
     window.EdilKappaAiTest = {
       artifactPdfBlob,
       chunkedPhotoBlob,
+      customerFacingDocumentValue,
+      customerFacingText,
       customerFacingValues,
       euro,
       formatEstimatedDuration,
@@ -2443,6 +2553,8 @@
       pdfPreviewFromCloud,
       previewsForReport,
       photoCaptionForPreview,
+      photoAppendixSourceLine,
+      normalizePhotoOrigin,
       quoteMissingQuestions,
       quoteMessageReleaseCheck,
       runDocumentTable,

@@ -59,12 +59,13 @@ test("stores one protected JPEG preview and uses it as the AI image", async () =
   const result = await prepareArchivedHeicPhotos({
     storageBucket: bucket,
     uid: "user-1",
-    mediaReferences: [{ storagePath: sourcePath, fileName: "Foto.heic", fileType: "image/heic", fileSize: 6, kind: "image" }],
+    mediaReferences: [{ storagePath: sourcePath, fileName: "Foto.heic", fileType: "image/heic", fileSize: 6, kind: "image", photoOrigin: "sopralluogo_edilkappa" }],
     converter: async () => Buffer.from("jpeg-preview")
   });
   assert.equal(result.mediaReferences[0].previewFileType, "image/jpeg");
   assert.match(result.mediaReferences[0].previewStoragePath, /edilkappa-preview-[a-f0-9]{16}\.jpg$/);
   assert.equal(result.attachments[0].sourceName, "Foto.heic");
+  assert.equal(result.attachments[0].photoOrigin, "sopralluogo_edilkappa");
   assert.match(result.attachments[0].dataUrl, /^data:image\/jpeg;base64,/);
 });
 

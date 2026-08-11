@@ -101,7 +101,7 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./direct-search.js?v=6'));
   assert.ok(indexHtml.includes('./client-archive.js?v=20'));
-  assert.ok(indexHtml.includes('./sw.js?v=46'));
-  assert.ok(serviceWorker.includes('v68-ai-job-recovery'));
+  assert.match(indexHtml, /\.\/sw\.js\?v=\d+/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });
