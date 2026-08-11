@@ -1,27 +1,27 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v89-foto-sopralluogo-heic`;
+const CACHE = `${CACHE_PREFIX}v90-asset-versionati`;
 const APP_SHELL = [
   "./",
   "./index.html",
   "./privacy.html",
   "./manifest.json",
   "./modern-ui.css",
-  "./media-contract.js",
+  "./media-contract.js?v=1",
   "./professional-extensions.js",
   "./business-suite.js",
   "./client-archive.js",
   "./direct-search.js",
   "./danea-integration.js",
   "./intervention-lifecycle.js",
-  "./inspection-workflow.js",
+  "./inspection-workflow.js?v=7",
   "./completion-center.js",
   "./bulk-sharing.js",
   "./hours-closeout.js",
   "./attendance-center.js",
-  "./edilkappa-loader.js",
-  "./firebase-cloud.js",
+  "./edilkappa-loader.js?v=2",
+  "./firebase-cloud.js?v=36",
   "./sharing-integration.js",
   "./quick-site-photos.js",
   "./richiesta.html",
@@ -68,7 +68,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then(
+    caches.match(event.request).then(
       (cached) =>
         cached ||
         fetch(event.request).then((response) => {
