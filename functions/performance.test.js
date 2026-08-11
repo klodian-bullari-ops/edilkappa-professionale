@@ -48,7 +48,7 @@ test("avoids full cloud renders for unrelated data and active forms", () => {
 
 test("keeps the offline shell small while caching daily workflows", () => {
   const worker = source("sw.js");
-  assert.match(worker, /v86-salvataggio-sopralluogo-cloud/);
+  assert.match(worker, /v87-salvataggio-record-sopralluogo/);
   assert.match(worker, /"\.\/edilkappa-loader\.js"/);
   assert.match(worker, /"\.\/danea-integration\.js"/);
   assert.match(worker, /"\.\/inspection-workflow\.js"/);
