@@ -115,7 +115,7 @@
       item.recommendations = String(formData.get('recommendations') || '').trim();
       item.technicalNotes = String(formData.get('technicalNotes') || '').trim();
       item.media = (item.media || []).concat(addedMedia);
-      item.status = 'Eseguito · da preventivare';
+      item.status = 'Da preventivare';
       item.completedAt = new Date().toISOString();
       intervention.status = 'Da preventivare';
       timeline(intervention, { id: `inspection-completed-${item.id}`, type: 'inspection', date: item.completedAt, label: 'Sopralluogo eseguito', actor: roleName(), detail: item.outcome });
