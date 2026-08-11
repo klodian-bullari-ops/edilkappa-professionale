@@ -208,24 +208,6 @@
     return { client, intervention, changed };
   }
 
-  function clientForItem(item) {
-    return db.condomini.find((client) => String(client.id) === String(item.clientId || ''))
-      || db.condomini.find((client) => identity(client.name) === identity(item.client || item.name))
-      || null;
-  }
-
-  function soleInterventionForItem(item) {
-    const client = clientForItem(item);
-    if (!client) return null;
-    const rows = db.interventions.filter((intervention) =>
-      String(intervention.clientId || '') === String(client.id) ||
-      identity(intervention.client) === identity(client.name)
-    );
-    const active = rows.filter((intervention) => !['Completato', 'Sospeso'].includes(intervention.status));
-    if (active.length === 1) return active[0];
-    return rows.length === 1 ? rows[0] : null;
-  }
-
   function linkOperationalData() {
     let changed = false;
     const requestById = new Map(db.leads.map((item) => [String(item.id || ''), item]));
@@ -233,7 +215,6 @@
       let intervention = db.interventions.find((entry) => String(entry.id) === String(site.interventionId || ''));
       const requestId = site.daneaRequestId || site.requestId || site.leadId || '';
       if (!intervention && requestId) intervention = interventionForRequest(requestById.get(String(requestId)) || { id: requestId });
-      if (!intervention) intervention = soleInterventionForItem(site);
       if (!intervention) continue;
       changed = setValue(site, 'interventionId', intervention.id) || changed;
       changed = setValue(site, 'clientId', intervention.clientId) || changed;
@@ -246,7 +227,7 @@
         const requestId = item.daneaRequestId || item.requestId || item.leadId || '';
         const intervention = requestId
           ? interventionForRequest(requestById.get(String(requestId)) || { id: requestId })
-          : soleInterventionForItem(item);
+          : null;
         if (!intervention) continue;
         changed = setValue(item, 'interventionId', intervention.id) || changed;
         changed = setValue(item, 'clientId', intervention.clientId) || changed;
@@ -320,8 +301,6 @@
   }
 
   function ensureManualIntervention(client, title, notes, date) {
-    const existing = db.interventions.filter((item) => String(item.clientId || '') === String(client.id) && !['Completato', 'Sospeso'].includes(item.status));
-    if (existing.length === 1) return existing[0];
     const now = new Date().toISOString();
     const intervention = {
       id: uid('int'), clientId: client.id, client: client.name,
