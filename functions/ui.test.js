@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-test("registers the EdilKappa AI browser interface", () => {
+test("registers the EdilKappa AI browser interface", async () => {
   const previousWindow = global.window;
   const previousDocument = global.document;
   global.window = { __EDILKAPPA_AI_TEST__: true };
@@ -26,8 +26,11 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(typeof global.window.edilkappaAiGenerateVisual, "function");
   assert.equal(typeof global.window.edilkappaAiSetModel, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.pdfTextSection, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.chunkedPhotoBlob, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.euro, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.formatEstimatedDuration, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.imageBlobFromDataUrl, "function");
+  assert.equal(typeof global.window.EdilKappaAiTest.previewsForReport, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.photoCaptionForPreview, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.quoteMissingQuestions, "function");
   assert.equal(typeof global.window.EdilKappaAiTest.runDocumentTable, "function");
@@ -56,6 +59,50 @@ test("registers the EdilKappa AI browser interface", () => {
   assert.equal(global.window.EdilKappaAiTest.formatEstimatedDuration("8–12 giorni"), "8-12 giorni");
   assert.match(global.window.EdilKappaAiTest.formatEstimatedDuration("812 giorni"), /non è plausibile/i);
   assert.equal(global.window.EdilKappaAiTest.euro(1100), "1.100,00 €");
+  const decodedPhoto = global.window.EdilKappaAiTest.imageBlobFromDataUrl("data:image/jpeg;base64,AAEC");
+  assert.equal(decodedPhoto.type, "image/jpeg");
+  assert.equal(decodedPhoto.size, 3);
+
+  const chunkSource = Buffer.from("0123456789");
+  global.window.EdilKappaCloud = {
+    async aiRequest(payload) {
+      const offset = Number(payload.offset || 0);
+      const nextOffset = Math.min(chunkSource.length, offset + 4);
+      return {
+        offset,
+        nextOffset,
+        chunkBase64: chunkSource.subarray(offset, nextOffset).toString("base64")
+      };
+    }
+  };
+  const chunkedPhoto = await global.window.EdilKappaAiTest.chunkedPhotoBlob(
+    { storagePath: "organisations/edilkappa/documents/user-1/ai-1/large.jpeg", fileName: "large.jpeg", fileType: "image/jpeg" },
+    { mimeType: "image/jpeg", byteLength: chunkSource.length, chunkBytes: 4 }
+  );
+  assert.equal(await chunkedPhoto.text(), "0123456789");
+
+  global.window.EdilKappaCloud = {
+    async aiRequest() { throw new Error("Anteprima cloud assente."); },
+    async getDocumentUrl() { throw new Error("Fotografia archiviata assente."); }
+  };
+  const previousWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const missingMessage = {
+      previews: [],
+      media: [{ kind: "image", storagePath: "organisations/edilkappa/documents/user-1/ai-1/IMG_1914.jpeg", fileName: "IMG_1914.jpeg", fileType: "image/jpeg" }]
+    };
+    const draftPreviews = await global.window.EdilKappaAiTest.previewsForReport(missingMessage, { allowMissing: true });
+    assert.equal(draftPreviews.length, 1);
+    assert.equal(draftPreviews[0].unavailable, true);
+    assert.equal(draftPreviews[0].sourceName, "IMG_1914.jpeg");
+    await assert.rejects(
+      global.window.EdilKappaAiTest.previewsForReport(missingMessage),
+      /Non riesco a inserire nel PDF la fotografia/
+    );
+  } finally {
+    console.warn = previousWarn;
+  }
 
   const commercialCaption = global.window.EdilKappaAiTest.photoCaptionForPreview({
     report: { evidenceFindings: [{ reference: "Foto 1", observation: "Il cliente chiede pagamento 50% all'accettazione.", assessment: "Condizione commerciale" }] }
@@ -181,7 +228,11 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /Completa i dati mancanti/);
   assert.match(source, /Scarica PDF bozza/);
   assert.match(source, /BOZZA PRELIMINARE · NON INVIARE AL CLIENTE PRIMA DELLA CONFERMA/);
-  assert.match(source, /artifactPdfBlob\(artifact, destination, await previewsForReport\(message\), \{ draft \}\)/);
+  assert.match(source, /previewsForReport\(message, \{ allowMissing: draft \}\)/);
+  assert.match(source, /artifactPdfBlob\(artifact, destination, photoPreviews, \{ draft \}\)/);
+  assert.match(source, /read_photo_preview_chunk/);
+  assert.match(source, /retryPhotoOperation/);
+  assert.match(source, /FOTOGRAFIA NON DISPONIBILE NELLA BOZZA/);
   assert.match(source, /link\.download = `\$\{draft \? "BOZZA-"/);
   assert.match(source, /pdfNumberedListSection\(doc, context, "Dati da confermare"/);
   assert.match(source, /if \(!draft && !deferredSignature\)/);
@@ -201,14 +252,16 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(functionSource, /convertHeicAttachments/);
   assert.match(functionSource, /prepareArchivedHeicPhotos/);
   assert.match(functionSource, /action === "prepare_photo_preview"/);
+  assert.match(functionSource, /action === "read_photo_preview_chunk"/);
   assert.match(functionSource, /previewDataUrl/);
+  assert.match(functionSource, /previewDownload/);
   const photoSource = fs.readFileSync(path.join(__dirname, "photo-utils.js"), "utf8");
   assert.match(photoSource, /require\("heic-convert"\)/);
   assert.match(photoSource, /firebaseStorageDownloadTokens/);
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=20/);
+  assert.match(html, /edilkappa-ai\.js\?v=21/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
@@ -249,7 +302,7 @@ test("loads the central operations agents and keeps every action under confirmat
   assert.match(center, /latestAttempted: false/);
   assert.match(center, /state\.latestAttempted = true/);
   assert.match(center, /!state\.latestAttempted/);
-  assert.match(serviceWorker, /v72-pdf-draft-quality/);
+  assert.match(serviceWorker, /v74-photo-pdf-ios/);
   assert.match(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
