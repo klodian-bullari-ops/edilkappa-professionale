@@ -30,7 +30,7 @@
     .workerHero{background:linear-gradient(135deg,#111111,#22282d);border-bottom:5px solid var(--lime)}.workerHero h2{color:var(--lime)}.notice{background:#fff7cc;border-color:#eed66e;color:#725a00}.mobileNav button.active{background:#fff7cc;color:var(--ink);border-radius:12px;font-weight:850}
     @media print{.sidebar,.topbar,.mobileNav,.actions,.btn{display:none!important}.main{margin:0}.content{padding:0}.card{box-shadow:none;border:0}.printDoc{display:block!important}}
   </style>
-  <link rel="stylesheet" href="./modern-ui.css?v=2">
+  <link rel="stylesheet" href="./modern-ui.css?v=3">
 </head>
 <body>
 <div class="shell">
@@ -115,7 +115,7 @@ function render(){
   const fn={dashboard,ai:()=>window.edilkappaAiView?.()||'<div class="empty">Caricamento EdilKappa AI…</div>',agenda,condomini,inspections,quotes,sites,workMap,hours:hoursView,attendance:()=>window.EdilKappaAttendance?.attendanceView?.()||'<div class="empty">Caricamento assenze…</div>',teamsView,portalView:()=>window.portalView?.()||'<div class="empty">Caricamento accessi…</div>',drone,lifeline,roofs,drains,companySettingsView,finance,more,worker,workerProfile,report,search:searchResults}[view]||dashboard;
   document.getElementById('app').innerHTML=fn();
 }
-function stat(label,value,icon,sub=''){return `<div class="stat"><div class="statTop"><span>${label}</span><span class="statIcon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
+function stat(label,value,icon,sub='',className=''){return `<div class="stat ${className}"><div class="statTop"><span>${label}</span><span class="statIcon">${icon}</span></div><strong>${value}</strong><small>${sub}</small></div>`}
 function badge(s){let c=/ritardo|rifiut/i.test(s)?'red':/corso|attesa|preventiv/i.test(s)?'orange':/accett|complet|pagat/i.test(s)?'':'blue';return `<span class="pill ${c}">${esc(s)}</span>`}
 function lifelineStatus(item){if(!item.nextCheck)return'Da verificare';const days=(new Date(item.nextCheck)-new Date())/86400000;if(days<0)return'Scaduta';if(days<=90)return'In scadenza';return'Regolare'}
 function roofStatus(item){if(item.status==='Completato')return'Completato';if(!item.date)return'Da programmare';const days=(new Date(item.date)-new Date())/86400000;if(days<0)return'In ritardo';if(days<=14)return'Programmato';return'Pianificato'}
@@ -134,7 +134,8 @@ function dashboard(){
   const agendaItems=(db.inspections||[]).slice().sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||''))).slice(0,4);
   const displayName=role==='owner'?'Klodian':roleName();
   return `<div class="dashboardHero"><div><span class="eyebrow">Buongiorno, ${esc(displayName)}</span><h2>Centro operativo</h2><p>Le attività importanti sono ordinate e apribili direttamente.</p></div><div class="actions"><button class="btn light" onclick="openInspection()">＋ Sopralluogo</button><button class="btn lime" onclick="openSite()">＋ Nuovo intervento</button></div></div>
-  <div class="grid stats">${stat('Richieste nuove',newRequests.length,'🛠️','da prendere in carico')}${stat('Preventivi da controllare',openQuotes.length,'📄','bozze e risposte aperte')}${stat('Cantieri attivi',active.length,'🏗️','lavori in esecuzione')}${stat('Ore mancanti',missingHours.length,'◷','operai senza registrazione oggi')}</div>
+  <div class="grid stats dashboardStats">${stat('Da fare oggi',newRequests.length+active.length,'🛠️','richieste e lavori attivi','mobileEssential')}${stat('Preventivi da controllare',openQuotes.length,'📄','bozze e risposte aperte','mobileExtra')}${stat('Cantieri attivi',active.length,'🏗️','lavori in esecuzione','mobileExtra')}${stat('Ore mancanti',missingHours.length,'◷','operai senza registrazione oggi','mobileEssential')}</div>
+  <div class="mobileDailyActions"><button class="mobilePrimaryAction" onclick="openSite()"><span>＋</span><b>Nuovo intervento</b><small>Apri subito un nuovo lavoro</small></button><button onclick="go('ai')"><span>✦</span><b>Crea preventivo</b></button></div>
   <div class="dashboardGrid"><section class="card dashboardPriority"><div class="cardHead"><h3>Priorità di oggi</h3><button class="btn sm light" onclick="go('sites')">Vedi lavori</button></div><div class="list">${priorities.slice(0,5).map(item=>`<div class="row"><div class="rowIcon">${item.icon}</div><div class="rowBody"><b>${esc(item.title)}</b><small>${esc(item.meta)}</small></div>${badge(item.status)}<button class="btn sm light" onclick="${item.action}">›</button></div>`).join('')||'<div class="empty">Nessuna priorità urgente.</div>'}</div></section><section class="card dashboardAgenda"><div class="cardHead"><h3>Agenda di oggi</h3><button class="btn sm light" onclick="go('agenda')">Apri agenda</button></div><div class="agenda">${agendaItems.map(item=>`<div class="event"><time>${esc(item.time||'—')}</time><b>${esc(item.client||'Appuntamento')}</b><small>${esc(item.type||'Sopralluogo')} · ${esc(item.address||'')}</small></div>`).join('')||'<div class="empty">Nessun appuntamento.</div>'}</div></section></div>
   <section class="card aiLaunchCard"><div class="aiLaunchLogo"><img src="assets/icona-edilkappa.svg" alt=""></div><div class="aiLaunchBody"><h3>EdilKappa AI</h3><p>Il tuo assistente intelligente per preventivi e gestione lavori.</p><button class="btn" onclick="go('ai')">✦ Crea preventivo</button></div></section><div class="company">${esc(companySummary())}</div>`;
 }
@@ -238,7 +239,7 @@ function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.a
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=51').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=52').catch(()=>{});
 </script>
 <script src="./professional-extensions.js?v=19"></script>
 <script src="./business-suite.js?v=19"></script>
