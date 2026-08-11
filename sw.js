@@ -1,13 +1,14 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v88-stato-sopralluogo-cloud-valido`;
+const CACHE = `${CACHE_PREFIX}v89-foto-sopralluogo-heic`;
 const APP_SHELL = [
   "./",
   "./index.html",
   "./privacy.html",
   "./manifest.json",
   "./modern-ui.css",
+  "./media-contract.js",
   "./professional-extensions.js",
   "./business-suite.js",
   "./client-archive.js",

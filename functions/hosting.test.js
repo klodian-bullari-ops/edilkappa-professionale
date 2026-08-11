@@ -24,7 +24,9 @@ test("il pacchetto Hosting contiene solo il gestionale pubblico", async () => {
 
   const html = await readFile(path.join(outputDir, "index.html"), "utf8");
   assert.match(html, /edilkappa-loader\.js\?v=1/);
-  assert.match(html, /firebase-cloud\.js\?v=35/);
+  assert.match(html, /media-contract\.js\?v=1/);
+  assert.match(html, /firebase-cloud\.js\?v=36/);
+  assert.equal(await exists(path.join(outputDir, "media-contract.js")), true);
   assert.equal(await exists(path.join(outputDir, "functions")), false);
   assert.equal(await exists(path.join(outputDir, "mcp-server")), false);
   assert.equal(await exists(path.join(outputDir, "firebase.json")), false);

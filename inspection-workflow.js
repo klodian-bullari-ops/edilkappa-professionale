@@ -1,9 +1,41 @@
 (function () {
   'use strict';
 
+  const pendingInspectionMedia = new Map();
+
   function normalize(value) {
     return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('it');
   }
+
+  function inspectionMediaStatus(message, tone = 'muted') {
+    const status = document.getElementById('inspectionMediaStatus');
+    if (!status) return;
+    status.textContent = message;
+    status.style.color = tone === 'error' ? '#b42318' : tone === 'success' ? '#18794e' : '#667085';
+  }
+
+  function mediaSelection(id, formData) {
+    const submitted = formData?.getAll?.('media') || [];
+    const remembered = pendingInspectionMedia.get(id)?.files || [];
+    if (window.EdilKappaMedia?.selectedFiles) return window.EdilKappaMedia.selectedFiles(submitted, remembered);
+    const usable = (files) => Array.from(files || []).filter((file) => file?.size);
+    const formFiles = usable(submitted);
+    return formFiles.length ? formFiles : usable(remembered);
+  }
+
+  window.rememberInspectionMedia = function (id, input) {
+    const files = window.EdilKappaMedia?.usableFiles
+      ? window.EdilKappaMedia.usableFiles(input?.files)
+      : Array.from(input?.files || []).filter((file) => file?.size);
+    pendingInspectionMedia.set(id, { files, touched: true });
+    if (!files.length) {
+      inspectionMediaStatus('Il telefono non ha consegnato le foto. Riapri “Scegli foto e video” e selezionale di nuovo.', 'error');
+      return;
+    }
+    const names = files.slice(0, 3).map((file) => file.name).join(', ');
+    const remaining = files.length > 3 ? ` e altri ${files.length - 3}` : '';
+    inspectionMediaStatus(`${files.length} file selezionati: ${names}${remaining}`, 'success');
+  };
 
   function clientForInspection(item) {
     return (db.condomini || []).find((client) => String(client.id) === String(item.clientId || ''))
@@ -88,12 +120,15 @@
     if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.uploadMedia) throw new Error('Serve la connessione al cloud per salvare foto e video.');
     const result = [];
     for (const [index, file] of selected.entries()) {
+      inspectionMediaStatus(`Caricamento ${index + 1} di ${selected.length}: ${file.name} · 0%`);
       const stored = await window.EdilKappaCloud.uploadMedia(file, {
         mediaId: `inspection-${item.id}-${Date.now()}-${index}`,
-        category: 'Sopralluogo eseguito', client: item.client, interventionId: item.interventionId
+        category: 'Sopralluogo eseguito', client: item.client, interventionId: item.interventionId,
+        onProgress: ({ progress }) => inspectionMediaStatus(`Caricamento ${index + 1} di ${selected.length}: ${file.name} · ${progress}%`)
       });
       result.push({ ...stored, kind: String(stored.fileType || '').startsWith('video/') ? 'video' : 'image', photoOrigin: 'sopralluogo_edilkappa' });
     }
+    inspectionMediaStatus(`${result.length} file caricati. Salvataggio del sopralluogo…`, 'success');
     return result;
   }
 
@@ -102,30 +137,39 @@
     if (!item) return alert('Sopralluogo non trovato.');
     const intervention = window.ensureInspectionIntervention(item);
     const mediaCount = Array.isArray(item.media) ? item.media.length : 0;
+    pendingInspectionMedia.delete(id);
     modal('Sopralluogo eseguito', `<div class="notice"><b>${esc(item.client)}</b><br>${esc(item.address || '')}<br>Intervento: ${esc(intervention.title)}</div><div style="height:14px"></div><div class="formGrid">
       <div class="field full"><label>Esito del sopralluogo</label><textarea name="outcome" required placeholder="Che cosa hai verificato e qual è la causa del problema?">${esc(item.outcome || '')}</textarea></div>
       <div class="field full"><label>Misure rilevate</label><textarea name="measurements" placeholder="Metri, superfici, spessori, quantità e altre misure">${esc(item.measurements || '')}</textarea></div>
       <div class="field full"><label>Lavorazioni consigliate</label><textarea name="recommendations" required placeholder="Come consigli di risolvere il problema?">${esc(item.recommendations || '')}</textarea></div>
       <div class="field full"><label>Note tecniche</label><textarea name="technicalNotes" placeholder="Accesso, sicurezza, materiali, difficoltà o richieste del cliente">${esc(item.technicalNotes || '')}</textarea></div>
-      <div class="field full"><label>Foto e video del sopralluogo</label><input name="media" type="file" accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" capture="environment" multiple><small>${mediaCount ? `${mediaCount} file già salvati. ` : ''}Puoi aggiungere più foto e video.</small></div>
+      <div class="field full"><label>Scegli foto e video</label><input name="media" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" multiple onchange="rememberInspectionMedia('${esc(item.id)}',this)"><small id="inspectionMediaStatus">${mediaCount ? `${mediaCount} file già salvati. ` : ''}HEIC e HEIF vengono riconosciuti automaticamente. Dal telefono puoi usare Fotocamera, Libreria foto o Sfoglia.</small></div>
     </div>`, async (formData) => {
-      const addedMedia = await uploadInspectionMedia(item, formData.getAll('media'));
-      item.outcome = String(formData.get('outcome') || '').trim();
-      item.measurements = String(formData.get('measurements') || '').trim();
-      item.recommendations = String(formData.get('recommendations') || '').trim();
-      item.technicalNotes = String(formData.get('technicalNotes') || '').trim();
-      item.media = (item.media || []).concat(addedMedia);
-      item.status = 'Da preventivare';
-      item.completedAt = new Date().toISOString();
-      intervention.status = 'Da preventivare';
-      timeline(intervention, { id: `inspection-completed-${item.id}`, type: 'inspection', date: item.completedAt, label: 'Sopralluogo eseguito', actor: roleName(), detail: item.outcome });
-      const inspectionToSave = structuredClone(item);
-      const interventionToSave = structuredClone({ ...intervention, recordType: 'Intervention' });
+      const selectedMedia = mediaSelection(id, formData);
+      const pending = pendingInspectionMedia.get(id);
+      if (pending?.touched && !selectedMedia.length) throw new Error('Le foto selezionate non sono state acquisite dal telefono. Riapri la libreria e selezionale di nuovo.');
+      const addedMedia = await uploadInspectionMedia(item, selectedMedia);
+      if (selectedMedia.length && addedMedia.length !== selectedMedia.length) throw new Error('Non tutte le foto sono state caricate. Riprova senza chiudere questa finestra.');
+
+      const currentItem = (db.inspections || []).find((entry) => entry.id === id) || item;
+      const currentIntervention = (db.interventions || []).find((entry) => String(entry.id) === String(currentItem.interventionId || intervention.id)) || intervention;
+      currentItem.outcome = String(formData.get('outcome') || '').trim();
+      currentItem.measurements = String(formData.get('measurements') || '').trim();
+      currentItem.recommendations = String(formData.get('recommendations') || '').trim();
+      currentItem.technicalNotes = String(formData.get('technicalNotes') || '').trim();
+      currentItem.media = (currentItem.media || []).concat(addedMedia);
+      currentItem.status = 'Da preventivare';
+      currentItem.completedAt = new Date().toISOString();
+      currentIntervention.status = 'Da preventivare';
+      timeline(currentIntervention, { id: `inspection-completed-${currentItem.id}`, type: 'inspection', date: currentItem.completedAt, label: 'Sopralluogo eseguito', actor: roleName(), detail: currentItem.outcome });
+      const inspectionToSave = structuredClone(currentItem);
+      const interventionToSave = structuredClone({ ...currentIntervention, recordType: 'Intervention' });
       save();
       if (window.EdilKappaCloud?.ready) {
         await window.EdilKappaCloud.syncRecord('inspections', inspectionToSave);
         await window.EdilKappaCloud.syncRecord('documents', interventionToSave);
       }
+      pendingInspectionMedia.delete(id);
     });
   };
 
