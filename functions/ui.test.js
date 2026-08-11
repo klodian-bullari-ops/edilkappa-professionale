@@ -360,3 +360,22 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   assert.match(bridge, /everyMinutes\(5\)/);
   assert.match(bridge, /no-reply@miocondominio\.eu/);
 });
+
+test("keeps the mobile home focused on priorities and the daily work program", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const css = fs.readFileSync(path.join(__dirname, "..", "modern-ui.css"), "utf8");
+  const serviceWorker = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
+  assert.match(html, /\['agenda','▦','Agenda',"go\('agenda'\)"/);
+  assert.doesNotMatch(html, /\['quickAdd','＋','Nuovo'/);
+  assert.match(html, /Nuovo sopralluogo/);
+  assert.match(html, /Programmati oggi/);
+  assert.match(html, /Programma di oggi/);
+  assert.match(html, /function workProgramItems/);
+  assert.match(html, /item\.start===date&&item\.status!=='Completato'/);
+  assert.doesNotMatch(html, /active\.slice\(0,3\)\.forEach\(item=>priorities/);
+  assert.match(html, /Data programmata/);
+  assert.match(html, /Ora inizio/);
+  assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
+  assert.match(css, /\.dashboardAgenda\{display:block/);
+  assert.match(serviceWorker, /v79-home-agenda-mobile/);
+});
