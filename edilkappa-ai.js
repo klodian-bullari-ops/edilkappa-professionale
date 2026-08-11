@@ -7,6 +7,9 @@
   const VIDEO_MAX_BYTES = 500 * 1024 * 1024;
   const DOCUMENT_MAX_BYTES = 6 * 1024 * 1024;
   const HEIC_MAX_BYTES = 25 * 1024 * 1024;
+  const PDF_PHOTO_MAX_BYTES = 50 * 1024 * 1024;
+  const PDF_PHOTO_CHUNK_MAX_BYTES = 3 * 1024 * 1024;
+  const PDF_PHOTO_RETRY_DELAYS = [0, 450, 1200];
   const TASKS = new Set(["auto", "quote", "report", "inspection"]);
   const MODEL_MODES = new Set(["auto", "sol", "terra"]);
   const PENDING_JOB_KEY = "edilkappa-ai-pending-job-v1";
@@ -23,6 +26,7 @@
     light: [242, 243, 245]
   });
   const EDILKAPPA_PDF_FONT = "DejaVuSans";
+  const pdfPhotoCache = new Map();
 
   const state = {
     mode: "work",
@@ -1311,28 +1315,45 @@
   }
 
   function addPhotoAppendix(doc, context, previews, artifact) {
-    const usable = (previews || []).filter((item) => /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl) && !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
-    for (let offset = 0; offset < usable.length; offset += 2) {
+    const entries = (previews || []).filter((item) => (item?.unavailable === true || /^data:image\/(jpeg|png);base64,/i.test(item.dataUrl)) && !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
+    for (let offset = 0; offset < entries.length; offset += 2) {
       newDocumentPage(doc, context);
       doc.setFont(EDILKAPPA_PDF_FONT, "bold");
       doc.setFontSize(12);
       doc.text("ALLEGATO FOTOGRAFICO", 14, 49);
-      usable.slice(offset, offset + 2).forEach((preview, localIndex) => {
+      entries.slice(offset, offset + 2).forEach((preview, localIndex) => {
         const index = offset + localIndex;
         const top = localIndex === 0 ? 57 : 164;
         const maxHeight = 82;
-        try {
-          const properties = doc.getImageProperties(preview.dataUrl);
-          const scale = Math.min(180 / properties.width, maxHeight / properties.height);
-          const width = properties.width * scale;
-          const height = properties.height * scale;
-          doc.addImage(preview.dataUrl, properties.fileType || "JPEG", 14 + (180 - width) / 2, top, width, height, undefined, "FAST");
-        } catch (_) {
+        if (preview.unavailable) {
+          doc.setFillColor(247, 247, 247);
+          doc.setDrawColor(185, 185, 185);
+          doc.rect(14, top, 180, maxHeight, "FD");
+          doc.setTextColor(95, 95, 95);
+          doc.setFont(EDILKAPPA_PDF_FONT, "bold");
+          doc.setFontSize(9.2);
+          doc.text("FOTOGRAFIA NON DISPONIBILE NELLA BOZZA", 104, top + 34, { align: "center" });
           doc.setFont(EDILKAPPA_PDF_FONT, "normal");
-          doc.setFontSize(8.5);
-          doc.text("Anteprima non inseribile; l’originale resta nell’archivio EdilKappa.", 14, top + 8);
+          doc.setFontSize(8);
+          const missingName = doc.splitTextToSize(String(preview.sourceName || preview.name || "Fotografia archiviata"), 150).slice(0, 2);
+          doc.text(missingName, 104, top + 42, { align: "center" });
+        } else {
+          try {
+            const properties = doc.getImageProperties(preview.dataUrl);
+            const scale = Math.min(180 / properties.width, maxHeight / properties.height);
+            const width = properties.width * scale;
+            const height = properties.height * scale;
+            doc.addImage(preview.dataUrl, properties.fileType || "JPEG", 14 + (180 - width) / 2, top, width, height, undefined, "FAST");
+          } catch (_) {
+            doc.setFont(EDILKAPPA_PDF_FONT, "normal");
+            doc.setFontSize(8.5);
+            doc.text("Anteprima non inseribile; l’originale resta nell’archivio EdilKappa.", 14, top + 8);
+          }
         }
-        const photoCaption = photoCaptionForPreview(artifact, preview, index);
+        const photoCaption = preview.unavailable
+          ? { caption: `${preview.sourceName || preview.name || "Fotografia"} · da recuperare prima del documento definitivo.`, assessment: String(preview.failureReason || "Riprova con una connessione stabile.").slice(0, 220) }
+          : photoCaptionForPreview(artifact, preview, index);
+        doc.setTextColor(...EDILKAPPA_DOCUMENT.dark);
         doc.setFont(EDILKAPPA_PDF_FONT, "bold");
         doc.setFontSize(8.2);
         const captionLines = doc.splitTextToSize(`${preview.generated ? "VISUALIZZAZIONE ILLUSTRATIVA AI" : `FOTO ${index + 1}`} · ${photoCaption.caption}`, 180).slice(0, 2);
@@ -1346,8 +1367,8 @@
       });
     }
     return {
-      count: usable.length,
-      signatureY: usable.length % 2 === 1 ? 170 : 0
+      count: entries.length,
+      signatureY: entries.length % 2 === 1 ? 170 : 0
     };
   }
 
@@ -1514,53 +1535,144 @@
     return fileName.replace(/\.(heic|heif|jpe?g|png|webp|gif)$/i, "");
   }
 
+  function photoCacheKey(item) {
+    return String(item?.previewStoragePath || item?.storagePath || "");
+  }
+
+  function retryablePhotoError(error) {
+    return /load failed|network|fetch|connection|connessione|unavailable|internal|deadline|timeout|temporar|retry/i.test(`${error?.code || ""} ${error?.message || ""}`);
+  }
+
+  async function retryPhotoOperation(operation) {
+    let lastError;
+    for (let attempt = 0; attempt < PDF_PHOTO_RETRY_DELAYS.length; attempt += 1) {
+      const delay = PDF_PHOTO_RETRY_DELAYS[attempt];
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      try {
+        return await operation(attempt);
+      } catch (error) {
+        lastError = error;
+        if (!retryablePhotoError(error) || attempt === PDF_PHOTO_RETRY_DELAYS.length - 1) throw error;
+      }
+    }
+    throw lastError || new Error("Recupero della fotografia non riuscito.");
+  }
+
+  function bytesFromBase64(value) {
+    const binary = atob(String(value || ""));
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes;
+  }
+
+  function imageBlobFromDataUrl(dataUrl) {
+    const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(String(dataUrl || ""));
+    if (!match) throw new Error("La conversione fotografica restituita non è valida.");
+    return new Blob([bytesFromBase64(match[2])], { type: match[1].toLowerCase() });
+  }
+
+  async function chunkedPhotoBlob(item, download) {
+    const mimeType = String(download?.mimeType || "").toLowerCase();
+    const byteLength = Number(download?.byteLength || 0);
+    const chunkBytes = Math.max(1, Math.min(Number(download?.chunkBytes || PDF_PHOTO_CHUNK_MAX_BYTES), PDF_PHOTO_CHUNK_MAX_BYTES));
+    if (!/^image\/(jpeg|png|webp|gif)$/i.test(mimeType) || !Number.isSafeInteger(byteLength) || byteLength <= 0 || byteLength > PDF_PHOTO_MAX_BYTES) {
+      throw new Error("Dati dell’anteprima fotografica non validi.");
+    }
+    const chunks = [];
+    let offset = 0;
+    while (offset < byteLength) {
+      const result = await retryPhotoOperation(() => window.EdilKappaCloud.aiRequest({
+        action: "read_photo_preview_chunk",
+        mode: "work",
+        conversationId: state.activeConversation.work,
+        mediaReference: item,
+        offset
+      }));
+      const returnedOffset = Number(result?.offset);
+      const nextOffset = Number(result?.nextOffset);
+      if (returnedOffset !== offset || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > byteLength) {
+        throw new Error("Sequenza dei frammenti fotografici non valida.");
+      }
+      const bytes = bytesFromBase64(result?.chunkBase64);
+      if (bytes.length !== nextOffset - offset || bytes.length > chunkBytes) {
+        throw new Error("Il frammento fotografico ricevuto è incompleto.");
+      }
+      chunks.push(bytes);
+      offset = nextOffset;
+    }
+    const blob = new Blob(chunks, { type: mimeType });
+    if (blob.size !== byteLength) throw new Error("La fotografia recuperata è incompleta.");
+    return blob;
+  }
+
   async function cloudPhotoReference(item) {
-    if (!/^image\/(heic|heif)$/i.test(item?.fileType || "")) return { reference: item, dataUrl: "" };
-    if (!window.EdilKappaCloud?.aiRequest) throw new Error("Il convertitore fotografico cloud non è disponibile.");
-    const result = await window.EdilKappaCloud.aiRequest({
-      action: "prepare_photo_preview",
-      mode: "work",
-      conversationId: state.activeConversation.work,
-      mediaReference: item
-    });
-    if (!result?.preview?.previewStoragePath) throw new Error("La fotografia convertita non è disponibile.");
-    Object.assign(item, result.preview);
-    return { reference: item, dataUrl: String(result.previewDataUrl || "") };
+    const fileType = String(item?.fileType || "").toLowerCase();
+    const isHeic = /^image\/(heic|heif)$/i.test(fileType);
+    if (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(fileType)) return { reference: item, dataUrl: "", download: null };
+    if (!window.EdilKappaCloud?.aiRequest) {
+      if (isHeic) throw new Error("Il convertitore fotografico cloud non è disponibile.");
+      return { reference: item, dataUrl: "", download: null };
+    }
+    try {
+      const result = await retryPhotoOperation(() => window.EdilKappaCloud.aiRequest({
+        action: "prepare_photo_preview",
+        mode: "work",
+        conversationId: state.activeConversation.work,
+        mediaReference: item
+      }));
+      if (!result?.preview?.previewStoragePath) throw new Error("L’anteprima fotografica cloud non è disponibile.");
+      Object.assign(item, result.preview);
+      return {
+        reference: item,
+        dataUrl: String(result.previewDataUrl || ""),
+        download: result.previewDownload || null
+      };
+    } catch (error) {
+      if (isHeic) throw error;
+      console.warn("Recupero protetto della fotografia non disponibile; provo il collegamento diretto.", { fileName: item?.fileName, message: error?.message });
+      return { reference: item, dataUrl: "", download: null };
+    }
   }
 
   async function pdfPreviewFromCloud(item) {
+    const cached = pdfPhotoCache.get(photoCacheKey(item));
+    if (cached) return cached;
     const cloudPreview = await cloudPhotoReference(item);
     const reference = cloudPreview.reference;
     let blob;
-    let fileType;
     if (cloudPreview.dataUrl) {
-      if (!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/i.test(cloudPreview.dataUrl)) {
-        throw new Error("La conversione fotografica restituita non è valida.");
-      }
-      const response = await fetch(cloudPreview.dataUrl);
-      blob = await response.blob();
-      fileType = "image/jpeg";
+      blob = imageBlobFromDataUrl(cloudPreview.dataUrl);
+    } else if (cloudPreview.download?.byteLength) {
+      blob = await chunkedPhotoBlob(item, cloudPreview.download);
     } else {
       const storagePath = reference.previewStoragePath || reference.storagePath;
       const url = await window.EdilKappaCloud?.getDocumentUrl?.(storagePath);
       if (!url) throw new Error("Collegamento della fotografia non disponibile.");
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Fotografia non scaricabile dall’archivio.");
-      blob = await response.blob();
-      fileType = String(reference.previewFileType || blob.type || reference.fileType || "").toLowerCase();
+      blob = await retryPhotoOperation(async () => {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error("Fotografia non scaricabile dall’archivio.");
+        return response.blob();
+      });
     }
+    const fileType = String(blob.type || reference.previewFileType || reference.fileType || "").toLowerCase();
     if (!/^image\/(jpeg|png|webp|gif)$/i.test(fileType)) throw new Error("Formato dell’anteprima fotografica non valido.");
     const prepared = await compressedImage(new File([blob], reference.previewFileName || reference.fileName || "foto.jpg", { type: fileType }));
-    return {
+    const preview = {
       dataUrl: prepared.dataUrl,
       mimeType: prepared.mimeType,
       sourceName: reference.title || reference.fileName,
       name: reference.previewFileName || reference.fileName,
       generated: reference.generated === true
     };
+    const cacheKey = photoCacheKey(reference);
+    if (cacheKey) {
+      if (pdfPhotoCache.size >= 12) pdfPhotoCache.delete(pdfPhotoCache.keys().next().value);
+      pdfPhotoCache.set(cacheKey, preview);
+    }
+    return preview;
   }
 
-  async function previewsForReport(message) {
+  async function previewsForReport(message, options = {}) {
     const previews = [];
     const seen = new Set();
     const localHeic = [];
@@ -1596,7 +1708,15 @@
       const names = Array.from(new Set(failedOriginals.map((item) => item.name)));
       const shownNames = names.slice(0, 3).join(", ") + (names.length > 3 ? ` e altre ${names.length - 3}` : "");
       const reason = Array.from(new Set(failedOriginals.map((item) => item.reason))).slice(0, 2).join(" ");
-      throw new Error(`Non riesco a inserire nel PDF ${failedOriginals.length === 1 ? "la fotografia" : `${failedOriginals.length} fotografie`}: ${shownNames}. ${reason}`);
+      if (options.allowMissing !== true) {
+        throw new Error(`Non riesco a inserire nel PDF ${failedOriginals.length === 1 ? "la fotografia" : `${failedOriginals.length} fotografie`}: ${shownNames}. ${reason}`);
+      }
+      failedOriginals.forEach((item) => previews.push({
+        unavailable: true,
+        sourceName: item.name,
+        name: item.name,
+        failureReason: item.reason
+      }));
     }
     return previews.filter((item) => !/screenshot|schermata|preventiv|tabella/i.test(`${item.sourceName || ""} ${item.name || ""}`)).slice(0, 10);
   }
@@ -2168,7 +2288,8 @@
       const destination = { client, interventionId: artifact.interventionId || "", title: artifact.subject || artifact.title || documentTypeLabel(artifact) };
       const release = artifact.kind === "quote" ? quoteMessageReleaseCheck(message, destination) : { passed: true };
       const draft = artifact.kind === "quote" && !release.passed;
-      const blob = await artifactPdfBlob(artifact, destination, await previewsForReport(message), { draft });
+      const photoPreviews = await previewsForReport(message, { allowMissing: draft });
+      const blob = await artifactPdfBlob(artifact, destination, photoPreviews, { draft });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -2313,11 +2434,14 @@
   if (window.__EDILKAPPA_AI_TEST__) {
     window.EdilKappaAiTest = {
       artifactPdfBlob,
+      chunkedPhotoBlob,
       customerFacingValues,
       euro,
       formatEstimatedDuration,
+      imageBlobFromDataUrl,
       pdfTextSection,
       pdfPreviewFromCloud,
+      previewsForReport,
       photoCaptionForPreview,
       quoteMissingQuestions,
       quoteMessageReleaseCheck,

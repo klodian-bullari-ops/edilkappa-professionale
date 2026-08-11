@@ -50,8 +50,10 @@ const {
 } = require("./danea-outlook");
 const {
   convertHeicBuffer,
+  describePreparedPhotoPreview,
   ensurePhotoPreview,
-  prepareArchivedHeicPhotos
+  prepareArchivedHeicPhotos,
+  readPreparedPhotoPreviewChunk
 } = require("./photo-utils");
 const {
   buildPdfAuditBody,
@@ -1326,13 +1328,34 @@ exports.edilkappaAi = onCall({
       [reference] = parseMediaReferences([request.data?.mediaReference], account.uid, mode);
       if (!reference || reference.kind !== "image") throw new Error("Seleziona una fotografia archiviata valida.");
       const prepared = await ensurePhotoPreview({ storageBucket, reference, uid: account.uid, orgId: ORG_ID });
+      const download = await describePreparedPhotoPreview({ storageBucket, prepared });
       return {
         mode,
         preview: prepared.reference,
-        previewDataUrl: prepared.buffer?.length
-          ? `data:image/jpeg;base64,${Buffer.from(prepared.buffer).toString("base64")}`
-          : ""
+        previewDataUrl: download.dataUrl,
+        previewDownload: {
+          mimeType: download.mimeType,
+          byteLength: download.byteLength,
+          chunkBytes: download.chunkBytes
+        }
       };
+    } catch (error) {
+      throw new HttpsError("invalid-argument", error.message);
+    }
+  }
+  if (action === "read_photo_preview_chunk") {
+    if (mode !== "work") throw new HttpsError("permission-denied", "Le anteprime fotografiche sono disponibili soltanto in modalità Lavoro.");
+    let reference;
+    try {
+      [reference] = parseMediaReferences([request.data?.mediaReference], account.uid, mode);
+      if (!reference || reference.kind !== "image") throw new Error("Seleziona una fotografia archiviata valida.");
+      const prepared = await ensurePhotoPreview({ storageBucket, reference, uid: account.uid, orgId: ORG_ID });
+      const chunk = await readPreparedPhotoPreviewChunk({
+        storageBucket,
+        prepared,
+        offset: request.data?.offset
+      });
+      return { mode, preview: prepared.reference, ...chunk };
     } catch (error) {
       throw new HttpsError("invalid-argument", error.message);
     }

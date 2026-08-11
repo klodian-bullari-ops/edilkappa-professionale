@@ -7,6 +7,9 @@ const HEIC_TYPES = new Set(["image/heic", "image/heif"]);
 const BROWSER_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_HEIC_SOURCE_BYTES = 25 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 2500000;
+const MAX_INLINE_PREVIEW_BYTES = 12 * 1024 * 1024;
+const MAX_PDF_PREVIEW_BYTES = 50 * 1024 * 1024;
+const PHOTO_PREVIEW_CHUNK_BYTES = 3 * 1024 * 1024;
 const PREVIEW_QUALITIES = [0.82, 0.68, 0.54, 0.42];
 
 function normalizedMimeType(value) {
@@ -139,6 +142,78 @@ async function ensurePhotoPreview({ storageBucket, reference, uid, orgId = "edil
   };
 }
 
+async function preparedPreviewSource({ storageBucket, prepared, maxBytes = MAX_PDF_PREVIEW_BYTES }) {
+  const reference = prepared?.reference || {};
+  const storagePath = String(reference.previewStoragePath || reference.storagePath || "");
+  if (!storagePath) throw new Error("Percorso dell’anteprima fotografica mancante.");
+  const file = storageBucket.file(storagePath);
+  const preparedBuffer = prepared?.buffer?.length ? Buffer.from(prepared.buffer) : null;
+  let metadata = {};
+  if (!preparedBuffer) [metadata] = await file.getMetadata();
+  const mimeType = normalizedMimeType(
+    metadata?.contentType
+      || reference.previewFileType
+      || (preparedBuffer ? "image/jpeg" : reference.fileType)
+  );
+  const byteLength = Number(preparedBuffer?.length || metadata?.size || 0);
+  if (!BROWSER_IMAGE_TYPES.has(mimeType)) throw new Error("Il formato dell’anteprima fotografica non è supportato.");
+  if (!byteLength) throw new Error("L’anteprima fotografica è vuota.");
+  if (byteLength > Number(maxBytes || MAX_PDF_PREVIEW_BYTES)) {
+    throw new Error("La fotografia supera 50 MB. Riducila e riprova.");
+  }
+  return { storagePath, file, buffer: preparedBuffer, mimeType, byteLength };
+}
+
+async function describePreparedPhotoPreview({
+  storageBucket,
+  prepared,
+  maxInlineBytes = MAX_INLINE_PREVIEW_BYTES,
+  maxBytes = MAX_PDF_PREVIEW_BYTES,
+  chunkBytes = PHOTO_PREVIEW_CHUNK_BYTES
+}) {
+  const source = await preparedPreviewSource({ storageBucket, prepared, maxBytes });
+  let buffer = source.buffer;
+  if (!buffer && source.byteLength <= Number(maxInlineBytes || 0)) {
+    [buffer] = await source.file.download();
+  }
+  return {
+    mimeType: source.mimeType,
+    byteLength: source.byteLength,
+    chunkBytes: Math.max(1, Math.min(Number(chunkBytes || PHOTO_PREVIEW_CHUNK_BYTES), PHOTO_PREVIEW_CHUNK_BYTES)),
+    dataUrl: buffer?.length ? `data:${source.mimeType};base64,${Buffer.from(buffer).toString("base64")}` : ""
+  };
+}
+
+async function readPreparedPhotoPreviewChunk({
+  storageBucket,
+  prepared,
+  offset = 0,
+  maxBytes = MAX_PDF_PREVIEW_BYTES,
+  chunkBytes = PHOTO_PREVIEW_CHUNK_BYTES
+}) {
+  const source = await preparedPreviewSource({ storageBucket, prepared, maxBytes });
+  const start = Number(offset);
+  const size = Math.max(1, Math.min(Number(chunkBytes || PHOTO_PREVIEW_CHUNK_BYTES), PHOTO_PREVIEW_CHUNK_BYTES));
+  if (!Number.isSafeInteger(start) || start < 0 || start >= source.byteLength) {
+    throw new Error("Posizione del frammento fotografico non valida.");
+  }
+  const nextOffset = Math.min(source.byteLength, start + size);
+  let buffer;
+  if (source.buffer) buffer = source.buffer.subarray(start, nextOffset);
+  else [buffer] = await source.file.download({ start, end: nextOffset - 1 });
+  if (!buffer?.length || buffer.length !== nextOffset - start) {
+    throw new Error("Il frammento fotografico ricevuto è incompleto.");
+  }
+  return {
+    mimeType: source.mimeType,
+    byteLength: source.byteLength,
+    offset: start,
+    nextOffset,
+    done: nextOffset >= source.byteLength,
+    chunkBase64: Buffer.from(buffer).toString("base64")
+  };
+}
+
 async function prepareArchivedHeicPhotos({ storageBucket, mediaReferences, uid, orgId = "edilkappa", converter }) {
   const references = [];
   const attachments = [];
@@ -167,13 +242,18 @@ async function prepareArchivedHeicPhotos({ storageBucket, mediaReferences, uid, 
 module.exports = {
   BROWSER_IMAGE_TYPES,
   HEIC_TYPES,
+  MAX_INLINE_PREVIEW_BYTES,
+  MAX_PDF_PREVIEW_BYTES,
   MAX_HEIC_SOURCE_BYTES,
   MAX_PREVIEW_BYTES,
+  PHOTO_PREVIEW_CHUNK_BYTES,
   convertHeicBuffer,
+  describePreparedPhotoPreview,
   ensurePhotoPreview,
   isHeicMimeType,
   isSupportedImageType,
   prepareArchivedHeicPhotos,
   previewFileName,
-  previewStoragePath
+  previewStoragePath,
+  readPreparedPhotoPreviewChunk
 };
