@@ -1469,6 +1469,7 @@
   }
 
   async function artifactPdfBlob(rawArtifact, destination, previews, options = {}) {
+    if (!window.jspdf?.jsPDF) await window.EdilKappaLoader?.ensurePdf?.();
     if (!window.jspdf?.jsPDF) throw new Error("Il generatore PDF non è disponibile. Ricarica la pagina e riprova.");
     const draft = rawArtifact?.kind === "quote" && options?.draft === true;
     const verifiedArtifact = rawArtifact?.kind === "quote"

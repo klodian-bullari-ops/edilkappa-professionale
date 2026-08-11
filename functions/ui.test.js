@@ -164,6 +164,7 @@ test("registers the EdilKappa AI browser interface", async () => {
 test("supports construction photos, video workflows and managed artifacts", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   assert.match(source, /video\/mp4/);
   assert.match(source, /extractVideoFrames/);
   assert.match(source, /uploadMedia/);
@@ -278,7 +279,8 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(html, /edilkappa-ai\.js\?v=22/);
+  assert.match(loader, /edilkappa-ai\.js\?v=22/);
+  assert.doesNotMatch(html, /<script[^>]+edilkappa-ai\.js/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
 
@@ -302,25 +304,27 @@ test("keeps EdilKappa AI available after professional extensions replace render"
 });
 
 test("loads the final AI route guard after the AI interface", () => {
-  const indexSource = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const loaderSource = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   const routeSource = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai-route.js"), "utf8");
-  assert.ok(indexSource.indexOf("edilkappa-ai-route.js") > indexSource.indexOf("edilkappa-ai.js"));
+  assert.ok(loaderSource.indexOf("edilkappa-ai-route.js") > loaderSource.indexOf("edilkappa-ai.js"));
   assert.match(routeSource, /view === "ai"/);
   assert.match(routeSource, /window\.edilkappaAiView/);
 });
 
 test("loads the central operations agents and keeps every action under confirmation", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   const serviceWorker = fs.readFileSync(path.join(__dirname, "..", "sw.js"), "utf8");
   const center = fs.readFileSync(path.join(__dirname, "..", "operations-center.js"), "utf8");
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
-  assert.match(html, /operations-center\.js\?v=2/);
+  assert.match(loader, /operations-center\.js\?v=2/);
+  assert.doesNotMatch(html, /<script[^>]+operations-center\.js/);
   assert.match(center, /latestAttempted: false/);
   assert.match(center, /state\.latestAttempted = true/);
   assert.match(center, /!state\.latestAttempted/);
   assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
-  assert.match(serviceWorker, /"\.\/operations-center\.js"/);
+  assert.doesNotMatch(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
   assert.match(center, /Guadagno reale/);
@@ -333,13 +337,14 @@ test("loads the central operations agents and keeps every action under confirmat
 
 test("moves Danea intake through the authenticated Gmail bridge", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const danea = fs.readFileSync(path.join(__dirname, "..", "danea-integration.js"), "utf8");
   const backend = fs.readFileSync(path.join(__dirname, "index.js"), "utf8");
   const bridge = fs.readFileSync(path.join(__dirname, "..", "scripts", "google-apps-script-danea.gs"), "utf8");
   const manifest = fs.readFileSync(path.join(__dirname, "..", "scripts", "appsscript.json"), "utf8");
-  assert.match(html, /danea-integration\.js\?v=25/);
-  assert.match(html, /firebase-cloud\.js\?v=30/);
+  assert.match(loader, /danea-integration\.js\?v=25/);
+  assert.match(html, /firebase-cloud\.js\?v=31/);
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
   assert.match(danea, /controllo Gmail ogni 5 minuti/);

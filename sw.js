@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v77-mobile-priorita-pulite`;
+const CACHE = `${CACHE_PREFIX}v78-avvio-rapido`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -12,18 +12,13 @@ const APP_SHELL = [
   "./business-suite.js",
   "./client-archive.js",
   "./direct-search.js",
-  "./smart-operations.js",
   "./danea-integration.js",
   "./intervention-lifecycle.js",
   "./completion-center.js",
   "./bulk-sharing.js",
-  "./edilconnect.js",
   "./hours-closeout.js",
   "./attendance-center.js",
-  "./controlled-learning.js",
-  "./operations-center.js",
-  "./edilkappa-ai.js",
-  "./edilkappa-ai-route.js",
+  "./edilkappa-loader.js",
   "./firebase-cloud.js",
   "./sharing-integration.js",
   "./quick-site-photos.js",

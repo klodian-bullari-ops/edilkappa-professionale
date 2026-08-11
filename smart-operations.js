@@ -211,8 +211,10 @@
     const item = db.quotes.find((entry) => entry.id === id); if (!item) return;
     if (item.storagePath || item.pdfKey) return openQuotePdf(id);
     if (!item.lines?.length && !Number(item.net || 0)) return alert('Questo preventivo non contiene ancora voci o importi. Apri Modifica e inserisci le lavorazioni prima di generare il PDF.');
-    if (!window.jspdf?.jsPDF) return alert('Il generatore PDF non è disponibile. Ricarica la pagina e riprova.');
     const popup = window.open('', '_blank');
+    try { if (!window.jspdf?.jsPDF) await window.EdilKappaLoader?.ensurePdf?.(); }
+    catch (error) { popup?.close(); return alert(error?.message || 'Il generatore PDF non è disponibile. Riprova.'); }
+    if (!window.jspdf?.jsPDF) { popup?.close(); return alert('Il generatore PDF non è disponibile. Ricarica la pagina e riprova.'); }
     const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     await pdfHeader(doc, 'PREVENTIVO', item.code);
     const client = clientByName(item.client) || {};
@@ -265,8 +267,10 @@
 
   window.printCertificate = async function (id) {
     const item = db.certificates.find((entry) => entry.id === id); if (!item) return;
-    if (!window.jspdf?.jsPDF) return alert('Il generatore PDF non è disponibile. Ricarica la pagina.');
     const popup = window.open('', '_blank');
+    try { if (!window.jspdf?.jsPDF) await window.EdilKappaLoader?.ensurePdf?.(); }
+    catch (error) { popup?.close(); return alert(error?.message || 'Il generatore PDF non è disponibile. Riprova.'); }
+    if (!window.jspdf?.jsPDF) { popup?.close(); return alert('Il generatore PDF non è disponibile. Ricarica la pagina.'); }
     const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit: 'mm', format: 'a4' }); await pdfHeader(doc, item.type.toUpperCase(), item.code);
     doc.autoTable({ startY: 42, body: [['Cliente', item.client], ['Indirizzo', item.address], ['Data', smartDate(item.date)], ['Tecnico', item.technician], ['Esito', item.outcome], ['Prossimo controllo', smartDate(item.nextCheck)]], theme: 'grid', styles: { fontSize: 9 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 42 } } });
     let y = doc.lastAutoTable.finalY + 9; doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.text('Descrizione e verifiche', 14, y); doc.setFont(undefined, 'normal'); const noteLines = doc.splitTextToSize(item.notes || '—', 180); doc.text(noteLines, 14, y + 6); y += 10 + noteLines.length * 4;

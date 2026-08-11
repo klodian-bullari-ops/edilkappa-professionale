@@ -12,7 +12,6 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     :root{--ink:#111111;--green:#167448;--lime:#f4c400;--paper:#f6f5f1;--white:#fff;--muted:#687078;--line:#e0e3e5;--orange:#ef6814;--red:#ad2a2a;--blue:#245b8f;--radius:20px;--shadow:0 12px 35px rgba(17,17,17,.10)}
     *{box-sizing:border-box}html{background:var(--paper)}body{margin:0;color:var(--ink);background:var(--paper);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:none!important}
@@ -46,7 +45,6 @@
   <nav class="mobileNav" id="mobileNav"></nav>
 </div>
 <dialog id="modal"><div id="modalContent"></div></dialog>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const COMPANY_DEFAULTS={name:'EDILKAPPA',address:'',vat:'',phone:'',email:''};
 const COMPANY={...COMPANY_DEFAULTS};
@@ -81,7 +79,7 @@ function currentStaff(){return STAFF.find(x=>x.id===role)}
 function currentTeamId(){return currentStaff()?.team||''}
 function roleName(){return role==='owner'?'Titolare':role==='secretary'?'Ufficio':currentStaff()?.name||'Operaio'}
 function nav(){return isOffice()?ownerNav:workerNav}
-function initRoles(){const s=document.getElementById('roleSelect');if(!isOffice()&&!STAFF.some(w=>w.id===role)){role='owner';localStorage.setItem('ek_role',role)}s.innerHTML='<option value="owner">Titolare</option><option value="secretary">Ufficio</option>'+STAFF.map(w=>{const team=WORKERS.find(t=>t.id===w.team);return`<option value="${w.id}">${esc(w.name)} · ${esc(team?.name||'Senza squadra')}</option>`}).join('');s.value=role;s.onchange=()=>{role=s.value;searchQuery='';document.getElementById('globalSearch').value='';localStorage.setItem('ek_role',role);view=isOffice()?'dashboard':'worker';render();checkHourReminders()}}
+function initRoles(){const s=document.getElementById('roleSelect');if(!isOffice()&&!STAFF.some(w=>w.id===role)){role='owner';localStorage.setItem('ek_role',role)}s.innerHTML='<option value="owner">Titolare</option><option value="secretary">Ufficio</option>'+STAFF.map(w=>{const team=WORKERS.find(t=>t.id===w.team);return`<option value="${w.id}">${esc(w.name)} · ${esc(team?.name||'Senza squadra')}</option>`}).join('');s.value=role;s.onchange=()=>{role=s.value;searchQuery='';document.getElementById('globalSearch').value='';localStorage.setItem('ek_role',role);view=isOffice()?'dashboard':'worker';window.EdilKappaLoader?.allowNextRender?.();render();checkHourReminders()}}
 function renderNav(){
   const html=nav().map(n=>`<button class="${view===n[0]?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');
   document.getElementById('desktopNav').innerHTML=html;
@@ -91,12 +89,16 @@ function renderNav(){
     :[['worker','▣','Lavori',"go('worker')",'jobs'],['hours','◷','Ore',"go('hours')",'hours'],['quickPhoto','📷','Foto','captureInfo()','photo'],['attendance','▦','Assenze',"go('attendance')",'attendance'],['workerProfile','●','Profilo',"go('workerProfile')",'profile']];
   document.getElementById('mobileNav').innerHTML=mobile.map(n=>`<button data-action="${n[4]}" class="${view===n[0]||(n[0]==='more'&&moreViews.includes(view))?'active':''}" onclick="${n[3]}"><span>${n[1]}</span>${n[2]}</button>`).join('');
 }
-function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;render()}
+function go(v){view=window.EdilKappaCloud?.restrictView?.(v)||v;const loading=window.EdilKappaLoader?.ensureView?.(view);window.EdilKappaLoader?.allowNextRender?.();render();loading?.catch?.(error=>window.EdilKappaLoader?.showError?.(error,view))}
 function openMobileSearch(){document.body.classList.add('mobileSearchOpen');setTimeout(()=>document.getElementById('globalSearch')?.focus(),30)}
 function closeMobileSearch(){document.body.classList.remove('mobileSearchOpen');document.getElementById('globalSearch')?.blur()}
-function runSearch(value){searchQuery=String(value||'').trim();view=searchQuery?'search':(isOffice()?'dashboard':'worker');render()}
+let searchRenderTimer=0;
+function runSearch(value){searchQuery=String(value||'').trim();clearTimeout(searchRenderTimer);view=searchQuery?'search':(isOffice()?'dashboard':'worker');if(!searchQuery){window.EdilKappaLoader?.allowNextRender?.();render();return}searchRenderTimer=setTimeout(()=>{window.EdilKappaLoader?.allowNextRender?.();render()},120)}
 function openSearchResult(action,id,contextId=''){searchQuery='';const input=document.getElementById('globalSearch');if(input)input.value='';const office=isOffice();switch(action){case'client':if(typeof window.openClientArchive==='function')return window.openClientArchive(id);view='condomini';render();return window.openCondo(id);case'intervention':if(typeof window.openClientArchive==='function')window.openClientArchive(contextId);if(typeof window.openIntervention==='function')return window.openIntervention(id,contextId);return;case'inspection':view='inspections';render();return window.openInspection(id);case'quote':view='quotes';render();return window.openQuote(id);case'site':view=office?'sites':'worker';render();return office?window.openSite(id):window.openReport(id);case'team':view='teamsView';render();return window.openTeam(id);case'drone':view='drone';render();return window.openDrone(id);case'lifeline':view='lifeline';render();return window.openLifeline(id);case'roof':view=office?'roofs':'worker';render();return office?window.openRoof(id):window.updateRoofTask(id);case'drain':view=office?'drains':'worker';render();return office?window.openDrain(id):window.updateDrainTask(id);default:return go(office?'dashboard':'worker')}}
+function refreshNotificationBadge(){const mobileBadge=document.getElementById('mobileNotificationBadge');if(mobileBadge){const count=(db.interventions||[]).filter(item=>/nuov|da gestire|apert/i.test(item.status||'')).length;mobileBadge.textContent=count||'';mobileBadge.hidden=!count}}
+function renderFromCloud(){const dialog=document.getElementById('modal'),active=document.activeElement,editing=dialog?.open||(active&&['INPUT','TEXTAREA','SELECT'].includes(active.tagName)&&(active.id==='globalSearch'||active.closest?.('#app')));if(editing)return false;render();return true}
 function render(){
+  if(window.EdilKappaLoader?.deferRender?.())return;
   if(!isOffice()&&!['worker','hours','attendance','report','workerProfile','search'].includes(view))view='worker';
   applyCompanySettings();
   const office=isOffice();
@@ -106,8 +108,7 @@ function render(){
   if(brandSubtitle)brandSubtitle.textContent=brandLabel;
   if(mobileBrandSubtitle)mobileBrandSubtitle.textContent=brandLabel;
   if(search)search.placeholder=office?'Cerca cliente, indirizzo, lavoro…':'Cerca nei miei lavori…';
-  const mobileBadge=document.getElementById('mobileNotificationBadge');
-  if(mobileBadge){const count=(db.interventions||[]).filter(item=>/nuov|da gestire|apert/i.test(item.status||'')).length;mobileBadge.textContent=count||'';mobileBadge.hidden=!count}
+  refreshNotificationBadge();
   renderNav();
   document.getElementById('avatar').textContent=roleName().charAt(0);
   const labels=Object.fromEntries(nav().map(x=>[x[0],x[2]]));labels.more='Altro';labels.search='Ricerca';
@@ -154,7 +155,7 @@ function toggleMapFilter(key,value){mapFilters[key]=value;if(view==='workMap')re
 function workMap(){const all=mapWorkItems(),jobs=all.filter(x=>mapFilters[x.category]);setTimeout(initWorkMap,80);return pageHead('Mappa lavori','Accendi soltanto i colori e le attività che vuoi vedere')+`<div class="notice"><b>${jobs.length} di ${all.length} attività visibili.</b> Sono incluse anche le linee vita associate ai condomìni.</div><div class="mapLegend">${mapFilterControl('active','#e47d28','In corso')}${mapFilterControl('complete','#315c3b','Completato')}${mapFilterControl('planned','#316b8c','Programmato')}${mapFilterControl('visit','#7b4bb7','Sopralluogo')}${mapFilterControl('lifeline','#c0394b','Linea vita')}</div><div id="workMapCanvas" class="mapBox"><div class="empty" id="mapStatus">Caricamento della mappa…</div></div><div style="height:16px"></div><div class="card"><div class="list">${jobs.map(x=>`<div class="row"><div class="rowIcon">${x.kind==='Sopralluogo'?'📅':x.kind==='Linea vita'?'⚓':'📍'}</div><div class="rowBody"><b>${esc(x.title)} · ${esc(x.client)}</b><small>${esc(x.kind)} · ${esc(x.date)}<br>${esc(x.address)}</small></div>${badge(x.status)}<a class="btn sm light" target="_blank" href="https://maps.google.com/?q=${encodeURIComponent(x.address)}">Apri mappa</a></div>`).join('')||'<div class="empty">Nessuna attività per i colori selezionati.</div>'}</div></div>`}
 function geoCache(){try{return JSON.parse(localStorage.getItem('ek_geo_cache')||'{}')}catch(e){return{}}}
 async function geocodeAddress(address){const cache=geoCache(),key=String(address||'').trim().toLocaleLowerCase('it');if(cache[key])return cache[key];if(!key)return null;try{const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&email=info%40edilkappa.com&q='+encodeURIComponent(address);const response=await fetch(url,{headers:{'Accept-Language':'it'}});const data=await response.json();if(!data[0])return null;const point=[Number(data[0].lat),Number(data[0].lon)];cache[key]=point;localStorage.setItem('ek_geo_cache',JSON.stringify(cache));await new Promise(r=>setTimeout(r,1100));return point}catch(e){return null}}
-async function initWorkMap(){const box=document.getElementById('workMapCanvas');if(!box)return;if(typeof L==='undefined'){box.innerHTML='<div class="empty">Mappa non disponibile. Controlla la connessione internet.</div>';return}box.innerHTML='';const map=L.map(box).setView([45.514,9.287],11);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);const bounds=[],jobs=mapWorkItems().filter(x=>mapFilters[x.category]),groups=new Map();let found=0;for(const job of jobs){if(!document.getElementById('workMapCanvas'))return;const point=await geocodeAddress(job.address);if(!point)continue;found++;const key=point.map(n=>n.toFixed(5)).join(',');if(!groups.has(key))groups.set(key,{point,jobs:[]});groups.get(key).jobs.push(job)}for(const group of groups.values()){bounds.push(group.point);const categories=group.jobs.map(x=>x.category),color=categories.includes('active')?'#e47d28':categories.includes('lifeline')?'#c0394b':categories.includes('visit')?'#7b4bb7':categories.includes('planned')?'#316b8c':'#315c3b',popup=group.jobs.map(job=>`<div style="margin-bottom:9px"><b>${esc(job.title)}</b><br>${esc(job.kind)} · ${esc(job.date)}<br>${esc(job.client)}<br><b>${esc(job.status)}</b></div>`).join('')+`<a target="_blank" href="https://maps.google.com/?q=${encodeURIComponent(group.jobs[0].address)}">Indicazioni</a>`;L.circleMarker(group.point,{radius:10,color:'#fff',weight:3,fillColor:color,fillOpacity:1}).addTo(map).bindPopup(popup)}if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:15});if(!found&&jobs.length)box.insertAdjacentHTML('beforeend','<div class="notice" style="position:absolute;z-index:500;left:12px;right:12px;bottom:12px">Nessun indirizzo riconosciuto. Controlla che via, numero civico e città siano completi.</div>')}
+async function initWorkMap(){let box=document.getElementById('workMapCanvas');if(!box)return;try{await window.EdilKappaLoader?.ensureMap?.()}catch(error){box=document.getElementById('workMapCanvas');if(box)box.innerHTML='<div class="empty">Mappa non disponibile. Controlla la connessione internet.</div>';return}box=document.getElementById('workMapCanvas');if(!box)return;if(typeof L==='undefined'){box.innerHTML='<div class="empty">Mappa non disponibile. Controlla la connessione internet.</div>';return}box.innerHTML='';const map=L.map(box).setView([45.514,9.287],11);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);const bounds=[],jobs=mapWorkItems().filter(x=>mapFilters[x.category]),groups=new Map();let found=0;for(const job of jobs){if(!document.getElementById('workMapCanvas'))return;const point=await geocodeAddress(job.address);if(!point)continue;found++;const key=point.map(n=>n.toFixed(5)).join(',');if(!groups.has(key))groups.set(key,{point,jobs:[]});groups.get(key).jobs.push(job)}for(const group of groups.values()){bounds.push(group.point);const categories=group.jobs.map(x=>x.category),color=categories.includes('active')?'#e47d28':categories.includes('lifeline')?'#c0394b':categories.includes('visit')?'#7b4bb7':categories.includes('planned')?'#316b8c':'#315c3b',popup=group.jobs.map(job=>`<div style="margin-bottom:9px"><b>${esc(job.title)}</b><br>${esc(job.kind)} · ${esc(job.date)}<br>${esc(job.client)}<br><b>${esc(job.status)}</b></div>`).join('')+`<a target="_blank" href="https://maps.google.com/?q=${encodeURIComponent(group.jobs[0].address)}">Indicazioni</a>`;L.circleMarker(group.point,{radius:10,color:'#fff',weight:3,fillColor:color,fillOpacity:1}).addTo(map).bindPopup(popup)}if(bounds.length)map.fitBounds(bounds,{padding:[35,35],maxZoom:15});if(!found&&jobs.length)box.insertAdjacentHTML('beforeend','<div class="notice" style="position:absolute;z-index:500;left:12px;right:12px;bottom:12px">Nessun indirizzo riconosciuto. Controlla che via, numero civico e città siano completi.</div>')}
 function teamsView(){return pageHead('Squadre','Crea le squadre e indica i due componenti',`<button class="btn lime" onclick="openTeam()">＋ Nuova squadra</button>`)+`<div class="grid grid2">${WORKERS.map(w=>`<section class="card"><div class="row" style="border:0;padding:0"><div class="avatar">${esc(w.name.charAt(0))}</div><div class="rowBody"><b>${esc(w.name)}</b><small>${esc(w.member1||'Componente 1')} · ${esc(w.member2||'Componente 2')}<br>${esc(w.phone||'Telefono non inserito')} · promemoria ore ${esc(w.reminderTime||'18:00')}</small></div><span class="pill blue">${teamAssignments(w.id)} incarichi</span></div><div class="actions" style="margin-top:14px"><button class="btn sm light" onclick="openTeam('${w.id}')">Modifica</button><button class="btn sm red" onclick="deleteTeam('${w.id}')">Elimina</button></div></section>`).join('')||'<div class="empty">Nessuna squadra. Premi “Nuova squadra”.</div>'}</div>`}
 function localToday(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
 function selectedHours(){return(db.timesheets||[]).filter(x=>x.date.startsWith(timesheetMonth)&&(!timesheetTeam||x.team===timesheetTeam)).sort((a,b)=>b.date.localeCompare(a.date))}
@@ -235,16 +236,12 @@ function updateDrainTask(id){const item=db.drains.find(x=>x.id===id);if(!item)re
 async function openStoredFile(key){const popup=window.open('','_blank');try{const blob=await readPdf(key);if(!blob)throw new Error('Il file non è più presente su questo dispositivo');const url=URL.createObjectURL(blob);if(popup)popup.location.href=url;else{const a=document.createElement('a');a.href=url;a.target='_blank';a.click()}setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(err){if(popup)popup.close();alert(err.message||'Impossibile aprire il documento')}}
 function openReport(id){go('report');setTimeout(()=>{const s=document.querySelector('[name=site]');if(s)s.value=id},0)}
 function saveReport(e){e.preventDefault();const f=new FormData(e.target),site=db.sites.find(s=>s.id===f.get('site'));if(!site)return;site.progress=Number(f.get('progress')||site.progress);site.cost+=Number(f.get('material')||0);db.reports.push({id:uid('r'),site:site.id,worker:role,date:new Date().toISOString(),hours:Number(f.get('hours')),material:Number(f.get('material')),notes:f.get('notes'),photoCount:e.target.photos.files.length});save();alert('Rapportino salvato. Il titolare lo vedrà nel cantiere.');go('worker')}
-function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.aiArtifact&&window.edilkappaAiDownloadSavedQuote)return window.edilkappaAiDownloadSavedQuote(q);const old=document.body.innerHTML;document.body.innerHTML=`<main style="padding:35px;font-family:Arial"><h1>${COMPANY.name}</h1><p>${COMPANY.address}<br>P.IVA ${COMPANY.vat}<br>${COMPANY.phone} · ${COMPANY.email}</p><hr><h2>PREVENTIVO ${esc(q.code)}</h2><p>Data: ${esc(q.date)}</p><h3>${esc(q.client)}</h3><p>${esc(q.subject)}</p><h2 style="text-align:right">Imponibile: ${euro(q.net)}</h2><p style="margin-top:80px">Validità offerta: 30 giorni</p></main>`;window.print();document.body.innerHTML=old;location.reload()}
+async function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;if(q.aiArtifact){try{const loading=window.EdilKappaLoader?.ensureView?.('ai');if(loading)await loading;if(window.edilkappaAiDownloadSavedQuote)return window.edilkappaAiDownloadSavedQuote(q)}catch(error){return alert(error?.message||'Non riesco a caricare il generatore del preventivo.')}}const old=document.body.innerHTML;document.body.innerHTML=`<main style="padding:35px;font-family:Arial"><h1>${COMPANY.name}</h1><p>${COMPANY.address}<br>P.IVA ${COMPANY.vat}<br>${COMPANY.phone} · ${COMPANY.email}</p><hr><h2>PREVENTIVO ${esc(q.code)}</h2><p>Data: ${esc(q.date)}</p><h3>${esc(q.client)}</h3><p>${esc(q.subject)}</p><h2 style="text-align:right">Imponibile: ${euro(q.net)}</h2><p style="margin-top:80px">Validità offerta: 30 giorni</p></main>`;window.print();document.body.innerHTML=old;location.reload()}
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=53').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=54').catch(()=>{});
 </script>
-<script src="./professional-extensions.js?v=19"></script>
-<script src="./business-suite.js?v=19"></script>
-<script src="./client-archive.js?v=20"></script>
-<script src="./direct-search.js?v=6"></script>
 <script>
 window.EdilKappaLocal={
   getDB:()=>db,
@@ -252,7 +249,9 @@ window.EdilKappaLocal={
   getView:()=>view,
   persist:()=>{applyCompanySettings();localStorage.setItem(KEY,JSON.stringify(db))},
   render:()=>render(),
-  go:(next)=>{view=next;render()},
+  renderFromCloud:()=>renderFromCloud(),
+  refreshChrome:()=>refreshNotificationBadge(),
+  go:(next)=>go(next),
   readFile:(key)=>readPdf(key),
   setRole:(next)=>{role=next;localStorage.setItem('ek_role',role);initRoles()},
   setWorkerRole:(profile,uid)=>{
@@ -272,19 +271,6 @@ window.EdilKappaLocal={
   clearDeviceData:()=>localStorage.removeItem(KEY)
 };
 </script>
-<script src="./linea-vita/vendor/jspdf.umd.min.js"></script>
-<script src="./linea-vita/vendor/jspdf.plugin.autotable.min.js"></script>
-<script src="./smart-operations.js?v=15"></script>
-<script src="./danea-integration.js?v=25"></script>
-<script src="./intervention-lifecycle.js?v=3"></script>
-<script src="./completion-center.js?v=3"></script>
-<script src="./bulk-sharing.js?v=5.2"></script>
-<script src="./edilconnect.js?v=2"></script>
-<script src="./hours-closeout.js?v=3"></script>
-<script src="./attendance-center.js?v=1"></script>
-<script src="./controlled-learning.js?v=2"></script>
-<script src="./operations-center.js?v=2"></script>
-<script src="./edilkappa-ai.js?v=22"></script>
-<script src="./edilkappa-ai-route.js?v=1"></script>
-<script type="module" src="./firebase-cloud.js?v=30"></script>
+<script src="./edilkappa-loader.js?v=1"></script>
+<script type="module" src="./firebase-cloud.js?v=31"></script>
 </body>
