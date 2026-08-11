@@ -16,6 +16,22 @@
     intervention.updatedAt = new Date().toISOString();
   }
 
+  function isDaneaIntervention(intervention) {
+    return Boolean(intervention && (intervention.requestId || intervention.daneaRequestId || /danea/i.test(String(intervention.source || ''))));
+  }
+
+  function createInspectionIntervention(item, client) {
+    const now = new Date().toISOString();
+    const intervention = {
+      id: uid('int'), clientId: client.id, client: client.name,
+      title: item.problem || item.type || 'Sopralluogo', category: 'Sopralluogo', date: item.date || localToday(),
+      status: item.completedAt ? 'Da preventivare' : 'Sopralluogo programmato', notes: item.problem || '', timeline: [], createdAt: now, updatedAt: now
+    };
+    db.interventions.push(intervention);
+    timeline(intervention, { id: `inspection-created-${item.id}`, type: 'inspection', date: now, label: 'Intervento aperto dal sopralluogo', actor: roleName(), detail: item.problem || '' });
+    return intervention;
+  }
+
   window.ensureInspectionIntervention = function (item) {
     if (!item) return null;
     const client = clientForInspection(item);
@@ -33,18 +49,37 @@
         : null;
     }
     if (!intervention) {
-      const now = new Date().toISOString();
-      intervention = {
-        id: uid('int'), clientId: client.id, client: client.name,
-        title: item.problem || item.type || 'Sopralluogo', category: 'Sopralluogo', date: item.date || localToday(),
-        status: 'Sopralluogo programmato', notes: item.problem || '', timeline: [], createdAt: now, updatedAt: now
-      };
-      db.interventions.push(intervention);
-      timeline(intervention, { id: `inspection-created-${item.id}`, type: 'inspection', date: now, label: 'Intervento aperto dal sopralluogo', actor: roleName(), detail: item.problem || '' });
+      intervention = createInspectionIntervention(item, client);
     }
     item.interventionId = intervention.id;
     timeline(intervention, { id: `inspection-linked-${item.id}`, type: 'inspection', date: item.createdAt || new Date().toISOString(), label: 'Sopralluogo programmato', actor: roleName(), detail: `${item.date || ''} ${item.time || ''}`.trim() });
     return intervention;
+  };
+
+  window.separateInspectionFromDanea = function (id) {
+    const item = (db.inspections || []).find((entry) => entry.id === id);
+    if (!item) return alert('Sopralluogo non trovato.');
+    const previous = (db.interventions || []).find((entry) => String(entry.id) === String(item.interventionId || ''));
+    if (!isDaneaIntervention(previous)) return alert('Questo sopralluogo non è collegato a una richiesta Danea.');
+    if (!confirm('Separare il sopralluogo dalla richiesta Danea? Descrizioni, misure, foto ed esito resteranno salvati.')) return;
+    const client = clientForInspection(item);
+    if (!client) return alert('Cliente o condominio non trovato.');
+    const intervention = createInspectionIntervention(item, client);
+    item.interventionId = intervention.id;
+    delete item.requestId;
+    delete item.daneaRequestId;
+    delete item.leadId;
+    timeline(intervention, { id: `inspection-linked-${item.id}`, type: 'inspection', date: item.createdAt || new Date().toISOString(), label: 'Sopralluogo separato da Danea', actor: roleName(), detail: `${item.date || ''} ${item.time || ''}`.trim() });
+    save();
+    render();
+    alert('Sopralluogo separato. Ora il preventivo AI userà soltanto i dati di questo sopralluogo.');
+  };
+
+  window.inspectionDaneaSeparationButton = function (item) {
+    const intervention = (db.interventions || []).find((entry) => String(entry.id) === String(item?.interventionId || ''));
+    return isDaneaIntervention(intervention)
+      ? `<button class="btn sm red" onclick="separateInspectionFromDanea('${item.id}')">Separa dalla richiesta Danea</button>`
+      : '';
   };
 
   async function uploadInspectionMedia(item, files) {

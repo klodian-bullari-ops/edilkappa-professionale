@@ -377,7 +377,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v82-sopralluogo-ai-automatico/);
+  assert.match(serviceWorker, /v85-collegamenti-danea-espliciti/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
@@ -400,7 +400,7 @@ test("supports a compact desktop navigation and a full-width AI focus mode", () 
 test("guides every intervention through one operational workflow", () => {
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
-  assert.match(loader, /client-archive\.js\?v=22/);
+  assert.match(loader, /client-archive\.js\?v=24/);
   assert.match(archive, /function workflowState/);
   assert.match(archive, /Richiesta.*Sopralluogo.*Preventivo.*Programmazione.*Esecuzione.*Chiusura/s);
   assert.match(archive, /Programma il sopralluogo/);
@@ -451,7 +451,7 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   const workflow = fs.readFileSync(path.join(__dirname, "..", "inspection-workflow.js"), "utf8");
   const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
-  assert.match(loader, /inspection-workflow\.js\?v=1/);
+  assert.match(loader, /inspection-workflow\.js\?v=3/);
   assert.ok(loader.indexOf("inspection-workflow.js") > loader.indexOf("intervention-lifecycle.js"));
   assert.match(html, /Segna eseguito/);
   assert.match(html, /Prepara preventivo AI/);
@@ -467,4 +467,21 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(ai, /seedMediaReferences/);
   assert.match(ai, /setTimeout\(\(\) => window\.edilkappaAiSend\(\), 0\)/);
   assert.match(archive, /Registra il sopralluogo eseguito/);
+  assert.match(workflow, /Separa dalla richiesta Danea/);
+  assert.match(workflow, /delete item\.daneaRequestId/);
+  assert.match(html, /function inspectionResultSummary/);
+  assert.match(html, /Modifica esito/);
+  assert.match(html, /Esito \/ richiesta/);
+  assert.match(archive, /Lavorazioni consigliate/);
+  assert.match(archive, /Foto\/video/);
+});
+
+test("never merges Danea and manual work only because the condominium matches", () => {
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  const lifecycle = fs.readFileSync(path.join(__dirname, "..", "intervention-lifecycle.js"), "utf8");
+  assert.match(loader, /intervention-lifecycle\.js\?v=4/);
+  assert.doesNotMatch(lifecycle, /soleInterventionForItem/);
+  assert.doesNotMatch(lifecycle, /existing\.length === 1/);
+  assert.match(lifecycle, /site\.daneaRequestId \|\| site\.requestId \|\| site\.leadId/);
+  assert.match(lifecycle, /String\(entry\.daneaRequestId \|\| ''\) === String\(item\.id \|\| ''\)/);
 });

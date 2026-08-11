@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v82-sopralluogo-ai-automatico`;
+const CACHE = `${CACHE_PREFIX}v85-collegamenti-danea-espliciti`;
 const APP_SHELL = [
   "./",
   "./index.html",
