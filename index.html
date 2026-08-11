@@ -86,7 +86,7 @@ function renderNav(){
   const desktopMoreActive=isOffice()&&!desktopCoreViews.has(view)&&view!=='search';
   const html=desktopNav.map(n=>`<button title="${esc(n[2])}" class="${view===n[0]||(n[0]==='more'&&desktopMoreActive)?'active':''}" onclick="go('${n[0]}')"><i>${n[1]}</i>${n[2]}</button>`).join('');
   document.getElementById('desktopNav').innerHTML=html;
-  const moreViews=['condomini','quotes','learningCenter','workMap','hours','teamsView','portalView','daneaRequestsView','completedView','activityView','drone','lifeline','roofs','drains','companySettingsView','finance'];
+  const moreViews=['condomini','quotes','learningCenter','workMap','hours','teamsView','portalView','daneaRequestsView','completedView','activityView','drone','lifeline','roofs','drains','companySettingsView','finance','systemControl'];
   const mobile=isOffice()
     ?[['dashboard','⌂','Home',"go('dashboard')",'home'],['sites','▤','Lavori',"go('sites')",'jobs'],['agenda','▦','Agenda',"go('agenda')",'agenda'],['ai','✦','AI',"go('ai')",'ai'],['more','•••','Altro',"go('more')",'more']]
     :[['worker','▣','Lavori',"go('worker')",'jobs'],['hours','◷','Ore',"go('hours')",'hours'],['quickPhoto','📷','Foto','captureInfo()','photo'],['attendance','▦','Assenze',"go('attendance')",'attendance'],['workerProfile','●','Profilo',"go('workerProfile')",'profile']];
@@ -256,7 +256,7 @@ async function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 applyDesktopSidebarState();initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=55').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=56').catch(()=>{});
 </script>
 <script>
 window.EdilKappaLocal={
@@ -288,5 +288,5 @@ window.EdilKappaLocal={
 };
 </script>
 <script src="./edilkappa-loader.js?v=1"></script>
-<script type="module" src="./firebase-cloud.js?v=31"></script>
+<script type="module" src="./firebase-cloud.js?v=32"></script>
 </body>

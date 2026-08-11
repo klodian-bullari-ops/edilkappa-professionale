@@ -279,7 +279,7 @@ test("supports construction photos, video workflows and managed artifacts", () =
   assert.match(source, /discount > 0\.005/);
   assert.match(source, /scenarioIncludedWorks/);
   assert.match(source, /\\bgestionale\\b/);
-  assert.match(loader, /edilkappa-ai\.js\?v=23/);
+  assert.match(loader, /edilkappa-ai\.js\?v=24/);
   assert.doesNotMatch(html, /<script[^>]+edilkappa-ai\.js/);
   assert.doesNotMatch(source, /const callout = artifact\.revisionReason/);
 });
@@ -344,7 +344,7 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   const bridge = fs.readFileSync(path.join(__dirname, "..", "scripts", "google-apps-script-danea.gs"), "utf8");
   const manifest = fs.readFileSync(path.join(__dirname, "..", "scripts", "appsscript.json"), "utf8");
   assert.match(loader, /danea-integration\.js\?v=25/);
-  assert.match(html, /firebase-cloud\.js\?v=31/);
+  assert.match(html, /firebase-cloud\.js\?v=32/);
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
   assert.match(danea, /controllo Gmail ogni 5 minuti/);
@@ -377,7 +377,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v80-sidebar-focus-desktop/);
+  assert.match(serviceWorker, /v81-intervento-unico-controllo/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
@@ -395,4 +395,52 @@ test("supports a compact desktop navigation and a full-width AI focus mode", () 
   assert.match(ai, /edilkappaAiToggleFocus/);
   assert.match(ai, /edilkappaAiExitFocus/);
   assert.match(ai, /\.ekAiPage\.focusMode \.ekAiThreads\{display:none/);
+});
+
+test("guides every intervention through one operational workflow", () => {
+  const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  assert.match(loader, /client-archive\.js\?v=21/);
+  assert.match(archive, /function workflowState/);
+  assert.match(archive, /Richiesta.*Sopralluogo.*Preventivo.*Programmazione.*Esecuzione.*Chiusura/s);
+  assert.match(archive, /Programma il sopralluogo/);
+  assert.match(archive, /Prepara il preventivo/);
+  assert.match(archive, /Programma il lavoro/);
+  assert.match(archive, /Completa foto, ore e chiusura/);
+  assert.match(archive, /Altre azioni/);
+});
+
+test("shows a reserved system control center with sync and integrity checks", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  const control = fs.readFileSync(path.join(__dirname, "..", "system-control.js"), "utf8");
+  const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
+  assert.match(html, /'systemControl'/);
+  assert.match(loader, /system-control\.js\?v=1/);
+  assert.match(loader, /"systemControl"/);
+  assert.match(control, /Controllo sistema/);
+  assert.match(control, /Cloud e accesso/);
+  assert.match(control, /Sincronizzazione/);
+  assert.match(control, /Richieste Danea/);
+  assert.match(control, /interventi senza cliente valido/);
+  assert.match(control, /if \(!isOffice\(\)\) view = 'worker'/);
+  assert.match(cloud, /get lastSyncAt\(\)/);
+  assert.match(cloud, /get lastSyncError\(\)/);
+});
+
+test("makes the AI document approval path explicit", () => {
+  const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
+  assert.match(loader, /edilkappa-ai\.js\?v=24/);
+  assert.match(ai, /function documentFlowHtml/);
+  assert.match(ai, /Materiale/);
+  assert.match(ai, /Anteprima/);
+  assert.match(ai, /Verifica/);
+  assert.match(ai, /Salvataggio/);
+});
+
+test("keeps technical TransferNow settings out of the Danea daily page", () => {
+  const danea = fs.readFileSync(path.join(__dirname, "..", "danea-integration.js"), "utf8");
+  const view = danea.slice(danea.indexOf("window.daneaRequestsView"), danea.indexOf("window.openDaneaRequest"));
+  assert.doesNotMatch(view, /openTransferNowSettings/);
 });

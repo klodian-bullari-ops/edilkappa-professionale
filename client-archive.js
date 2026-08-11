@@ -20,7 +20,9 @@
     .archiveTimeline{position:relative;margin-left:8px;padding-left:21px;border-left:3px solid #dce6dc}.archiveTimelineItem{position:relative;padding:0 0 15px}.archiveTimelineItem:last-child{padding-bottom:0}.archiveTimelineItem:before{content:'';position:absolute;width:11px;height:11px;border-radius:50%;background:var(--green);left:-28px;top:4px;border:3px solid #fff;box-shadow:0 0 0 1px #cbd7cb}.archiveTimelineItem b,.archiveTimelineItem small{display:block}.archiveTimelineItem small{color:var(--muted);margin-top:3px;line-height:1.4}
     .clientNameButton{border:0;background:transparent;padding:0;color:var(--green);font-weight:850;text-align:left}
     .archiveFocus{outline:4px solid rgba(244,196,0,.55);box-shadow:0 0 0 8px rgba(244,196,0,.16),var(--shadow);transition:outline-color .25s,box-shadow .25s}
-    @media(max-width:620px){.clientArchiveHero h2{font-size:25px}.archiveFiles{grid-template-columns:1fr}}
+    .interventionFlow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin:15px 0}.interventionStep{position:relative;min-height:62px;padding:9px;border:1px solid #e0e5e8;border-radius:12px;background:#f5f7f8;color:#6b7480;font-size:11px;font-weight:800}.interventionStep span{display:block;font-size:18px;margin-bottom:4px}.interventionStep.done{background:#eaf7ef;border-color:#b9ddc6;color:#176542}.interventionStep.current{background:#fff7cc;border-color:#e8cf63;color:#6e5700}.interventionNext{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;margin:11px 0;border-radius:14px;background:#f3f8f5;border:1px solid #d4e4da}.interventionNext b,.interventionNext small{display:block}.interventionNext small{color:var(--muted);margin-top:3px}.archiveActionsMenu{margin:10px 0}.archiveActionsMenu summary{cursor:pointer;color:#52615a;font-weight:800}.archiveActionsMenu .actions{margin-top:9px}
+    @media(max-width:820px){.interventionFlow{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    @media(max-width:620px){.clientArchiveHero h2{font-size:25px}.archiveFiles{grid-template-columns:1fr}.interventionNext{align-items:stretch;flex-direction:column}.interventionNext .btn{width:100%}}
   `;
   document.head.appendChild(style);
 
@@ -169,6 +171,19 @@
     openWithContext(clientId, interventionId, () => openCompanyDocument());
   };
 
+  window.openInspectionForIntervention = function (clientId, interventionId) {
+    const client = clientById(clientId);
+    if (!client) return alert('Cliente o condominio non trovato.');
+    modal('Nuovo sopralluogo collegato', `<div class="notice"><b>${esc(client.name)}</b><br>${esc(client.address || '')}</div><div style="height:14px"></div><div class="formGrid">
+      ${field('Data', 'date', 'date', localToday())}${field('Ora', 'time', 'time', '09:00')}
+      <div class="field"><label>Tipo intervento</label><select name="type">${selectOptions(['Manutenzione condominio','Ristrutturazione','Pulizia gronde e controllo tetto','Pulizia griglie, pozzetti e tombini','Videoispezione drone','Urgenza'],'Manutenzione condominio')}</select></div>
+      ${field('Indirizzo', 'address', 'text', client.address || '', true)}
+      <div class="field full"><label>Problema / richiesta</label><textarea name="problem" required></textarea></div>
+    </div>`, (formData) => {
+      db.inspections.push({id:uid('s'),clientId:client.id,client:client.name,interventionId,date:formData.get('date'),time:formData.get('time'),type:formData.get('type'),address:formData.get('address'),problem:formData.get('problem'),reminder:'60',status:'Da preventivare',createdAt:new Date().toISOString()});
+    });
+  };
+
   window.assignArchiveItem = function (collectionName, itemId) {
     const item = (db[collectionName] || []).find((entry) => entry.id === itemId);
     if (!item) return;
@@ -315,12 +330,34 @@
       ${!quoteRows && !documentRows && !droneRows ? '<div class="empty">Nessun file in questo intervento.</div>' : ''}`;
   }
 
+  function workflowState(item, rows) {
+    const hasInspection = rows.inspections.length > 0;
+    const hasQuote = rows.quotes.length > 0;
+    const hasSite = rows.sites.length > 0;
+    const hasExecution = rows.sites.some((site) => /in corso|complet/i.test(site.status || '')) || rows.reports.length > 0 || rows.timesheets.length > 0;
+    const completed = item.status === 'Completato' || (hasSite && rows.sites.every((site) => site.status === 'Completato'));
+    const values = [true, hasInspection, hasQuote, hasSite, hasExecution, completed];
+    const labels = [['📥','Richiesta'],['📅','Sopralluogo'],['📄','Preventivo'],['🗓️','Programmazione'],['🏗️','Esecuzione'],['✓','Chiusura']];
+    const firstMissing = values.findIndex((value) => !value);
+    const steps = labels.map(([icon,label],index) => `<div class="interventionStep ${values[index] ? 'done' : index === firstMissing ? 'current' : ''}"><span>${icon}</span>${label}</div>`).join('');
+    if (!hasInspection) return {steps,label:'Programma il sopralluogo',detail:'Inserisci data, ora e problema da verificare.',action:`openInspectionForIntervention('${item.clientId}','${item.id}')`};
+    if (!hasQuote) return {steps,label:'Prepara il preventivo',detail:'Apri EdilKappa AI oppure carica un preventivo già pronto.',action:"go('ai')"};
+    if (!hasSite) return {steps,label:'Programma il lavoro',detail:'Crea il cantiere, assegna le squadre e indica la data.',action:`openSiteForIntervention('${item.clientId}','${item.id}')`};
+    const activeSite = rows.sites.find((site) => site.status !== 'Completato') || rows.sites[0];
+    if (!hasExecution) return {steps,label:'Avvia e aggiorna il cantiere',detail:'Conferma lo stato e raccogli il primo aggiornamento operativo.',action:`openSite('${activeSite.id}')`};
+    if (!completed) return {steps,label:'Completa foto, ore e chiusura',detail:'Controlla le prove del lavoro prima di concludere.',action:`openSite('${activeSite.id}')`};
+    return {steps,label:'Intervento completato',detail:'Documenti, cronologia e dati operativi restano archiviati qui.',action:''};
+  }
+
   function interventionCard(client, item) {
     const rows = rowsFor(client, item.id);
     const total = rows.quotes.length + rows.documents.length + rows.drone.length + rows.sites.length + rows.inspections.length + rows.reports.length + rows.timesheets.length;
+    const flow = workflowState(item, rows);
     return `<section class="card archiveIntervention" id="intervention-${esc(item.id)}"><div class="cardHead"><div><span class="pill blue">${esc(item.category || 'Intervento')}</span><h3 style="margin:9px 0 3px">${esc(item.title)}</h3><small>${esc(item.date || 'Data da definire')} · ${total} element${total === 1 ? 'o' : 'i'}</small></div>${badge(item.status || 'Pianificato')}</div>
       ${item.notes ? `<p class="company">${esc(item.notes)}</p>` : ''}
-      <div class="actions"><button class="btn sm lime" onclick="openSiteForIntervention('${client.id}','${item.id}')">＋ Cantiere</button><button class="btn sm lime" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm green" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica intervento</button><button class="btn sm red" onclick="deleteIntervention('${item.id}','${client.id}')">Elimina intervento</button></div>
+      <div class="interventionFlow">${flow.steps}</div>
+      <div class="interventionNext"><div><b>${esc(flow.label)}</b><small>${esc(flow.detail)}</small></div>${flow.action ? `<button class="btn lime" onclick="${flow.action}">Continua →</button>` : '<span class="pill">Archiviato</span>'}</div>
+      <details class="archiveActionsMenu"><summary>Altre azioni</summary><div class="actions"><button class="btn sm light" onclick="openInspectionForIntervention('${client.id}','${item.id}')">＋ Sopralluogo</button><button class="btn sm light" onclick="openSiteForIntervention('${client.id}','${item.id}')">＋ Cantiere</button><button class="btn sm light" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm light" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica</button><button class="btn sm red" onclick="deleteIntervention('${item.id}','${client.id}')">Elimina</button></div></details>
       ${operationalGroups(item, rows)}
       ${groupedFiles(rows)}
     </section>`;
