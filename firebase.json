@@ -3,6 +3,47 @@
     "source": "functions",
     "runtime": "nodejs22"
   },
+  "hosting": {
+    "site": "edilkappa-professionale",
+    "public": "hosting-dist",
+    "predeploy": [
+      "node scripts/build-hosting.mjs"
+    ],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/sw.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/manifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
+        ]
+      }
+    ]
+  },
   "firestore": {
     "database": "edilkappa",
     "location": "europe-west8",
