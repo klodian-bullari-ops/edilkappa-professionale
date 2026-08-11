@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v90-asset-versionati`;
+const CACHE = `${CACHE_PREFIX}v91-gestione-foto-sopralluogo`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -15,7 +15,7 @@ const APP_SHELL = [
   "./direct-search.js",
   "./danea-integration.js",
   "./intervention-lifecycle.js",
-  "./inspection-workflow.js?v=7",
+  "./inspection-workflow.js?v=8",
   "./completion-center.js",
   "./bulk-sharing.js",
   "./hours-closeout.js",

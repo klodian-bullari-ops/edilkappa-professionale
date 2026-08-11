@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 test("registers the EdilKappa AI browser interface", async () => {
   const previousWindow = global.window;
@@ -377,7 +378,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v90-asset-versionati/);
+  assert.match(serviceWorker, /v91-gestione-foto-sopralluogo/);
   assert.doesNotMatch(serviceWorker, /ignoreSearch/);
 });
 
@@ -454,7 +455,7 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   const media = fs.readFileSync(path.join(__dirname, "..", "media-contract.js"), "utf8");
   const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
-  assert.match(loader, /inspection-workflow\.js\?v=7/);
+  assert.match(loader, /inspection-workflow\.js\?v=8/);
   assert.match(html, /media-contract\.js\?v=1/);
   assert.match(html, /firebase-cloud\.js\?v=36/);
   assert.match(cloud, /async syncCollection\(localName\)/);
@@ -470,6 +471,11 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(workflow, /uploadMedia/);
   assert.match(workflow, /rememberInspectionMedia/);
   assert.match(workflow, /HEIC e HEIF vengono riconosciuti automaticamente/);
+  assert.match(workflow, /Foto e video già salvati/);
+  assert.match(workflow, /openInspectionMedia/);
+  assert.match(workflow, /deleteInspectionMedia/);
+  assert.match(workflow, /Le altre foto e i video resteranno salvati/);
+  assert.match(workflow, /cloud\.deleteDocument\(file\.storagePath\)/);
   assert.match(workflow, /onProgress/);
   assert.doesNotMatch(workflow, /name="media"[^>]+capture="environment"/);
   assert.match(media, /image\/heic-sequence/);
@@ -489,6 +495,54 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(html, /Esito \/ richiesta/);
   assert.match(archive, /Lavorazioni consigliate/);
   assert.match(archive, /Foto\/video/);
+});
+
+test("deletes only the selected inspection attachment from Storage and Firestore", async () => {
+  const workflow = fs.readFileSync(path.join(__dirname, "..", "inspection-workflow.js"), "utf8");
+  const deletedPaths = [];
+  const alerts = [];
+  let syncedRecord = null;
+  let saveCount = 0;
+  const context = {
+    Date,
+    structuredClone,
+    db: {
+      inspections: [{
+        id: "inspection-1",
+        client: "Condominio IL GIARDINO",
+        media: [
+          { fileName: "foto-reale.jpg", storagePath: "storage/foto-reale.jpg", fileType: "image/jpeg" },
+          { fileName: "prova.heic", storagePath: "storage/prova.heic", fileType: "image/heic" }
+        ]
+      }]
+    },
+    document: {
+      createElement: () => ({ textContent: "" }),
+      head: { appendChild: () => {} },
+      getElementById: () => null
+    },
+    confirm: () => true,
+    alert: (message) => alerts.push(message),
+    save: () => { saveCount += 1; },
+    console
+  };
+  context.window = context;
+  context.EdilKappaCloud = {
+    ready: true,
+    deleteDocument: async (storagePath) => deletedPaths.push(storagePath),
+    syncRecord: async (collection, record) => { syncedRecord = { collection, record }; }
+  };
+
+  vm.runInNewContext(workflow, context);
+  await context.deleteInspectionMedia("inspection-1", 1, { disabled: false, textContent: "Elimina" });
+
+  assert.deepEqual(deletedPaths, ["storage/prova.heic"]);
+  assert.equal(syncedRecord.collection, "inspections");
+  assert.equal(syncedRecord.record.media.length, 1);
+  assert.equal(syncedRecord.record.media[0].fileName, "foto-reale.jpg");
+  assert.equal(context.db.inspections[0].media.length, 1);
+  assert.equal(saveCount, 1);
+  assert.deepEqual(alerts, []);
 });
 
 test("never merges Danea and manual work only because the condominium matches", () => {
