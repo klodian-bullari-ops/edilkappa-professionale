@@ -119,10 +119,12 @@
       item.completedAt = new Date().toISOString();
       intervention.status = 'Da preventivare';
       timeline(intervention, { id: `inspection-completed-${item.id}`, type: 'inspection', date: item.completedAt, label: 'Sopralluogo eseguito', actor: roleName(), detail: item.outcome });
+      const inspectionToSave = structuredClone(item);
+      const interventionToSave = structuredClone({ ...intervention, recordType: 'Intervention' });
       save();
       if (window.EdilKappaCloud?.ready) {
-        await window.EdilKappaCloud.syncCollection('inspections');
-        await window.EdilKappaCloud.syncCollection('documents');
+        await window.EdilKappaCloud.syncRecord('inspections', inspectionToSave);
+        await window.EdilKappaCloud.syncRecord('documents', interventionToSave);
       }
     });
   };
