@@ -5,7 +5,7 @@
     critical: [
       "./professional-extensions.js?v=19",
       "./business-suite.js?v=19",
-      "./client-archive.js?v=20",
+      "./client-archive.js?v=21",
       "./direct-search.js?v=6",
       "./danea-integration.js?v=25",
       "./intervention-lifecycle.js?v=3",
@@ -18,10 +18,11 @@
       "./smart-operations.js?v=15",
       "./edilconnect.js?v=2",
       "./controlled-learning.js?v=2",
-      "./operations-center.js?v=2"
+      "./operations-center.js?v=2",
+      "./system-control.js?v=1"
     ],
     ai: [
-      "./edilkappa-ai.js?v=23",
+      "./edilkappa-ai.js?v=24",
       "./edilkappa-ai-route.js?v=1"
     ],
     pdf: [
@@ -40,6 +41,7 @@
     "edilconnectView",
     "learningCenter",
     "operationsCenter",
+    "systemControl",
     "portalPreview"
   ]);
   const scriptPromises = new Map();

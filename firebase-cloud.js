@@ -143,6 +143,8 @@ let syncTimer = null;
 let syncPromise = Promise.resolve();
 let syncing = false;
 let ready = false;
+let lastSyncAt = '';
+let lastSyncError = '';
 let cloudRenderTimer = null;
 let cloudRenderMaxTimer = null;
 let localPersistScheduled = false;
@@ -178,6 +180,9 @@ const api = {
   deleteDocument,
   enablePushNotifications,
   get ready() { return ready; },
+  get syncing() { return syncing; },
+  get lastSyncAt() { return lastSyncAt; },
+  get lastSyncError() { return lastSyncError; },
   get currentUid() { return user?.uid || ''; },
   get currentProfile() { return profile; },
   get workerProfiles() {
@@ -980,8 +985,11 @@ async function syncNow() {
     setSyncState('Sincronizzazione…', '#d69b18');
     await uploadPendingReportPhotos();
     for (const [localName, remoteName] of mappings) await pushCollection(localName, remoteName);
+    lastSyncAt = new Date().toISOString();
+    lastSyncError = '';
     setSyncState('Sincronizzato', '#167448');
   })().catch((error) => {
+    lastSyncError = errorText(error);
     setSyncState('Errore sync', '#ad2a2a', errorText(error));
     throw error;
   }).finally(() => { syncing = false; });
