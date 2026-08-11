@@ -344,7 +344,7 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   const bridge = fs.readFileSync(path.join(__dirname, "..", "scripts", "google-apps-script-danea.gs"), "utf8");
   const manifest = fs.readFileSync(path.join(__dirname, "..", "scripts", "appsscript.json"), "utf8");
   assert.match(loader, /danea-integration\.js\?v=25/);
-  assert.match(html, /firebase-cloud\.js\?v=32/);
+  assert.match(html, /firebase-cloud\.js\?v=33/);
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
   assert.match(danea, /controllo Gmail ogni 5 minuti/);
@@ -377,7 +377,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v85-collegamenti-danea-espliciti/);
+  assert.match(serviceWorker, /v86-salvataggio-sopralluogo-cloud/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
@@ -449,9 +449,12 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   const workflow = fs.readFileSync(path.join(__dirname, "..", "inspection-workflow.js"), "utf8");
+  const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
   const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
-  assert.match(loader, /inspection-workflow\.js\?v=3/);
+  assert.match(loader, /inspection-workflow\.js\?v=4/);
+  assert.match(html, /firebase-cloud\.js\?v=33/);
+  assert.match(cloud, /async syncCollection\(localName\)/);
   assert.ok(loader.indexOf("inspection-workflow.js") > loader.indexOf("intervention-lifecycle.js"));
   assert.match(html, /Segna eseguito/);
   assert.match(html, /Prepara preventivo AI/);
@@ -469,6 +472,8 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(archive, /Registra il sopralluogo eseguito/);
   assert.match(workflow, /Separa dalla richiesta Danea/);
   assert.match(workflow, /delete item\.daneaRequestId/);
+  assert.match(workflow, /syncCollection\('inspections'\)/);
+  assert.match(workflow, /syncCollection\('documents'\)/);
   assert.match(html, /function inspectionResultSummary/);
   assert.match(html, /Modifica esito/);
   assert.match(html, /Esito \/ richiesta/);

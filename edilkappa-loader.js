@@ -9,7 +9,7 @@
       "./direct-search.js?v=6",
       "./danea-integration.js?v=25",
       "./intervention-lifecycle.js?v=4",
-      "./inspection-workflow.js?v=3",
+      "./inspection-workflow.js?v=4",
       "./completion-center.js?v=3",
       "./bulk-sharing.js?v=5.2",
       "./hours-closeout.js?v=3",
