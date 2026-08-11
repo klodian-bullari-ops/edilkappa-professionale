@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v86-salvataggio-sopralluogo-cloud`;
+const CACHE = `${CACHE_PREFIX}v87-salvataggio-record-sopralluogo`;
 const APP_SHELL = [
   "./",
   "./index.html",
