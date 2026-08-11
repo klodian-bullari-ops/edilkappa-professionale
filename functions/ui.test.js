@@ -344,7 +344,7 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   const bridge = fs.readFileSync(path.join(__dirname, "..", "scripts", "google-apps-script-danea.gs"), "utf8");
   const manifest = fs.readFileSync(path.join(__dirname, "..", "scripts", "appsscript.json"), "utf8");
   assert.match(loader, /danea-integration\.js\?v=25/);
-  assert.match(html, /firebase-cloud\.js\?v=35/);
+  assert.match(html, /firebase-cloud\.js\?v=36/);
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
   assert.match(danea, /controllo Gmail ogni 5 minuti/);
@@ -377,7 +377,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v88-stato-sopralluogo-cloud-valido/);
+  assert.match(serviceWorker, /v89-foto-sopralluogo-heic/);
 });
 
 test("supports a compact desktop navigation and a full-width AI focus mode", () => {
@@ -450,10 +450,12 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
   const workflow = fs.readFileSync(path.join(__dirname, "..", "inspection-workflow.js"), "utf8");
   const cloud = fs.readFileSync(path.join(__dirname, "..", "firebase-cloud.js"), "utf8");
+  const media = fs.readFileSync(path.join(__dirname, "..", "media-contract.js"), "utf8");
   const ai = fs.readFileSync(path.join(__dirname, "..", "edilkappa-ai.js"), "utf8");
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
-  assert.match(loader, /inspection-workflow\.js\?v=6/);
-  assert.match(html, /firebase-cloud\.js\?v=35/);
+  assert.match(loader, /inspection-workflow\.js\?v=7/);
+  assert.match(html, /media-contract\.js\?v=1/);
+  assert.match(html, /firebase-cloud\.js\?v=36/);
   assert.match(cloud, /async syncCollection\(localName\)/);
   assert.match(cloud, /async syncRecord\(localName, record\)/);
   assert.ok(loader.indexOf("inspection-workflow.js") > loader.indexOf("intervention-lifecycle.js"));
@@ -465,7 +467,12 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(workflow, /Misure rilevate/);
   assert.match(workflow, /Lavorazioni consigliate/);
   assert.match(workflow, /uploadMedia/);
-  assert.match(workflow, /item\.status = 'Da preventivare'/);
+  assert.match(workflow, /rememberInspectionMedia/);
+  assert.match(workflow, /HEIC e HEIF vengono riconosciuti automaticamente/);
+  assert.match(workflow, /onProgress/);
+  assert.doesNotMatch(workflow, /name="media"[^>]+capture="environment"/);
+  assert.match(media, /image\/heic-sequence/);
+  assert.match(workflow, /currentItem\.status = 'Da preventivare'/);
   assert.match(html, /Eseguito · da preventivare/);
   assert.match(workflow, /prepareInspectionQuoteAI/);
   assert.match(ai, /edilkappaAiPrepareInspection/);

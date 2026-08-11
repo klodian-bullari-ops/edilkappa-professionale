@@ -257,7 +257,7 @@ async function printQuote(id){const q=db.quotes.find(x=>x.id===id);if(!q)return;
 function captureInfo(){alert('Apri un cantiere e premi “Inserisci aggiornamento” per allegare le foto al rapportino corretto.')}
 function callOwner(){if(!COMPANY.phone)return alert('Il numero del titolare non è ancora configurato nei dati aziendali.');location.href=`tel:${COMPANY.phone.replace(/[^\d+]/g,'')}`}
 applyDesktopSidebarState();initRoles();render();setTimeout(()=>{checkReminders();checkHourReminders()},1500);setInterval(()=>{checkReminders();checkHourReminders()},60000);
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=58').catch(()=>{});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js?v=59').catch(()=>{});
 </script>
 <script>
 window.EdilKappaLocal={
@@ -288,6 +288,7 @@ window.EdilKappaLocal={
   clearDeviceData:()=>localStorage.removeItem(KEY)
 };
 </script>
+<script src="./media-contract.js?v=1"></script>
 <script src="./edilkappa-loader.js?v=1"></script>
-<script type="module" src="./firebase-cloud.js?v=35"></script>
+<script type="module" src="./firebase-cloud.js?v=36"></script>
 </body>

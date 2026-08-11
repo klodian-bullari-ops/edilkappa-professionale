@@ -282,6 +282,8 @@ function safeFileName(value) {
 }
 
 function inferredMimeType(file) {
+  const normalizedType = window.EdilKappaMedia?.inferredMimeType?.(file);
+  if (normalizedType) return normalizedType;
   const explicitType = String(file?.type || '').toLowerCase();
   if (explicitType && explicitType !== 'application/octet-stream') return explicitType;
   const extension = String(file?.name || '').split('.').pop()?.toLowerCase();
@@ -370,6 +372,14 @@ async function uploadMedia(file, options = {}) {
     task.on('state_changed', (snapshot) => {
       const progress = Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100);
       setSyncState(`Caricamento ${progress}%`, '#d69b18', file.name);
+      if (typeof options.onProgress === 'function') {
+        options.onProgress({
+          progress,
+          bytesTransferred: snapshot.bytesTransferred,
+          totalBytes: snapshot.totalBytes,
+          fileName: file.name
+        });
+      }
     }, reject, resolve);
   });
   setSyncState('Sincronizzato', '#2f7d32');
