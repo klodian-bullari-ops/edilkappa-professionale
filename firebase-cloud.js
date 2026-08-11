@@ -145,6 +145,7 @@ let syncing = false;
 let ready = false;
 let cloudRenderTimer = null;
 let cloudRenderMaxTimer = null;
+let localPersistScheduled = false;
 let initialHydrationTimer = null;
 let initialHydrationActive = false;
 let initialHydrationRegistrationComplete = false;
@@ -702,6 +703,56 @@ function parseEnvelope(snapshot) {
   return item;
 }
 
+const CLOUD_VIEW_DEPENDENCIES = new Map(Object.entries({
+  dashboard: ['clients', 'inspections', 'sites', 'quotes', 'reports', 'timesheets', 'absences', 'teams', 'documents', 'leads', 'roofs', 'drains', 'payments', 'edilconnect', 'companySettings'],
+  worker: ['sites', 'reports', 'timesheets', 'absences', 'teams', 'roofs', 'drains'],
+  workerProfile: ['teams'],
+  agenda: ['inspections', 'clients'],
+  inspections: ['inspections', 'clients'],
+  condomini: ['clients', 'documents', 'sites', 'quotes', 'reports', 'inspections'],
+  clientArchive: ['clients', 'documents', 'sites', 'quotes', 'reports', 'inspections', 'timesheets'],
+  sites: ['sites', 'teams', 'reports', 'documents', 'timesheets'],
+  completedView: ['sites', 'reports', 'documents', 'quotes', 'roofs', 'drains'],
+  activityView: ['sites', 'reports', 'documents', 'quotes', 'absences', 'roofs', 'drains'],
+  quotes: ['quotes', 'clients', 'documents', 'priceList'],
+  workMap: ['sites', 'roofs', 'drains', 'inspections', 'lifelines'],
+  hours: ['timesheets', 'sites', 'teams', 'absences', 'roofs', 'drains'],
+  attendance: ['absences', 'teams'],
+  report: ['sites', 'teams'],
+  finance: ['expenses', 'sites', 'quotes', 'payments'],
+  daneaRequestsView: ['leads', 'documents', 'clients', 'sites'],
+  reportsView: ['reports', 'sites', 'clients'],
+  deadlinesView: ['deadlines', 'payments', 'documents'],
+  priceListView: ['priceList'],
+  certificatesView: ['certificates', 'clients'],
+  warehouseView: ['inventory', 'equipment'],
+  edilconnectView: ['edilconnect', 'sites', 'timesheets', 'teams'],
+  learningCenter: ['quotes'],
+  search: ['clients', 'inspections', 'sites', 'quotes', 'documents', 'teams', 'drone', 'lifelines', 'roofs', 'drains'],
+  ai: [],
+  more: [],
+  portalView: [],
+  portalPreview: ['clients', 'sites', 'quotes', 'reports', 'documents', 'certificates', 'lifelines', 'deadlines'],
+  operationsCenter: []
+}).map(([viewName, collections]) => [viewName, new Set(collections)]));
+
+function cloudEventsAffectCurrentView(events) {
+  const dependencies = CLOUD_VIEW_DEPENDENCIES.get(local.getView());
+  if (!dependencies) return true;
+  return events.some((event) => dependencies.has(String(event.localName || '')));
+}
+
+function scheduleLocalPersist() {
+  if (localPersistScheduled) return;
+  localPersistScheduled = true;
+  const persist = () => {
+    localPersistScheduled = false;
+    local.persist();
+  };
+  if ('requestIdleCallback' in window) window.requestIdleCallback(persist, { timeout: 800 });
+  else setTimeout(persist, 80);
+}
+
 function flushCloudUi() {
   clearTimeout(cloudRenderTimer);
   clearTimeout(cloudRenderMaxTimer);
@@ -712,10 +763,13 @@ function flushCloudUi() {
   pendingCollectionEvents.clear();
   const scrollX = window.scrollX;
   const scrollY = window.scrollY;
-  local.persist();
+  scheduleLocalPersist();
   updateAdministratorPortal();
-  local.render();
-  if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+  local.refreshChrome?.();
+  const rendered = cloudEventsAffectCurrentView(events)
+    ? (typeof local.renderFromCloud === 'function' ? local.renderFromCloud() : (local.render(), true))
+    : false;
+  if (rendered && (window.scrollX !== scrollX || window.scrollY !== scrollY)) {
     requestAnimationFrame(() => window.scrollTo({ left: scrollX, top: scrollY, behavior: 'auto' }));
   }
   events.forEach((detail) => window.dispatchEvent(new CustomEvent('edilkappa:cloud-collection-synced', { detail })));

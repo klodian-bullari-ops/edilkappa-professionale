@@ -431,7 +431,8 @@
     reconcileTimer = setTimeout(() => {
       if (!reconcileRequestData()) return;
       originalSave();
-      render();
+      if (typeof window.EdilKappaLocal?.renderFromCloud === 'function') window.EdilKappaLocal.renderFromCloud();
+      else render();
     }, 120);
   });
 

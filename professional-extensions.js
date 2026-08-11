@@ -209,7 +209,9 @@
   };
 
   render = function () {
+    if (window.EdilKappaLoader?.deferRender?.()) return;
     if (!isOffice() && !['worker','hours','report','search'].includes(view)) view = 'worker';
+    if (typeof refreshNotificationBadge === 'function') refreshNotificationBadge();
     renderNav(); document.getElementById('avatar').textContent = roleName().charAt(0);
     const labels = Object.fromEntries(nav().map((x) => [x[0], x[2]])); labels.more = 'Altro'; labels.search = 'Ricerca';
     document.getElementById('pageTitle').textContent = labels[view] || 'EDILKAPPA';

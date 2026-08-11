@@ -603,7 +603,10 @@
   });
 
   window.addEventListener('edilkappa:cloud-users-synced', () => {
-    if (isOffice() && window.EdilKappaLocal?.getView?.() !== 'portalView') render();
+    if (isOffice() && window.EdilKappaLocal?.getView?.() !== 'portalView') {
+      if (typeof window.EdilKappaLocal?.renderFromCloud === 'function') window.EdilKappaLocal.renderFromCloud();
+      else render();
+    }
   });
 
   setTimeout(() => {

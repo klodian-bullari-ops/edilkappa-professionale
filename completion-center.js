@@ -220,7 +220,10 @@
     if (localName === 'roofs') changed = detectCompletionActivities(snapshot, 'roofs', 'roof', 'Intervento tetto/gronde') || changed;
     if (localName === 'drains') changed = detectCompletionActivities(snapshot, 'drains', 'drain', 'Intervento pozzetti') || changed;
     storeActivitySnapshot(snapshot);
-    if (changed && ['dashboard', 'activityView', 'completedView'].includes(window.EdilKappaLocal?.getView?.())) render();
+    if (changed && ['dashboard', 'activityView', 'completedView'].includes(window.EdilKappaLocal?.getView?.())) {
+      if (typeof window.EdilKappaLocal?.renderFromCloud === 'function') window.EdilKappaLocal.renderFromCloud();
+      else render();
+    }
   }
 
   function reportRowsForSite(siteId) {
