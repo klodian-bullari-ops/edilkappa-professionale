@@ -18,6 +18,8 @@ const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const MAX_ATTACHMENTS = 16;
 const MAX_MEDIA_REFERENCES = 10;
+const PHOTO_ORIGINS = new Set(["sopralluogo_edilkappa", "cliente", "da_confermare"]);
+const DEFAULT_PHOTO_ORIGIN = "da_confermare";
 
 const STRING_LIST_SCHEMA = {
   type: "array",
@@ -178,6 +180,19 @@ const AI_RESPONSE_SCHEMA = {
 
 function cleanText(value, maximum = 8000) {
   return String(value || "").replace(/\u0000/g, "").trim().slice(0, maximum);
+}
+
+function normalizePhotoOrigin(value) {
+  const normalized = cleanText(value, 40).toLowerCase();
+  return PHOTO_ORIGINS.has(normalized) ? normalized : DEFAULT_PHOTO_ORIGIN;
+}
+
+function photoOriginDescription(value) {
+  return ({
+    sopralluogo_edilkappa: "acquisita da EdilKappa durante il sopralluogo",
+    cliente: "ricevuta dal committente",
+    da_confermare: "con origine da confermare"
+  })[normalizePhotoOrigin(value)];
 }
 
 function safeFileName(value) {
@@ -406,7 +421,8 @@ function parseAttachments(value) {
       kind,
       mimeType,
       dataUrl,
-      isImage: ALLOWED_ARCHIVED_IMAGE_TYPES.has(mimeType)
+      isImage: ALLOWED_ARCHIVED_IMAGE_TYPES.has(mimeType),
+      photoOrigin: ALLOWED_ARCHIVED_IMAGE_TYPES.has(mimeType) ? normalizePhotoOrigin(item?.photoOrigin) : ""
     };
   });
 }
@@ -428,7 +444,8 @@ function parseMediaReferences(value, uid, mode = "work") {
       fileType,
       fileSize: safeNumber(item?.fileSize, 2 * 1024 * 1024 * 1024),
       durationSeconds: safeNumber(item?.durationSeconds, 86400),
-      kind: ALLOWED_VIDEO_TYPES.has(fileType) ? "video" : ALLOWED_ARCHIVED_IMAGE_TYPES.has(fileType) ? "image" : "document"
+      kind: ALLOWED_VIDEO_TYPES.has(fileType) ? "video" : ALLOWED_ARCHIVED_IMAGE_TYPES.has(fileType) ? "image" : "document",
+      photoOrigin: ALLOWED_VIDEO_TYPES.has(fileType) || ALLOWED_ARCHIVED_IMAGE_TYPES.has(fileType) ? normalizePhotoOrigin(item?.photoOrigin) : ""
     };
   });
 }
@@ -444,6 +461,7 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
     "Ragiona sugli allegati e sui dati forniti, ma non inventare misure, quantità, norme, scadenze o risultati di ispezioni.",
     "Lavora come un agente completo: prima ricostruisci il problema, poi valuta alternative tecniche, costi, rischi e informazioni mancanti, infine produci il risultato operativo richiesto.",
     "Quando mancano informazioni davvero necessarie, inseriscile in missingInformation esclusivamente come domande dirette, brevi e precise, spiegando esattamente cosa deve misurare, fotografare o scegliere il titolare. Per una cucina chiedi, solo quando pertinenti: lunghezza/larghezza/altezza del locale, parete utile da spigolo a spigolo, posizione di porte/finestre/termosifoni, distanza e quota dello scarico, misure dei moduli, potenza in kW e foto del quadro, scelta gas/induzione e foto dell'etichetta di eventuali apparecchi murali. Non ripetere domande a cui i dati o gli allegati rispondono già. Se una misura non è disponibile, chiedi se il titolare autorizza una stima a corpo da verificare in sopralluogo.",
+    "Rispetta l'origine dichiarata di fotografie e fotogrammi: se sono acquisiti da EdilKappa durante il sopralluogo, non descriverli come immagini ricevute dal cliente; se l'origine è da confermare, non attribuirla.",
     "Distingui sempre: ciò che è visibile, ciò che è una causa probabile e ciò che richiede verifica sul posto da parte di un tecnico qualificato.",
     "Non dichiarare mai che un lavoro, un impianto o un documento è conforme o certificato basandoti soltanto su foto, fotogrammi o dati incompleti.",
     "I fotogrammi con lo stesso nome sorgente provengono dallo stesso video e sono ordinati nel tempo; analizzali come una sequenza, senza fingere di aver visto i fotogrammi intermedi.",
@@ -466,6 +484,7 @@ function buildInstructions({ mode, displayName, businessContext, taskType = "aut
     "Sei in modalità LAVORO per EdilKappa, impresa edile e di manutenzioni.",
     `TIPO DI LAVORO RICHIESTO: ${normalizedTask}. Se è auto, deducilo dalla richiesta; se è quote crea un preventivo, se è report crea una relazione tecnica, se è inspection svolgi l'analisi senza creare automaticamente un documento salvo richiesta esplicita.`,
     "Aiuta con preventivi, sopralluoghi, relazioni, cantieri, squadre, rapportini, comunicazioni ai clienti, costi e pianificazione.",
+    "Nei campi destinati al cliente non menzionare AI, intelligenza artificiale, OpenAI, ChatGPT, GPT, modelli, algoritmi o generazione automatica. Il documento deve risultare predisposto professionalmente da EdilKappa. Usa l'espressione 'bozza preliminare' e non 'bozza parametrica'. La provenienza tecnica interna resta registrata soltanto nel gestionale.",
     "Applica il METODO EDILKAPPA a ogni preventivo, relazione o analisi tecnica. Non mostrare ragionamenti interni o catene di pensiero: restituisci invece prove controllabili, conclusioni sintetiche, ipotesi, alternative e verifiche da eseguire.",
     "METODO EDILKAPPA — 1) definisci obiettivo, destinatario e risultato richiesto; 2) inventaria le evidenze fornite da testo, foto, video, documenti e gestionale; 3) separa fatti osservati, interpretazioni tecniche e incertezze; 4) valuta cause, conseguenze, urgenza e rischi; 5) confronta le soluzioni possibili per efficacia, durata, costo, tempi e manutenzione; 6) raccomanda una soluzione motivata; 7) scomponi lavorazioni e prezzi; 8) verifica coerenza tecnica, aritmetica e commerciale; 9) prepara un documento leggibile dal cliente.",
     "Compila artifact.evidence soltanto con fatti rintracciabili nei dati forniti. Compila artifact.uncertainties con ciò che non è dimostrato. artifact.decisionRationale deve essere una motivazione professionale breve e verificabile, non il ragionamento interno completo. artifact.recommendedSolution deve dichiarare chiaramente la soluzione consigliata e perché è preferibile.",
@@ -536,7 +555,7 @@ function buildInput(history, message, attachments, videoTranscripts = []) {
   attachments.forEach((item) => {
     if (item.isImage) {
       const time = item.kind === "video_frame" ? ` al secondo ${item.capturedAtSeconds.toFixed(1)}` : "";
-      content.push({ type: "input_text", text: `${item.kind === "video_frame" ? "Fotogramma del video" : "Fotografia"} “${item.sourceName}”${time}.` });
+      content.push({ type: "input_text", text: `${item.kind === "video_frame" ? "Fotogramma del video" : "Fotografia"} “${item.sourceName}”${time}. Origine dichiarata: ${photoOriginDescription(item.photoOrigin)}.` });
       content.push({ type: "input_image", image_url: item.dataUrl, detail: "high" });
       return;
     }
@@ -676,6 +695,15 @@ function normalizeQuoteMissingQuestion(value) {
   }
   if (/cucina\s+esistente|mobili|moduli|top|cappa|elettrodomestic/.test(normalized) && /misur|dimension|recuper|stato|compatibil/.test(normalized)) {
     return "Quali sono la lunghezza totale, l'altezza e la profondità della cucina esistente e le misure dei singoli moduli, del top, della cappa e degli elettrodomestici da recuperare?";
+  }
+  if (/cappa|condotto\s+di\s+espulsione|ricircolo/.test(normalized)) {
+    return "La cappa sarà filtrante a ricircolo oppure collegata a un condotto di espulsione esistente? Se il condotto esiste, invia una fotografia e indica posizione e diametro; altrimenti autorizzi la soluzione filtrante da verificare?";
+  }
+  if (/piano\s+(?:dell['’]?)?appartament|ascensor|trasporto|macer|accesso\s+al\s+cantiere/.test(normalized)) {
+    return "A quale piano si trova l'appartamento? L'ascensore è utilizzabile per materiali e attrezzature e quali sono larghezza e altezza del percorso di accesso? Puoi indicare inoltre dove possono sostare il mezzo e i contenitori per i materiali di risulta?";
+  }
+  if (/altezza\s+(?:dei\s+)?local|superfic\w*\s+(?:rivestit|da\s+tinteggi)|pareti\s+e\s+soffitt/.test(normalized)) {
+    return "Qual è l'altezza netta dei due locali? Misura inoltre lunghezza e altezza delle pareti rivestite e indica quali pareti e soffitti devono essere tinteggiati; se non riesci a rilevarle, autorizzi una stima a corpo da verificare in sopralluogo?";
   }
   if (/finitur|tinteggiatur|pittur|rasatur|rivestiment|paviment|soffitto/.test(normalized)) {
     return "Nell'ex cucina vuoi ripristinare soltanto le zone interessate dai lavori oppure tinteggiare completamente pareti e soffitto? Quali eventuali pavimenti o rivestimenti devono essere rimossi o mantenuti?";
@@ -876,6 +904,7 @@ module.exports = {
   isRevisionRequest,
   normalizeArtifact,
   normalizeEstimatedDuration,
+  normalizePhotoOrigin,
   normalizeQuoteMissingInformation,
   parseAttachments,
   parseMediaReferences

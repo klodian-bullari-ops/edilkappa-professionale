@@ -12,6 +12,7 @@ const {
   extractAnswer,
   normalizeArtifact,
   normalizeEstimatedDuration,
+  normalizePhotoOrigin,
   normalizeQuoteMissingInformation,
   parseAttachments,
   parseMediaReferences
@@ -58,12 +59,15 @@ test("keeps work and personal instructions separate", () => {
   assert.doesNotMatch(personal, /sites/);
 });
 
-test("validates and converts image attachments", () => {
-  const attachments = parseAttachments([{ name: "tetto.jpg", dataUrl: "data:image/jpeg;base64,AAAA" }]);
+test("validates image attachments and preserves the declared photographic origin", () => {
+  const attachments = parseAttachments([{ name: "tetto.jpg", dataUrl: "data:image/jpeg;base64,AAAA", photoOrigin: "sopralluogo_edilkappa" }]);
   const input = buildInput([], "Cosa vedi?", attachments);
+  assert.equal(attachments[0].photoOrigin, "sopralluogo_edilkappa");
   assert.equal(input[0].content[1].type, "input_text");
+  assert.match(input[0].content[1].text, /acquisita da EdilKappa durante il sopralluogo/i);
   assert.equal(input[0].content[2].type, "input_image");
   assert.equal(input[0].content[2].detail, "high");
+  assert.equal(normalizePhotoOrigin("valore-non-valido"), "da_confermare");
 });
 
 test("accepts HEIC photographs for server-side conversion", () => {
@@ -77,6 +81,8 @@ test("keeps internal management instructions out of customer documents", () => {
   const instructions = buildInstructions({ mode: "work", displayName: "Klodian", taskType: "quote" });
   assert.match(instructions, /non inserire istruzioni interne/i);
   assert.match(instructions, /gestionale/i);
+  assert.match(instructions, /non menzionare AI/i);
+  assert.match(instructions, /bozza preliminare/i);
 });
 
 test("labels video frames and keeps their capture time", () => {
@@ -255,8 +261,9 @@ test("extracts and normalizes a structured quote", () => {
 
 test("accepts only archived media belonging to the authenticated user", () => {
   const path = "organisations/edilkappa/documents/user-1/ai-video/sopralluogo.mp4";
-  const references = parseMediaReferences([{ storagePath: path, fileName: "sopralluogo.mp4", fileType: "video/mp4", fileSize: 1000 }], "user-1", "work");
+  const references = parseMediaReferences([{ storagePath: path, fileName: "sopralluogo.mp4", fileType: "video/mp4", fileSize: 1000, photoOrigin: "sopralluogo_edilkappa" }], "user-1", "work");
   assert.equal(references[0].kind, "video");
+  assert.equal(references[0].photoOrigin, "sopralluogo_edilkappa");
   assert.throws(() => parseMediaReferences([{ storagePath: path, fileName: "x.mp4", fileType: "video/mp4" }], "user-2", "work"), /Percorso/);
   assert.deepEqual(parseMediaReferences([{ storagePath: path }], "user-1", "personal"), []);
 });
@@ -363,11 +370,17 @@ test("turns generic kitchen gaps into precise measurement and photo questions", 
   const questions = normalizeQuoteMissingInformation([
     "Rilevare le misure della sala e della parete destinata alla cucina",
     "Verificare distanza e quota dello scarico",
-    "Identificare la caldaia a gas installata a parete"
+    "Identificare la caldaia a gas installata a parete",
+    "Tipo di cappa richiesto e presenza di un condotto di espulsione utilizzabile",
+    "Piano dell'appartamento, disponibilità dell'ascensore e trasporto delle macerie",
+    "Altezza dei locali e superfici rivestite e da tinteggiare"
   ]);
   assert.ok(questions.some((item) => /lunghezza, larghezza e altezza della sala/i.test(item)));
   assert.ok(questions.some((item) => /distanza tra il punto acqua\/scarico/i.test(item)));
   assert.ok(questions.some((item) => /foto ravvicinata dell'etichetta/i.test(item)));
+  assert.ok(questions.some((item) => /cappa sarà filtrante a ricircolo/i.test(item)));
+  assert.ok(questions.some((item) => /A quale piano si trova l'appartamento/i.test(item)));
+  assert.ok(questions.some((item) => /altezza netta dei due locali/i.test(item)));
   assert.ok(questions.every((item) => !/piano a induzione/i.test(item)));
   assert.ok(questions.every((item) => item.endsWith("?")));
 });

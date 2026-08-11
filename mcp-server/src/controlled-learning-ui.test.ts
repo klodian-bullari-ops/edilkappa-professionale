@@ -32,7 +32,7 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
 test('il modulo di apprendimento controllato è caricato e disponibile offline', () => {
   assert.ok(indexHtml.includes('./controlled-learning.js?v=2'));
   assert.ok(indexHtml.includes("['learningCenter','🧠','Memoria AI']"));
-  assert.ok(serviceWorker.includes('v68-ai-job-recovery'));
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
   assert.ok(serviceWorker.includes('"./controlled-learning.js"'));
 });
 

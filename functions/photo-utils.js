@@ -233,7 +233,8 @@ async function prepareArchivedHeicPhotos({ storageBucket, mediaReferences, uid, 
       kind: "image",
       mimeType: "image/jpeg",
       dataUrl: `data:image/jpeg;base64,${Buffer.from(jpeg).toString("base64")}`,
-      isImage: true
+      isImage: true,
+      photoOrigin: reference.photoOrigin || "da_confermare"
     });
   }
   return { mediaReferences: references, attachments };
