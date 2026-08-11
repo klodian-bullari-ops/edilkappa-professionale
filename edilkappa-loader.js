@@ -21,7 +21,7 @@
       "./operations-center.js?v=2"
     ],
     ai: [
-      "./edilkappa-ai.js?v=22",
+      "./edilkappa-ai.js?v=23",
       "./edilkappa-ai-route.js?v=1"
     ],
     pdf: [
