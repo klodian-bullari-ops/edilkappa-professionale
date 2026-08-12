@@ -55,11 +55,17 @@ DEPLOY_ROLES=(
   roles/cloudscheduler.admin
   roles/datastore.owner
   roles/eventarc.admin
+  # Firebase CLI risolve il bucket predefinito tramite l'API Firebase Storage.
+  # storage.admin da solo non include firebasestorage.defaultBucket.get.
+  roles/firebase.viewer
   roles/firebasehosting.admin
   roles/firebaserules.admin
   roles/iam.serviceAccountViewer
   roles/pubsub.admin
   roles/run.admin
+  # Firebase CLI deve leggere i metadati dei secret dichiarati dalle funzioni.
+  # Il ruolo viewer non consente di leggere il valore di OPENAI_API_KEY.
+  roles/secretmanager.viewer
   roles/serviceusage.serviceUsageConsumer
   roles/storage.admin
 )

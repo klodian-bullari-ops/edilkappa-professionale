@@ -116,6 +116,8 @@ test("GitHub Firebase authentication is keyless and restricted to production", (
   assert.match(setup, /assertion\.environment == 'production'/);
   assert.match(setup, /assertion\.workflow_ref/);
   assert.match(setup, /roles\/iam\.workloadIdentityUser/);
+  assert.match(setup, /roles\/firebase\.viewer/);
+  assert.match(setup, /roles\/secretmanager\.viewer/);
   assert.doesNotMatch(setup, /service-accounts keys create/);
   assert.match(gitignore, /gha-creds-\*\.json/);
 });
