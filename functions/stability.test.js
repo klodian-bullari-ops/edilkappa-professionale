@@ -29,6 +29,13 @@ test("sync status keeps individual collection errors visible", () => {
   assert.match(cloud, /listClientErrors/);
 });
 
+test("bootstrap owner authentication does not depend on a Firestore profile read", () => {
+  const backend = source("functions/index.js");
+  const authentication = backend.slice(backend.indexOf("async function authorizedUser"), backend.indexOf("function conversationId"));
+  assert.match(authentication, /if \(!bootstrapOwner\) \{/);
+  assert.match(authentication, /firestore\.collection\("users"\)/);
+});
+
 test("stability interface provides filters pagination trash and backups", () => {
   const stability = source("stability-pack.js");
   const loader = source("edilkappa-loader.js");
@@ -48,6 +55,7 @@ test("nightly backup and temporary EdilKappa shares replace the legacy transfer 
   const sharing = `${source("sharing-integration.js")}\n${source("bulk-sharing.js")}`;
   const storage = source("storage.rules");
   assert.match(backend, /exports\.edilkappaBackup/);
+  assert.match(backend, /exports\.edilkappaBackup = onCall\(\{[^}]*invoker: "public"/);
   assert.match(backend, /exports\.backupEdilkappaNightly/);
   assert.match(backend, /schedule: "15 2 \* \* \*"/);
   assert.match(backend, /purgeOldClientErrors/);
@@ -73,6 +81,7 @@ test("build and deployment are versioned and guarded", () => {
   assert.match(build, /version\.json/);
   assert.match(deploy, /inputs\.conferma == 'PUBBLICA'/);
   assert.match(deploy, /firestore:rules,storage,functions:edilkappaBackup/);
+  assert.match(deploy, /functions:edilkappaDaneaBridge/);
   assert.match(quality, /pull_request/);
 });
 

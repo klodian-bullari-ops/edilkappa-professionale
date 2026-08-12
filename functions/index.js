@@ -159,8 +159,11 @@ async function authorizedUser(request, mode) {
   if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "Verifica prima il tuo indirizzo email.");
   const email = String(request.auth.token.email || "").toLowerCase();
   const bootstrapOwner = email === OWNER_EMAIL;
-  const snapshot = await firestore.collection("users").doc(request.auth.uid).get();
-  const profile = snapshot.exists ? snapshot.data() : null;
+  let profile = null;
+  if (!bootstrapOwner) {
+    const snapshot = await firestore.collection("users").doc(request.auth.uid).get();
+    profile = snapshot.exists ? snapshot.data() : null;
+  }
   const role = bootstrapOwner ? "owner" : profile?.role;
   const active = bootstrapOwner || (profile?.orgId === ORG_ID && profile?.active === true);
   if (!active || !["owner", "office"].includes(role)) {
@@ -964,10 +967,14 @@ exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", invoker: "public
   if (account.role !== "owner") throw new HttpsError("permission-denied", "Solo il titolare può controllare il collegamento Danea.");
   const action = cleanText(request.data?.action || "status", 40);
   if (action !== "status") throw new HttpsError("invalid-argument", "Operazione ponte Danea non valida.");
-  const reference = DANEA_BRIDGE_REF();
-  const snapshot = await reference.get();
-  const integration = snapshot.data() || {};
-  return { connected: Boolean(integration.connected), mailbox: integration.mailbox || "info@edilkappa.com", lastReceivedAtMs: Number(integration.lastReceivedAtMs || 0), lastImported: Number(integration.lastImported || 0), lastError: integration.lastError || "" };
+  try {
+    const snapshot = await DANEA_BRIDGE_REF().get();
+    const integration = snapshot.data() || {};
+    return { connected: Boolean(integration.connected), mailbox: integration.mailbox || "info@edilkappa.com", lastReceivedAtMs: Number(integration.lastReceivedAtMs || 0), lastImported: Number(integration.lastImported || 0), lastError: integration.lastError || "" };
+  } catch (error) {
+    console.error("Danea bridge status failed", { name: cleanText(error?.name, 120), message: cleanText(error?.message, 500) });
+    throw new HttpsError("unavailable", "Non riesco a verificare il collegamento Danea. Riprova tra poco.");
+  }
 });
 
 exports.notifyNewLead = onDocumentCreated({ document: "leads/{leadId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
@@ -1920,7 +1927,7 @@ async function purgeOldClientErrors(now = Date.now()) {
   }));
 }
 
-exports.edilkappaBackup = onCall({ region: "europe-west8", timeoutSeconds: 120, memory: "1GiB", cors: true }, async (request) => {
+exports.edilkappaBackup = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 120, memory: "1GiB", cors: true }, async (request) => {
   const account = await authorizedUser(request, "work");
   if (account.role !== "owner") throw new HttpsError("permission-denied", "I backup sono riservati al titolare.");
   const action = String(request.data?.action || "list");

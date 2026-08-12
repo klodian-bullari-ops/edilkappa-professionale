@@ -349,10 +349,15 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
   assert.match(danea, /controllo Gmail ogni 5 minuti/);
+  assert.match(danea, /Collegamento Danea non verificato/);
+  assert.match(danea, /outlookState\.retries < 12/);
+  assert.match(danea, /retryDaneaBridgeStatus/);
   assert.match(backend, /exports\.processDaneaInbox/);
   assert.match(backend, /exports\.edilkappaDaneaBridge/);
   assert.match(backend, /document: "daneaInbox\/\{messageId\}"/);
   assert.match(backend, /exports\.edilkappaDaneaBridge = onCall\(\{[^}]*invoker: "public"/);
+  assert.match(backend, /Danea bridge status failed/);
+  assert.match(backend, /throw new HttpsError\("unavailable", "Non riesco a verificare il collegamento Danea/);
   assert.match(backend, /exports\.edilkappaOperations = onCall\(\{[\s\S]*?invoker: "public"/);
   assert.doesNotMatch(backend, /DANEA_INGEST_KEY/);
   assert.match(bridge, /ScriptApp\.getOAuthToken\(\)/);
