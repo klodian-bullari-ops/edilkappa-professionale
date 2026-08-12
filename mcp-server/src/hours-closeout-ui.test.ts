@@ -8,6 +8,7 @@ const root = path.resolve(process.cwd(), '..');
 const source = fs.readFileSync(path.join(root, 'hours-closeout.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+const loader = fs.readFileSync(path.join(root, 'edilkappa-loader.js'), 'utf8');
 const directSearch = fs.readFileSync(path.join(root, 'direct-search.js'), 'utf8');
 const edilconnect = fs.readFileSync(path.join(root, 'edilconnect.js'), 'utf8');
 const businessSuite = fs.readFileSync(path.join(root, 'business-suite.js'), 'utf8');
@@ -108,7 +109,7 @@ function appContext(): AppContext {
 }
 
 test('il modulo ore è caricato dall’app e dalla cache offline', () => {
-  assert.match(indexHtml, /hours-closeout\.js\?v=3/);
+  assert.match(loader, /hours-closeout\.js\?v=3/);
   assert.match(serviceWorker, /hours-closeout\.js/);
   assert.match(source, /L’avviso rimane finché non inserisci le tue ore/);
   assert.match(source, /Ore mancanti sui cantieri conclusi/);

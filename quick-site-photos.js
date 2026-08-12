@@ -247,15 +247,9 @@
     if (!ownerAccess()) return alert('Solo il titolare può eliminare un album.');
     const albums = database().reports || [];
     const album = albums.find((item) => String(item.id) === String(albumId) && item.photoOnly === true);
-    if (!album || !confirm(`Eliminare definitivamente questo album di ${album.photoCount || 0} fotografie?`)) return;
-    for (const photo of album.photos || []) {
-      if (photo.storagePath) await window.EdilKappaCloud?.deleteDocument?.(photo.storagePath).catch(() => {});
-    }
-    database().reports = albums.filter((item) => item !== album);
-    window.EdilKappaLocal?.persist?.();
-    window.EdilKappaCloud?.scheduleSync?.();
+    if (!album) return;
     closeModal();
-    render();
+    await deleteItem('reports', album.id, `questo album di ${album.photoCount || 0} fotografie`);
   };
 
   window.captureInfo = window.openQuickPhotoUpload;

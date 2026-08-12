@@ -31,7 +31,8 @@ test('preventivi, documenti, foto e video si possono aggiungere dalla scheda int
 
 test('un intervento vuoto si può eliminare senza cancellare dati collegati', () => {
   assert.ok(archiveUi.includes('window.deleteIntervention'));
-  assert.ok(archiveUi.includes('Elimina intervento'));
+  assert.ok(archiveUi.includes('Sposta nel cestino'));
+  assert.ok(archiveUi.includes("deleteItem('interventions'"));
   assert.ok(archiveUi.includes('non può essere eliminato perché contiene'));
 });
 
@@ -39,7 +40,7 @@ test('gli interventi vengono sincronizzati come cartelle nell’archivio documen
   assert.ok(indexHtml.includes('interventions:[]'));
   assert.ok(firebaseCloud.includes("remoteName === 'documents'"));
   assert.ok(firebaseCloud.includes("recordType: 'Intervention'"));
-  assert.ok(firebaseCloud.includes('local.getDB().interventions'));
+  assert.ok(firebaseCloud.includes('database.interventions'));
 });
 
 test('il connettore ChatGPT cerca o crea la scheda intervento corretta', () => {

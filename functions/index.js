@@ -1,6 +1,7 @@
 "use strict";
 
 const { createHash, randomUUID } = require("node:crypto");
+const { gzipSync } = require("node:zlib");
 const { initializeApp } = require("firebase-admin/app");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -68,6 +69,17 @@ const storageBucket = getStorage(adminApp).bucket("edilkappa-professionale.fireb
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
 const OWNER_EMAIL = "info@edilkappa.com";
 const ORG_ID = "edilkappa";
+const BACKUP_PREFIX = "system-backups/edilkappa/";
+const SHARE_PREFIX = "organisations/edilkappa/shares/";
+const BACKUP_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const CLIENT_ERROR_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const BACKUP_COLLECTIONS = [
+  "users", "clients", "inspections", "documents", "sites", "quotes", "reports",
+  "timesheets", "absences", "edilconnect", "drone", "lifelines", "roofs", "drains",
+  "expenses", "teams", "deadlines", "payments", "leads", "priceList", "certificates",
+  "inventory", "equipment", "settings", "attachments", "quoteAcceptances", "audit", "clientErrors"
+];
 const DAILY_REQUEST_LIMIT = 120;
 const MAX_TRANSCRIPTION_BYTES = 25 * 1024 * 1024;
 const MAX_VISUALS_PER_ARTIFACT = 3;
@@ -1811,4 +1823,116 @@ exports.edilkappaAi = onCall({
     updatedAt: FieldValue.serverTimestamp()
   });
   return { jobId, status: "working", stage: "analysis", openAiStatus: preliminary.status || "queued", modelLabel: modelChoice.modelLabel };
+});
+
+function backupDateStamp(date = new Date()) {
+  return date.toISOString().replace(/[:.]/g, "-");
+}
+
+async function createEdilKappaBackup(trigger = "manual") {
+  const generatedAt = new Date();
+  const collections = {};
+  let recordCount = 0;
+  for (const name of BACKUP_COLLECTIONS) {
+    const snapshot = await firestore.collection(name).get();
+    collections[name] = snapshot.docs.map((document) => ({ id: document.id, data: document.data() }));
+    recordCount += snapshot.size;
+  }
+  const payload = {
+    format: "edilkappa-backup-v1",
+    orgId: ORG_ID,
+    generatedAt: generatedAt.toISOString(),
+    trigger,
+    recordCount,
+    collections
+  };
+  const compressed = gzipSync(Buffer.from(JSON.stringify(payload)));
+  const path = `${BACKUP_PREFIX}${backupDateStamp(generatedAt)}.json.gz`;
+  await storageBucket.file(path).save(compressed, {
+    resumable: false,
+    contentType: "application/gzip",
+    metadata: {
+      cacheControl: "private, no-store",
+      metadata: {
+        orgId: ORG_ID,
+        trigger,
+        generatedAt: generatedAt.toISOString(),
+        recordCount: String(recordCount),
+        format: "edilkappa-backup-v1"
+      }
+    }
+  });
+  return { path, generatedAt: generatedAt.toISOString(), recordCount, bytes: compressed.length, trigger };
+}
+
+async function listEdilKappaBackups() {
+  const [files] = await storageBucket.getFiles({ prefix: BACKUP_PREFIX });
+  const rows = await Promise.all(files.map(async (file) => {
+    const [metadata] = await file.getMetadata();
+    return {
+      path: file.name,
+      generatedAt: metadata.metadata?.generatedAt || metadata.timeCreated || "",
+      recordCount: Number(metadata.metadata?.recordCount || 0),
+      bytes: Number(metadata.size || 0),
+      trigger: metadata.metadata?.trigger || "automatic"
+    };
+  }));
+  return rows.sort((left, right) => String(right.generatedAt).localeCompare(String(left.generatedAt))).slice(0, 20);
+}
+
+async function purgeExpiredBackups(now = Date.now()) {
+  const [files] = await storageBucket.getFiles({ prefix: BACKUP_PREFIX });
+  await Promise.all(files.map(async (file) => {
+    const [metadata] = await file.getMetadata();
+    const createdAt = Date.parse(metadata.metadata?.generatedAt || metadata.timeCreated || "");
+    if (Number.isFinite(createdAt) && now - createdAt > BACKUP_RETENTION_MS) await file.delete({ ignoreNotFound: true });
+  }));
+}
+
+async function purgeExpiredShares(now = Date.now()) {
+  const [files] = await storageBucket.getFiles({ prefix: SHARE_PREFIX });
+  await Promise.all(files.map(async (file) => {
+    const [metadata] = await file.getMetadata();
+    const expiresAt = Date.parse(metadata.metadata?.expiresAt || "");
+    if (Number.isFinite(expiresAt) && expiresAt <= now) await file.delete({ ignoreNotFound: true });
+  }));
+}
+
+async function purgeExpiredTrash(now = Date.now()) {
+  for (const name of BACKUP_COLLECTIONS.filter((collectionName) => !["users", "attachments", "quoteAcceptances", "audit"].includes(collectionName))) {
+    const snapshot = await firestore.collection(name).where("orgId", "==", ORG_ID).get();
+    await Promise.all(snapshot.docs.map(async (document) => {
+      let payload = {};
+      try { payload = JSON.parse(document.data()?.payload || "{}"); } catch (_) {}
+      const deletedAt = Date.parse(payload.deletedAt || "");
+      if (!Number.isFinite(deletedAt) || now - deletedAt <= TRASH_RETENTION_MS) return;
+      if (payload.storagePath) await storageBucket.file(payload.storagePath).delete({ ignoreNotFound: true }).catch(() => {});
+      await document.ref.delete();
+    }));
+  }
+}
+
+async function purgeOldClientErrors(now = Date.now()) {
+  const snapshot = await firestore.collection("clientErrors").where("orgId", "==", ORG_ID).get();
+  await Promise.all(snapshot.docs.map(async (document) => {
+    const createdAt = document.data()?.createdAt?.toMillis?.();
+    if (Number.isFinite(createdAt) && now - createdAt > CLIENT_ERROR_RETENTION_MS) await document.ref.delete();
+  }));
+}
+
+exports.edilkappaBackup = onCall({ region: "europe-west8", timeoutSeconds: 120, memory: "1GiB", cors: true }, async (request) => {
+  const account = await authorizedUser(request, "work");
+  if (account.role !== "owner") throw new HttpsError("permission-denied", "I backup sono riservati al titolare.");
+  const action = String(request.data?.action || "list");
+  if (action === "list") return { backups: await listEdilKappaBackups() };
+  if (action === "create") return { backup: await createEdilKappaBackup("manual") };
+  throw new HttpsError("invalid-argument", "Operazione backup non riconosciuta.");
+});
+
+exports.backupEdilkappaNightly = onSchedule({ schedule: "15 2 * * *", timeZone: "Europe/Rome", region: "europe-west8", timeoutSeconds: 540, memory: "1GiB" }, async () => {
+  await createEdilKappaBackup("automatic");
+  await purgeExpiredBackups();
+  await purgeExpiredShares();
+  await purgeExpiredTrash();
+  await purgeOldClientErrors();
 });

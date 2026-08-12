@@ -13,7 +13,8 @@
       "./completion-center.js?v=3",
       "./bulk-sharing.js?v=5.2",
       "./hours-closeout.js?v=3",
-      "./attendance-center.js?v=1"
+      "./attendance-center.js?v=1",
+      "./stability-pack.js?v=1"
     ],
     tools: [
       "./smart-operations.js?v=15",
@@ -43,6 +44,8 @@
     "learningCenter",
     "operationsCenter",
     "systemControl",
+    "trashView",
+    "backupView",
     "portalPreview"
   ]);
   const scriptPromises = new Map();

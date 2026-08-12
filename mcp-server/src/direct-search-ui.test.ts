@@ -6,6 +6,7 @@ import vm from 'node:vm';
 const directSearch = readFileSync(new URL('../../direct-search.js', import.meta.url), 'utf8');
 const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
+const loader = readFileSync(new URL('../../edilkappa-loader.js', import.meta.url), 'utf8');
 
 function testContext() {
   const opened: Array<{ clientId: string; focus: { interventionId: string; itemId: string } }> = [];
@@ -99,9 +100,9 @@ test('un documento trovato apre la scheda completa e mette in evidenza il file',
 });
 
 test('il nuovo modulo di ricerca è caricato e disponibile offline', () => {
-  assert.ok(indexHtml.includes('./direct-search.js?v=6'));
-  assert.ok(indexHtml.includes('./client-archive.js?v=20'));
+  assert.ok(loader.includes('./direct-search.js?v=6'));
+  assert.ok(loader.includes('./client-archive.js?v=24'));
   assert.match(indexHtml, /\.\/sw\.js\?v=\d+/);
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
   assert.ok(serviceWorker.includes('"./direct-search.js"'));
 });

@@ -76,14 +76,15 @@ test('la finestra reale mostra i canali per documenti e tutte le foto del cantie
   assert.match(modalContent.innerHTML, /2 file selezionati/);
 });
 
-test('Danea usa il collegamento diretto e TransferNow resta facoltativo', () => {
+test('Danea usa il collegamento diretto e il vecchio servizio di trasferimento è stato rimosso', () => {
   const daneaFunction = sharingUi.slice(
     sharingUi.indexOf('window.shareArchiveToDanea'),
     sharingUi.indexOf('function sharingRoleAllowed')
   );
   assert.ok(daneaFunction.includes('shareDirectToDanea'));
   assert.ok(!daneaFunction.includes('createTransfer(context)'));
-  assert.ok(sharingUi.includes('Facoltativo per file grandi'));
+  assert.doesNotMatch(sharingUi.toLowerCase(), new RegExp(['transfer', 'now'].join('')));
+  assert.match(bulkSharingUi, /uploadSharePackage/);
 });
 
 test('le foto di un cantiere si possono selezionare e condividere insieme', () => {
@@ -109,7 +110,7 @@ test('Excel e CSV sono ammessi nell’archivio cloud', () => {
 });
 
 test('la cache viene aggiornata per consegnare la nuova condivisione ai telefoni', () => {
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
 });
 
 test('Condividi non viene aggiunto alle priorità compatte della Home', () => {

@@ -6,7 +6,7 @@
   const PACKAGE_MAX_BYTES = 1900 * 1024 * 1024;
   const SHARING_URL = 'https://edilkappa-condivisioni.edilkappasas.chatgpt.site';
   const FIREBASE_AUTH_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
-  const TRANSFER_MAX_AGE = 6 * 24 * 60 * 60 * 1000;
+  const SHARE_MAX_AGE = 6 * 24 * 60 * 60 * 1000;
   const FIREBASE_STORAGE_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
   const FIREBASE_FIRESTORE_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
   const COMPLETED_PATTERN = /complet|conclus|chius|eseguit|fatturat/i;
@@ -425,74 +425,25 @@
     });
   }
 
-  async function sharingRequest(path, token, options = {}) {
-    const headers = new Headers(options.headers || {});
-    headers.set('authorization', `Bearer ${token}`);
-    const response = await fetch(`${SHARING_URL}${path}`, { ...options, headers });
-    let body = {};
-    try { body = await response.json(); } catch (_) {}
-    if (!response.ok) throw new Error(body.error || 'Il servizio di condivisione non risponde.');
-    return body;
+  function reusableCloudShare(session, file) {
+    const value = session.cloudShare;
+    return value && value.key === `${session.preparedKey}:${file.size}` && value.link && Date.now() - value.createdAt < SHARE_MAX_AGE ? value : null;
   }
 
-  function reusableTransfer(session, file) {
-    const value = session.transfer;
-    return value && value.key === `${session.preparedKey}:${file.size}` && value.link && Date.now() - value.createdAt < TRANSFER_MAX_AGE ? value : null;
-  }
-
-  async function transferLink(session, file, button) {
-    const reusable = reusableTransfer(session, file);
+  async function cloudShareLink(session, file, button) {
+    const reusable = reusableCloudShare(session, file);
     if (reusable) return reusable.link;
-    const token = await sharingToken();
+    if (!window.EdilKappaCloud?.uploadSharePackage) throw new Error('Il servizio di condivisione EdilKappa non è ancora disponibile.');
     const context = daneaContext(session.info);
-    let uploadToken = '';
-    try {
-      setBusy(button, true, 'Avvio caricamento…');
-      const started = await sharingRequest('/api/transfernow/direct/start', token, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileSize: file.size,
-          interventionId: context?.interventionId || `${session.info.kind}-${session.info.id}`,
-          daneaRequestId: context?.requestId || 'manuale',
-          subject: `EdilKappa · ${session.info.title}`,
-          message: `Allegati EdilKappa · ${session.info.client || 'Cliente'} · ${session.info.title}`,
-        }),
-      });
-      uploadToken = started.uploadToken;
-      const uploadedParts = [];
-      let sent = 0;
-      for (const part of started.parts) {
-        const blob = file.slice(part.start, part.start + part.size);
-        const percent = Math.max(1, Math.round((sent / file.size) * 100));
-        if (button) button.textContent = `Caricamento ${percent}%`;
-        const uploaded = await sharingRequest('/api/transfernow/direct/part', token, {
-          method: 'PUT',
-          headers: {
-            'content-type': 'application/octet-stream',
-            'x-upload-token': uploadToken,
-            'x-part-number': String(part.partNumber),
-          },
-          body: blob,
-        });
-        uploadedParts.push({ ETag: uploaded.etag, PartNumber: uploaded.partNumber });
-        sent += part.size;
-      }
-      if (button) button.textContent = 'Creo il link…';
-      const finished = await sharingRequest('/api/transfernow/direct/finish', token, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ uploadToken, parts: uploadedParts }),
-      });
-      session.transfer = { key: `${session.preparedKey}:${file.size}`, link: finished.link, transferId: finished.transferId, createdAt: Date.now() };
-      return finished.link;
-    } catch (error) {
-      if (uploadToken) sharingRequest('/api/transfernow/direct/cancel', token, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ uploadToken }),
-      }).catch(() => {});
-      throw error;
-    }
+    setBusy(button, true, 'Caricamento EdilKappa…');
+    const uploaded = await window.EdilKappaCloud.uploadSharePackage(file, {
+      packageId: `${session.info.kind}-${session.info.id}-${Date.now()}`,
+      client: session.info.client || '',
+      interventionId: context?.interventionId || `${session.info.kind}-${session.info.id}`,
+      onProgress: ({ progress }) => { if (button) button.textContent = `Caricamento ${progress}%`; }
+    });
+    session.cloudShare = { key: `${session.preparedKey}:${file.size}`, link: uploaded.url, storagePath: uploaded.storagePath, expiresAt: uploaded.expiresAt, createdAt: Date.now() };
+    return uploaded.url;
   }
 
   function selectedFiles() {
@@ -586,7 +537,7 @@
     if (targetWindow) { targetWindow.document.write('<p style="font:16px Arial;padding:24px">Preparazione del pacchetto EdilKappa…</p>'); targetWindow.document.close(); }
     try {
       const file = preparedFile || await packageFileForSelection(session, selected);
-      const link = await transferLink(session, file, button);
+      const link = await cloudShareLink(session, file, button);
       const code = context.request.daneaId || context.requestId;
       const message = `Intervento Danea ${code} – pacchetto completo EdilKappa: ${link}`;
       const copied = await clipboard(message);
@@ -626,7 +577,7 @@
     session.preparedKey = '';
     session.preparedFile = null;
     session.preparedOriginalFiles = [];
-    session.transfer = null;
+    session.cloudShare = null;
     const selected = selectedFiles();
     if (!selected.length) {
       disableShareActions(true);
@@ -690,13 +641,13 @@
         return;
       }
       if (mode === 'copy') {
-        const link = await transferLink(session, file, button);
-        if (await clipboard(link)) alert('Link temporaneo copiato.'); else prompt('Copia questo link:', link);
+        const link = await cloudShareLink(session, file, button);
+        if (await clipboard(link)) alert('Link EdilKappa valido 7 giorni copiato.'); else prompt('Copia questo link EdilKappa:', link);
         return;
       }
       const targetWindow = window.open('', '_blank');
       if (targetWindow) { targetWindow.document.write('<p style="font:16px Arial;padding:24px">Caricamento protetto del pacchetto EdilKappa…</p>'); targetWindow.document.close(); }
-      const link = await transferLink(session, file, button);
+      const link = await cloudShareLink(session, file, button);
       const shareText = `${text}\nScarica tutti gli allegati: ${link}`;
       if (mode === 'whatsapp') {
         const target = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
@@ -721,7 +672,7 @@
     let result;
     try { result = filesForScope(kind, id); } catch (error) { return alert(error.message); }
     if (!result.files.length) return alert('Non ci sono ancora foto, video o documenti disponibili per questo lavoro.');
-    activeSession = { ...result, preparedFile: null, preparedOriginalFiles: [], preparedKey: '', preparationRevision: 0, preparationTimer: null, transfer: null };
+    activeSession = { ...result, preparedFile: null, preparedOriginalFiles: [], preparedKey: '', preparationRevision: 0, preparationTimer: null, cloudShare: null };
     const danea = daneaContext(result.info);
     const dialog = document.getElementById('modal');
     const content = document.getElementById('modalContent');

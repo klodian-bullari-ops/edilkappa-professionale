@@ -23,10 +23,12 @@ test("il pacchetto Hosting contiene solo il gestionale pubblico", async () => {
   });
 
   const html = await readFile(path.join(outputDir, "index.html"), "utf8");
-  assert.match(html, /edilkappa-loader\.js\?v=3/);
-  assert.match(html, /sw\.js\?v=61/);
-  assert.match(html, /media-contract\.js\?v=1/);
-  assert.match(html, /firebase-cloud\.js\?v=36/);
+  const version = JSON.parse(await readFile(path.join(outputDir, "version.json"), "utf8")).version;
+  assert.match(version, /^[a-f0-9]{12}$/);
+  assert.ok(html.includes(`edilkappa-loader.js?v=${version}`));
+  assert.ok(html.includes(`sw.js?v=${version}`));
+  assert.ok(html.includes(`media-contract.js?v=${version}`));
+  assert.ok(html.includes(`firebase-cloud.js?v=${version}`));
   assert.equal(await exists(path.join(outputDir, "media-contract.js")), true);
   assert.equal(await exists(path.join(outputDir, "functions")), false);
   assert.equal(await exists(path.join(outputDir, "mcp-server")), false);
@@ -34,6 +36,7 @@ test("il pacchetto Hosting contiene solo il gestionale pubblico", async () => {
   assert.equal(await exists(path.join(outputDir, "firestore.rules")), false);
   assert.equal(await exists(path.join(outputDir, "assets", "icona-edilkappa.svg")), true);
   assert.equal(await exists(path.join(outputDir, "linea-vita", "vendor", "jspdf.umd.min.js")), true);
+  assert.equal(await exists(path.join(outputDir, "stability-pack.js")), true);
 });
 
 test("firebase.json distribuisce la cartella generata con cache PWA aggiornata", async () => {

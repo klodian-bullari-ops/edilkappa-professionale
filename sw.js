@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}v92-avvio-gestione-foto`;
+const CACHE = `${CACHE_PREFIX}stabilita`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -20,6 +20,7 @@ const APP_SHELL = [
   "./bulk-sharing.js",
   "./hours-closeout.js",
   "./attendance-center.js",
+  "./stability-pack.js",
   "./edilkappa-loader.js?v=3",
   "./firebase-cloud.js?v=36",
   "./sharing-integration.js",

@@ -1,0 +1,42 @@
+name: Controlli EdilKappa
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            mcp-server/package-lock.json
+      - name: Installa funzioni
+        working-directory: functions
+        run: npm ci
+      - name: Testa funzioni e interfaccia
+        working-directory: functions
+        run: npm test && npm run check
+      - name: Installa connettore
+        working-directory: mcp-server
+        run: npm ci
+      - name: Testa connettore
+        working-directory: mcp-server
+        run: npm test && npm run check
+      - name: Verifica pacchetto Hosting
+        run: node scripts/build-hosting.mjs
+

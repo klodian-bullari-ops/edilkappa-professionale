@@ -8,6 +8,7 @@ const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'ut
 const cloudUi = readFileSync(new URL('../../firebase-cloud.js', import.meta.url), 'utf8');
 const firestoreRules = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
+const loader = readFileSync(new URL('../../edilkappa-loader.js', import.meta.url), 'utf8');
 
 type EdilConnectApi = {
   suggestedCongruity: (input: Record<string, unknown>) => boolean;
@@ -144,7 +145,7 @@ test('il CSV usa UTF-8, separatore Excel italiano e include il CUC', () => {
 
 test('i dati amministrativi EdilConnect restano separati e riservati', () => {
   assert.match(indexHtml, /edilconnect:\[\]/);
-  assert.match(indexHtml, /\.\/edilconnect\.js\?v=2/);
+  assert.match(loader, /\.\/edilconnect\.js\?v=2/);
   assert.match(indexHtml, /'timesheets','absences','edilconnect','drone'/);
   assert.match(cloudUi, /\['edilconnect', 'edilconnect'\]/);
   assert.match(firestoreRules, /match \/edilconnect\/\{docId\}[\s\S]*allow read: if isStaff\(\)/);
@@ -152,9 +153,9 @@ test('i dati amministrativi EdilConnect restano separati e riservati', () => {
 });
 
 test('la nuova funzione è disponibile offline', () => {
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
-  assert.match(serviceWorker, /"\.\/edilconnect\.js"/);
-  assert.match(serviceWorker, /caches\.match\(event\.request, \{ ignoreSearch: true \}\)/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
+  assert.match(loader, /\.\/edilconnect\.js\?v=2/);
+  assert.match(serviceWorker, /caches\.match\(event\.request\)/);
   assert.match(moduleSource, /https:\/\/www\.congruitanazionale\.it\/Home\/Simulatore/);
   assert.match(moduleSource, /#modalForm>\.modalBody\{[^}]*overflow-y:auto/);
   assert.match(moduleSource, /\.edilconnectWarning \.row\{display:grid/);

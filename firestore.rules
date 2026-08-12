@@ -438,6 +438,26 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /clientErrors/{docId} {
+      function validClientError(d) {
+        return d.keys().hasAll(['id', 'orgId', 'uid', 'role', 'message', 'source', 'stack', 'createdAt'])
+          && d.keys().hasOnly(['id', 'orgId', 'uid', 'role', 'message', 'source', 'stack', 'createdAt'])
+          && d.id == docId
+          && d.orgId == 'edilkappa'
+          && d.uid == request.auth.uid
+          && d.role == me().role
+          && nonEmptyText(d.message, 1000)
+          && shortText(d.source, 500)
+          && shortText(d.stack, 4000)
+          && d.createdAt is timestamp;
+      }
+
+      allow read: if isStaff();
+      allow create: if active() && validClientError(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
