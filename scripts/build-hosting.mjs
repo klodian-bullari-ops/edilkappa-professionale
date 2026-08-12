@@ -22,6 +22,21 @@ async function copyRuntimeDirectory(directory) {
   });
 }
 
+async function collectRuntimeFiles(rootFiles) {
+  const files = [...rootFiles];
+  async function walk(relativeDirectory) {
+    const entries = (await readdir(path.join(repoRoot, relativeDirectory), { withFileTypes: true }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const relativePath = path.join(relativeDirectory, entry.name);
+      if (entry.isDirectory()) await walk(relativePath);
+      else if (entry.isFile() && !/\.(?:md|txt)$/i.test(entry.name)) files.push(relativePath);
+    }
+  }
+  for (const directory of runtimeDirectories) await walk(directory);
+  return files.sort();
+}
+
 async function buildFingerprint(rootFiles) {
   const hash = createHash("sha256");
   for (const file of rootFiles) {
@@ -38,8 +53,8 @@ function versionLocalAssets(content, fingerprint) {
   });
 }
 
-async function applyBuildVersion(fingerprint) {
-  for (const file of ["index.html", "edilkappa-loader.js", "sw.js"]) {
+async function applyBuildVersion(fingerprint, rootFiles) {
+  for (const file of rootFiles.filter((name) => /\.(?:css|html|js)$/i.test(name))) {
     const target = path.join(outputDir, file);
     let content = await readFile(target, "utf8");
     content = versionLocalAssets(content, fingerprint);
@@ -64,8 +79,8 @@ async function buildHostingPackage() {
 
   await Promise.all(rootFiles.map((file) => cp(path.join(repoRoot, file), path.join(outputDir, file))));
   await Promise.all(runtimeDirectories.map(copyRuntimeDirectory));
-  const fingerprint = await buildFingerprint(rootFiles);
-  await applyBuildVersion(fingerprint);
+  const fingerprint = await buildFingerprint(await collectRuntimeFiles(rootFiles));
+  await applyBuildVersion(fingerprint, rootFiles);
 
   console.log(`Firebase Hosting pronto: ${rootFiles.length} file principali, ${runtimeDirectories.length} cartelle, versione ${fingerprint}.`);
 }

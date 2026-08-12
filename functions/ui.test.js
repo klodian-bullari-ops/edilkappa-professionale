@@ -348,7 +348,9 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   assert.match(html, /firebase-cloud\.js\?v=36/);
   assert.match(cloud, /daneaBridgeRequest/);
   assert.match(danea, /Outlook →/);
-  assert.match(danea, /controllo Gmail ogni 5 minuti/);
+  assert.match(danea, /ultimo controllo/);
+  assert.match(danea, /health === 'active'/);
+  assert.match(danea, /installDaneaTrigger/);
   assert.match(danea, /Collegamento Danea non verificato/);
   assert.match(danea, /outlookState\.retries < 12/);
   assert.match(danea, /retryDaneaBridgeStatus/);
@@ -364,6 +366,9 @@ test("moves Danea intake through the authenticated Gmail bridge", () => {
   assert.match(bridge, /databases\/edilkappa\/documents\/daneaInbox/);
   assert.match(manifest, /www\.googleapis\.com\/auth\/datastore/);
   assert.match(bridge, /everyMinutes\(5\)/);
+  assert.match(bridge, /reportDaneaHeartbeat/);
+  assert.match(bridge, /lastPollAtMs/);
+  assert.match(bridge, /syncDaneaToEdilKappa\(\)/);
   assert.match(bridge, /no-reply@miocondominio\.eu/);
 });
 
@@ -429,10 +434,49 @@ test("shows a reserved system control center with sync and integrity checks", ()
   assert.match(control, /Cloud e accesso/);
   assert.match(control, /Sincronizzazione/);
   assert.match(control, /Richieste Danea/);
+  assert.match(control, /daneaBridgeRequest/);
+  assert.match(control, /sendEdilKappaTestNotification/);
+  assert.match(control, /duplicateClientGroups/);
+  assert.match(control, /Pulizia dati guidata/);
   assert.match(control, /interventi senza cliente valido/);
   assert.match(control, /if \(!isOffice\(\)\) view = 'worker'/);
   assert.match(cloud, /get lastSyncAt\(\)/);
   assert.match(cloud, /get lastSyncError\(\)/);
+});
+
+test("finds duplicate client names even when their address formatting differs", () => {
+  const code = fs.readFileSync(path.join(__dirname, "..", "system-control.js"), "utf8");
+  const sandbox = {
+    window: {},
+    document: { createElement: () => ({ textContent: "" }), head: { appendChild: () => {} } },
+    db: { condomini: [
+      { id: "a", name: "Condominio IL GIARDINO", address: "Via Monte Sabotino 33, 20066 Melzo (MI)" },
+      { id: "b", name: "IL GIARDINO", address: "VIA MONTE SABOTINO 33 - MELZO" }
+    ] },
+    navigator: {},
+    ownerNav: [],
+    more: () => "",
+    view: "dashboard",
+    render: () => {},
+    setTimeout: () => {},
+    console
+  };
+  vm.runInNewContext(code, sandbox);
+  const groups = sandbox.window.EdilKappaSystemControl.duplicateClientGroups();
+  assert.equal(groups.length, 1);
+  assert.deepEqual(Array.from(groups[0], (item) => item.id), ["a", "b"]);
+});
+
+test("requires an auditable reason when a work is closed without evidence", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const completion = fs.readFileSync(path.join(__dirname, "..", "completion-center.js"), "utf8");
+  assert.match(html, /Motivo chiusura senza foto o rapportino/);
+  assert.match(html, /overrideReason\.length<15/);
+  assert.match(completion, /hoursReady/);
+  assert.match(completion, /entry\.hours1/);
+  assert.match(completion, /entry\.hours2/);
+  assert.match(completion, /completionOverrideReason/);
+  assert.match(completion, /motivazione di almeno 15 caratteri/);
 });
 
 test("makes the AI document approval path explicit", () => {

@@ -52,12 +52,18 @@ test("stability interface provides filters pagination trash and backups", () => 
 test("nightly backup and temporary EdilKappa shares replace the legacy transfer service", () => {
   const backend = source("functions/index.js");
   const cloud = source("firebase-cloud.js");
+  const stability = source("stability-pack.js");
   const sharing = `${source("sharing-integration.js")}\n${source("bulk-sharing.js")}`;
   const storage = source("storage.rules");
   assert.match(backend, /exports\.edilkappaBackup/);
   assert.match(backend, /exports\.edilkappaBackup = onCall\(\{[^}]*invoker: "public"/);
   assert.match(backend, /exports\.backupEdilkappaNightly/);
   assert.match(backend, /schedule: "15 2 \* \* \*"/);
+  assert.match(backend, /verifyEdilKappaBackup/);
+  assert.match(backend, /gunzipSync/);
+  assert.match(backend, /checksum/);
+  assert.match(stability, /verifyLatestEdilKappaBackup/);
+  assert.match(stability, /Da verificare/);
   assert.match(backend, /purgeOldClientErrors/);
   assert.match(cloud, /uploadSharePackage/);
   assert.match(storage, /organisations\/edilkappa\/shares/);
@@ -78,11 +84,43 @@ test("build and deployment are versioned and guarded", () => {
   const deploy = source(".github/workflows/deploy-production.yml");
   const quality = source(".github/workflows/quality.yml");
   assert.match(build, /buildFingerprint/);
+  assert.match(build, /collectRuntimeFiles/);
   assert.match(build, /version\.json/);
+  assert.match(build, /rootFiles\.filter/);
   assert.match(deploy, /inputs\.conferma == 'PUBBLICA'/);
-  assert.match(deploy, /firestore:rules,storage,functions:edilkappaBackup/);
-  assert.match(deploy, /functions:edilkappaDaneaBridge/);
+  assert.match(deploy, /google-github-actions\/setup-gcloud@v2/);
+  assert.match(deploy, /firestore:rules,storage,functions:backupEdilkappaNightly/);
+  assert.match(deploy, /for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaNotifications/);
+  assert.match(deploy, /--only "functions:\$\{function_name\}"/);
+  assert.match(deploy, /functions:processDaneaInbox/);
+  assert.match(deploy, /Unable to set the invoker\|Failed to set the IAM Policy/);
+  assert.match(deploy, /deploy_status/);
+  assert.match(deploy, /--no-invoker-iam-check/);
   assert.match(quality, /pull_request/);
+  assert.match(quality, /npm audit --omit=dev --audit-level=moderate/);
+  assert.match(quality, /npm run build/);
+});
+
+test("hosting disables stale root caching and adds safe browser headers", () => {
+  const config = JSON.parse(source("firebase.json"));
+  const headers = config.hosting.headers;
+  assert.ok(headers.some((entry) => entry.source === "/" && entry.headers.some((header) => /no-cache/.test(header.value))));
+  const global = headers.find((entry) => entry.source === "**");
+  assert.ok(global.headers.some((header) => header.key === "X-Content-Type-Options" && header.value === "nosniff"));
+  assert.ok(global.headers.some((header) => header.key === "X-Frame-Options" && header.value === "DENY"));
+});
+
+test("notifications have a protected status and delivery test", () => {
+  const backend = source("functions/index.js");
+  const cloud = source("firebase-cloud.js");
+  const control = source("system-control.js");
+  assert.match(backend, /exports\.edilkappaNotifications = onCall/);
+  assert.match(backend, /Notifica di prova EdilKappa/);
+  assert.match(backend, /currentDeviceRegistered/);
+  assert.match(backend, /deviceId: requestedDeviceId/);
+  assert.match(cloud, /notificationRequest/);
+  assert.match(cloud, /requestPayload\.deviceId = await tokenDocumentId/);
+  assert.match(control, /Invia notifica di prova/);
 });
 
 test("dashboard has one priority area and one scheduled-work area", () => {

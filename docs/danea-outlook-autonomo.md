@@ -9,6 +9,8 @@
    l'identità Google dell'account autorizzato.
 4. Una funzione interna ricontrolla mittente e oggetto, poi elimina i duplicati usando
    Message-ID e, come secondo controllo, studio più codice attività.
+5. A ogni controllo lo script aggiorna un heartbeat privato: il gestionale può così
+   distinguere un ponte realmente attivo da un archivio che contiene soltanto vecchie richieste.
 
 Per ogni richiesta nuova EdilKappa crea o collega cliente, richiesta e cantiere
 pianificato, conserva descrizione/priorità/indirizzo/link ufficiale e invia una
@@ -34,7 +36,9 @@ notifica. Accettazione, rifiuto, invio e cancellazione restano sotto conferma.
    con il contenuto di `scripts/appsscript.json`, che richiede soltanto gli
    ambiti Gmail, trigger, chiamate Google e coda Firestore necessari.
 4. Eseguire una volta `installDaneaTrigger()` e autorizzare Gmail/UrlFetch e
-   l'accesso al progetto Google Cloud.
+   l’accesso al progetto Google Cloud. L’installazione avvia subito anche il primo
+   controllo, quindi nel gestionale lo stato Danea deve diventare verde senza dover
+   attendere una nuova richiesta.
 
 ## Funzioni Firebase
 

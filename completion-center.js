@@ -257,6 +257,12 @@
         : [];
     const documentPhotos = documents.filter((document) => String(document.fileType || '').startsWith('image/'));
     const mediaPhotos = documents.flatMap((document) => document.media || []).filter(fileIsImage);
+    const siteIds = new Set(sites.map((site) => String(site.id)));
+    const hourRows = (data.timesheets || []).filter((entry) => {
+      const total = Number(entry.hours || 0) + Number(entry.hours1 || 0) + Number(entry.hours2 || 0);
+      return siteIds.has(String(entry.siteId || '')) && total > 0;
+    });
+    const hoursRequired = ['site', 'intervention'].includes(kind);
     const photoCount = reportPhotos.length + ownFiles.filter(fileIsImage).length + documentPhotos.length + mediaPhotos.length;
     const finalPhotoCount = reportPhotos.filter((photo) => /dopo|complet/i.test(photo.phase || '')).length
       + reports.filter((report) => report.photoOnly === true && isCompleted(report.status)).reduce((sum, report) => sum + reportPhotoCount(report), 0)
@@ -273,6 +279,9 @@
       photoReady: finalPhotoCount > 0,
       reportReady,
       documentReady,
+      hoursRequired,
+      hoursReady: !hoursRequired || hourRows.length > 0,
+      hourRows,
       reviewed: Boolean(item.completionReviewedAt)
     };
   }
@@ -314,16 +323,17 @@
 
   function checklistHtml(closeout) {
     const item = (ok, label) => `<span class="closeoutCheck ${ok ? 'ok' : 'missing'}">${ok ? '✓' : '!'} ${esc(label)}</span>`;
-    return `<div class="closeoutChecks">${item(closeout.photoReady, 'Foto finali')}${item(closeout.reportReady, 'Rapportino')}${item(closeout.documentReady, 'Documenti')}${item(closeout.reviewed, 'Controllato')}</div>`;
+    return `<div class="closeoutChecks">${item(closeout.photoReady, 'Foto finali')}${item(closeout.reportReady, 'Rapportino')}${closeout.hoursRequired ? item(closeout.hoursReady, 'Ore') : ''}${item(closeout.documentReady, 'Documenti')}${item(closeout.reviewed, 'Controllato')}</div>`;
   }
 
   function completedCard(row) {
-    const missing = !row.closeout.photoReady || !row.closeout.reportReady;
+    const missing = !row.closeout.photoReady || !row.closeout.reportReady || !row.closeout.hoursReady;
     return `<section class="card completedCard ${missing ? 'needsCheck' : ''}">
       <div class="cardHead"><div><span class="pill blue">${esc(row.label)}</span><h3>${esc(row.title)}</h3><small>${esc(row.client)}${row.address ? ` · ${esc(row.address)}` : ''}</small></div>${badge(row.item.archivedAt ? 'Archiviato' : row.closeout.reviewed ? 'Controllato' : 'Da controllare')}</div>
       <div class="completedMeta"><span>✓ Completato ${esc(dateText(row.completedAt))}</span><span>${esc(row.meta)}</span><span>📷 ${row.closeout.photoCount} foto</span><span>📝 ${row.closeout.fullReports.length} rapportini</span></div>
       ${checklistHtml(row.closeout)}
-      ${missing ? '<div class="completionWarning">Prima di archiviare verifica le voci evidenziate.</div>' : ''}
+      ${missing ? '<div class="completionWarning">Prima di archiviare verifica le voci evidenziate. Il titolare può confermare un’eccezione soltanto indicandone il motivo.</div>' : ''}
+      ${row.item.completionOverrideReason ? `<div class="notice"><b>Eccezione autorizzata:</b> ${esc(row.item.completionOverrideReason)}</div>` : ''}
       <div class="actions completedActions"><button class="btn sm green" onclick="openCompletedItem('${row.kind}','${row.id}')">Apri scheda esatta</button><button class="btn sm light" onclick="openCompletedMedia('${row.kind}','${row.id}')">📷 Foto (${row.closeout.photoCount})</button>${!row.item.archivedAt && !row.closeout.reviewed ? `<button class="btn sm lime" onclick="markCompletionReviewed('${row.kind}','${row.id}')">Segna controllato</button>` : ''}${row.item.archivedAt ? `<button class="btn sm light" onclick="restoreArchivedCompleted('${row.kind}','${row.id}')">Ripristina archivio</button>` : `<button class="btn sm light" onclick="reopenCompletedItem('${row.kind}','${row.id}')">Riapri lavoro</button>`}</div>
     </section>`;
   }
@@ -453,6 +463,19 @@
   window.markCompletionReviewed = function (kind, id) {
     const item = itemForKind(kind, id);
     if (!item) return;
+    const closeout = closeoutData(kind, item);
+    const missing = [
+      !closeout.photoReady && 'foto finali',
+      !closeout.reportReady && 'rapportino',
+      !closeout.hoursReady && 'ore'
+    ].filter(Boolean);
+    if (missing.length) {
+      const reason = prompt(`Mancano: ${missing.join(', ')}. Per confermare comunque, indica il motivo dell’eccezione:`);
+      if (!reason) return;
+      if (reason.trim().length < 15) return alert('Scrivi una motivazione di almeno 15 caratteri.');
+      item.completionOverrideReason = reason.trim();
+      item.completionOverrideAt = new Date().toISOString();
+    }
     item.completionReviewedAt = new Date().toISOString();
     item.completionReviewedBy = typeof roleName === 'function' ? roleName() : 'Titolare';
     item.updatedAt = item.completionReviewedAt;
