@@ -5,11 +5,12 @@ import vm from 'node:vm';
 
 const completionUi = readFileSync(new URL('../../completion-center.js', import.meta.url), 'utf8');
 const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+const loader = readFileSync(new URL('../../edilkappa-loader.js', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
 
 test('il centro completati è JavaScript valido ed è caricato dal gestionale', () => {
   assert.doesNotThrow(() => new vm.Script(completionUi));
-  assert.ok(indexHtml.includes('./completion-center.js?v=3'));
+  assert.ok(loader.includes('./completion-center.js?v=3'));
   assert.ok(indexHtml.includes("'completedView','activityView'"));
 });
 
@@ -32,7 +33,7 @@ test('le nuove foto generano un avviso con apertura del punto esatto', () => {
 });
 
 test('il service worker conserva il nuovo modulo e apre gli avvisi cliccati', () => {
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
   assert.ok(serviceWorker.includes('"./completion-center.js"'));
   assert.ok(serviceWorker.includes('notificationclick'));
   assert.ok(serviceWorker.includes('event.notification.data?.url'));

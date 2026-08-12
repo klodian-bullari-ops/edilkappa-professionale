@@ -324,7 +324,7 @@ test("loads the central operations agents and keeps every action under confirmat
   assert.match(center, /latestAttempted: false/);
   assert.match(center, /state\.latestAttempted = true/);
   assert.match(center, /!state\.latestAttempted/);
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
   assert.doesNotMatch(serviceWorker, /"\.\/operations-center\.js"/);
   assert.match(center, /Centro operativo EdilKappa/);
   assert.match(center, /Non inviata: serve la tua conferma/);
@@ -378,7 +378,7 @@ test("keeps the mobile home focused on priorities and the daily work program", (
   assert.match(html, /Ora inizio/);
   assert.match(css, /\.mobileQuoteAction\{grid-column:1\/-1/);
   assert.match(css, /\.dashboardAgenda\{display:block/);
-  assert.match(serviceWorker, /v92-avvio-gestione-foto/);
+  assert.match(serviceWorker, /\$\{CACHE_PREFIX\}stabilita/);
   assert.doesNotMatch(serviceWorker, /ignoreSearch/);
 });
 
@@ -441,10 +441,13 @@ test("makes the AI document approval path explicit", () => {
   assert.match(ai, /Salvataggio/);
 });
 
-test("keeps technical TransferNow settings out of the Danea daily page", () => {
+test("removes the legacy transfer service from Danea and sharing code", () => {
   const danea = fs.readFileSync(path.join(__dirname, "..", "danea-integration.js"), "utf8");
+  const sharing = fs.readFileSync(path.join(__dirname, "..", "sharing-integration.js"), "utf8");
+  const bulk = fs.readFileSync(path.join(__dirname, "..", "bulk-sharing.js"), "utf8");
   const view = danea.slice(danea.indexOf("window.daneaRequestsView"), danea.indexOf("window.openDaneaRequest"));
-  assert.doesNotMatch(view, /openTransferNowSettings/);
+  assert.doesNotMatch(`${view}\n${sharing}\n${bulk}`.toLowerCase(), new RegExp(["transfer", "now"].join("")));
+  assert.match(bulk, /uploadSharePackage/);
 });
 
 test("turns a scheduled inspection into a linked AI quote workflow", () => {

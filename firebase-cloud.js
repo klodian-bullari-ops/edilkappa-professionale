@@ -62,6 +62,7 @@ const functions = getFunctions(app, 'europe-west8');
 const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 610000 });
 const callEdilKappaOperations = httpsCallable(functions, 'edilkappaOperations', { timeout: 550000 });
 const callEdilKappaDaneaBridge = httpsCallable(functions, 'edilkappaDaneaBridge', { timeout: 40000 });
+const callEdilKappaBackup = httpsCallable(functions, 'edilkappaBackup', { timeout: 120000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -130,6 +131,7 @@ const remoteIds = new Map();
 const loadedCollections = new Set();
 const pendingCollectionEvents = new Map();
 const initialHydrationSources = new Set();
+const collectionSyncState = new Map();
 const CLOUD_RENDER_DEBOUNCE_MS = 120;
 const CLOUD_RENDER_MAX_WAIT_MS = 500;
 const INITIAL_HYDRATION_TIMEOUT_MS = 1800;
@@ -188,6 +190,10 @@ const api = {
     const response = await callEdilKappaDaneaBridge(payload);
     return response.data;
   },
+  async backupRequest(payload = { action: 'list' }) {
+    const response = await callEdilKappaBackup(payload);
+    return response.data;
+  },
   restrictView(next) {
     return profile?.role === 'administrator' ? 'portalPreview' : next;
   },
@@ -196,14 +202,23 @@ const api = {
   getAttachmentFile,
   uploadMedia,
   uploadDocument,
+  uploadSharePackage,
   getDocumentUrl,
   openDocument,
   deleteDocument,
+  softDeleteRecord,
+  restoreDeletedRecord,
+  permanentlyDeleteRecord,
+  reportClientError,
+  listClientErrors,
   enablePushNotifications,
   get ready() { return ready; },
   get syncing() { return syncing; },
   get lastSyncAt() { return lastSyncAt; },
   get lastSyncError() { return lastSyncError; },
+  get syncHealth() {
+    return Array.from(collectionSyncState, ([collectionName, state]) => ({ collectionName, ...state }));
+  },
   get currentUid() { return user?.uid || ''; },
   get currentProfile() { return profile; },
   get workerProfiles() {
@@ -382,7 +397,7 @@ async function uploadMedia(file, options = {}) {
       }
     }, reject, resolve);
   });
-  setSyncState('Sincronizzato', '#2f7d32');
+  recomputeSyncState();
   return {
     storagePath: path,
     fileName: String(file.name || 'allegato').slice(0, 180),
@@ -390,6 +405,39 @@ async function uploadMedia(file, options = {}) {
     fileSize: file.size,
     uploadedAt: new Date().toISOString()
   };
+}
+
+async function uploadSharePackage(file, options = {}) {
+  if (!ready || !user || !['owner', 'office'].includes(profile?.role)) {
+    throw new Error('La condivisione dei pacchetti è disponibile al titolare e all’ufficio.');
+  }
+  if (!navigator.onLine) throw new Error('Serve una connessione internet per creare il collegamento.');
+  if (!file?.size) throw new Error('Il pacchetto selezionato è vuoto.');
+  if (file.size > MEDIA_MAX_BYTES) throw new Error('Il pacchetto supera il limite di 2 GB.');
+  const packageId = uploadIdentifier(options.packageId);
+  const path = `organisations/${ORG_ID}/shares/${user.uid}/${packageId}/${safeFileName(file.name || 'allegati-edilkappa.zip')}`;
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const reference = storageRef(storage, path);
+  const task = uploadBytesResumable(reference, file, {
+    contentType: 'application/zip',
+    customMetadata: {
+      orgId: ORG_ID,
+      ownerUid: user.uid,
+      expiresAt,
+      client: String(options.client || '').slice(0, 160),
+      interventionId: String(options.interventionId || '').slice(0, 128)
+    }
+  });
+  await new Promise((resolve, reject) => {
+    task.on('state_changed', (snapshot) => {
+      const progress = Math.round(snapshot.bytesTransferred / snapshot.totalBytes * 100);
+      setSyncState(`Condivisione ${progress}%`, '#d69b18', file.name);
+      options.onProgress?.({ progress, bytesTransferred: snapshot.bytesTransferred, totalBytes: snapshot.totalBytes });
+    }, reject, resolve);
+  });
+  const url = await getDownloadURL(reference);
+  recomputeSyncState();
+  return { url, storagePath: path, expiresAt, fileName: file.name, fileSize: file.size };
 }
 
 async function getDocumentUrl(path) {
@@ -423,6 +471,90 @@ async function deleteDocument(path) {
   }
 }
 
+function remoteTarget(localName, record = {}) {
+  if (localName === 'interventions') return { localName, remoteName: 'documents', recordType: 'Intervention' };
+  const mapping = mappings.find(([name]) => name === localName);
+  if (!mapping) throw new Error('Archivio cloud non riconosciuto.');
+  return { localName, remoteName: mapping[1], recordType: record.recordType || '' };
+}
+
+async function softDeleteRecord(localName, record) {
+  if (!record?.id) throw new Error('Elemento da eliminare non valido.');
+  if (!['owner', 'office'].includes(profile?.role)) throw new Error('Non hai i permessi per usare il cestino.');
+  const target = remoteTarget(localName, record);
+  const tombstone = JSON.parse(safePayload({
+    ...record,
+    ...(target.recordType ? { recordType: target.recordType } : {}),
+    deletedAt: new Date().toISOString(),
+    deletedBy: profile?.displayName || profile?.email || user?.email || 'Utente EdilKappa',
+    deletedCollection: target.remoteName,
+    deletedLocalName: target.localName
+  }));
+  if (ready) {
+    const known = remoteIds.get(target.remoteName) || new Set();
+    await setDoc(doc(firestore, target.remoteName, String(tombstone.id)), envelope(tombstone, target.remoteName, !known.has(String(tombstone.id))), { merge: true });
+  }
+  return tombstone;
+}
+
+async function restoreDeletedRecord(record) {
+  if (!record?.id || !record.deletedCollection || !record.deletedLocalName) throw new Error('Elemento del cestino non valido.');
+  if (!['owner', 'office'].includes(profile?.role)) throw new Error('Non hai i permessi per ripristinare questo elemento.');
+  const restored = JSON.parse(safePayload(record));
+  delete restored.deletedAt;
+  delete restored.deletedBy;
+  delete restored.deletedCollection;
+  delete restored.deletedLocalName;
+  const remoteName = String(record.deletedCollection);
+  const localName = String(record.deletedLocalName);
+  if (localName === 'interventions') restored.recordType = 'Intervention';
+  else delete restored.recordType;
+  const known = remoteIds.get(remoteName) || new Set();
+  await setDoc(doc(firestore, remoteName, String(restored.id)), envelope(restored, remoteName, !known.has(String(restored.id))), { merge: true });
+  return { localName, record: restored };
+}
+
+async function permanentlyDeleteRecord(record) {
+  if (profile?.role !== 'owner') throw new Error('Solo il titolare può eliminare definitivamente.');
+  if (!record?.id || !record.deletedCollection) throw new Error('Elemento del cestino non valido.');
+  await deleteDoc(doc(firestore, String(record.deletedCollection), String(record.id)));
+  if (record.storagePath) await deleteDocument(record.storagePath);
+  return true;
+}
+
+async function reportClientError(event = {}) {
+  if (!ready || !user || !profile?.active || !navigator.onLine) return false;
+  const id = `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  await setDoc(doc(firestore, 'clientErrors', id), {
+    id,
+    orgId: ORG_ID,
+    uid: user.uid,
+    role: String(profile.role || ''),
+    message: String(event.message || 'Errore sconosciuto').slice(0, 1000),
+    source: String(event.source || location.pathname).slice(0, 500),
+    stack: String(event.stack || '').slice(0, 4000),
+    createdAt: serverTimestamp()
+  });
+  return true;
+}
+
+async function listClientErrors(maximum = 30) {
+  if (!ready || !['owner', 'office'].includes(profile?.role)) return [];
+  const snapshot = await getDocs(query(collection(firestore, 'clientErrors'), where('orgId', '==', ORG_ID)));
+  return snapshot.docs.map((item) => {
+    const data = item.data();
+    const createdAt = data.createdAt?.toDate?.() || null;
+    return {
+      id: item.id,
+      message: String(data.message || 'Errore sconosciuto'),
+      source: String(data.source || ''),
+      role: String(data.role || ''),
+      createdAt: createdAt?.toISOString?.() || '',
+      createdAtText: createdAt?.toLocaleString?.('it-IT') || ''
+    };
+  }).sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))).slice(0, Math.min(100, Math.max(1, Number(maximum || 30))));
+}
+
 function setSyncState(label, color = '#d69b18', title = '') {
   const state = document.querySelector('.syncState');
   if (!state) return;
@@ -431,6 +563,41 @@ function setSyncState(label, color = '#d69b18', title = '') {
   if (dot) dot.style.background = color;
   if (text) text.textContent = label;
   state.title = title || label;
+}
+
+function setCollectionSyncState(sourceKey, status, error = '') {
+  collectionSyncState.set(sourceKey, {
+    status,
+    error: String(error || ''),
+    updatedAt: new Date().toISOString()
+  });
+  recomputeSyncState();
+}
+
+function recomputeSyncState() {
+  if (!navigator.onLine) {
+    setSyncState('Offline', '#d69b18', 'Connessione assente: i dati restano disponibili sul dispositivo.');
+    return;
+  }
+  const errors = Array.from(collectionSyncState.entries()).filter(([, state]) => state.status === 'error');
+  if (errors.length) {
+    const names = errors.map(([sourceKey]) => sourceKey.split(':')[0]).filter((value, index, values) => values.indexOf(value) === index);
+    lastSyncError = errors.map(([sourceKey, state]) => `${sourceKey.split(':')[0]}: ${state.error}`).join(' · ');
+    setSyncState(`Errore ${names.length}`, '#ad2a2a', `Archivi non sincronizzati: ${names.join(', ')}. ${lastSyncError}`);
+    return;
+  }
+  lastSyncError = '';
+  if (syncing) {
+    setSyncState('Sincronizzazione…', '#d69b18');
+    return;
+  }
+  const states = Array.from(collectionSyncState.values());
+  if (states.some((state) => state.status === 'pending')) {
+    setSyncState('Da sincronizzare', '#d69b18');
+    return;
+  }
+  if (states.length && states.every((state) => state.status === 'ok')) lastSyncAt = new Date().toISOString();
+  setSyncState(lastSyncAt ? 'Sincronizzato' : 'Collegamento…', lastSyncAt ? '#167448' : '#d69b18');
 }
 
 function installCloudStyles() {
@@ -546,6 +713,7 @@ function stopDataListeners() {
   listenerMaps.clear();
   remoteIds.clear();
   loadedCollections.clear();
+  collectionSyncState.clear();
   pendingCollectionEvents.clear();
   initialHydrationSources.clear();
   clearTimeout(cloudRenderTimer);
@@ -557,6 +725,8 @@ function stopDataListeners() {
   initialHydrationActive = false;
   initialHydrationRegistrationComplete = false;
   ready = false;
+  lastSyncAt = '';
+  lastSyncError = '';
 }
 
 function installAccountButton() {
@@ -607,7 +777,7 @@ async function activate(nextProfile) {
   startDataListeners();
   if (profile.role === 'owner') startUsersListener();
   ready = true;
-  setSyncState(navigator.onLine ? 'Sincronizzato' : 'Offline', navigator.onLine ? '#167448' : '#d69b18');
+  recomputeSyncState();
 }
 
 async function handleProfile(nextProfile) {
@@ -870,17 +1040,30 @@ function mergeSnapshot(remoteName, snapshot, sourceKey = `${remoteName}:default`
   remoteIds.set(remoteName, new Set(map.keys()));
   loadedCollections.add(remoteName);
   const values = Array.from(map.values());
+  const activeValues = values.filter((item) => !item.deletedAt);
+  const deletedValues = values
+    .filter((item) => item.deletedAt)
+    .map((item) => ({
+      ...item,
+      deletedCollection: item.deletedCollection || remoteName,
+      deletedLocalName: item.deletedLocalName || (remoteName === 'documents' && item.recordType === 'Intervention' ? 'interventions' : localName)
+    }));
+  const database = local.getDB();
+  database.trash = [
+    ...(database.trash || []).filter((item) => item.deletedCollection !== remoteName),
+    ...deletedValues
+  ].sort((left, right) => String(right.deletedAt || '').localeCompare(String(left.deletedAt || '')));
   if (remoteName === 'documents') {
-    local.getDB().interventions = values
+    database.interventions = activeValues
       .filter((item) => item.recordType === 'Intervention')
       .map(({ recordType, ...item }) => item);
-    local.getDB().documents = values.filter((item) => item.recordType !== 'Intervention');
+    database.documents = activeValues.filter((item) => item.recordType !== 'Intervention');
   } else {
-    local.getDB()[localName] = values;
+    database[localName] = activeValues;
   }
   if (localName === 'teams' && profile?.role === 'worker') local.setWorkerRole(profile, user.uid);
-  scheduleCloudUi({ remoteName, localName, count: values.length });
-  setSyncState(snapshot.metadata.fromCache && !navigator.onLine ? 'Offline' : 'Sincronizzato', snapshot.metadata.fromCache && !navigator.onLine ? '#d69b18' : '#167448');
+  scheduleCloudUi({ remoteName, localName, count: activeValues.length });
+  setCollectionSyncState(sourceKey, 'ok');
 }
 
 function listenTo(remoteName, constraints = [], listenerId = 'default') {
@@ -893,13 +1076,15 @@ function listenTo(remoteName, constraints = [], listenerId = 'default') {
     settleInitialHydrationSource(sourceKey);
   };
   registerInitialHydrationSource(sourceKey);
+  setCollectionSyncState(sourceKey, 'pending');
   unsubscribers.push(onSnapshot(target, (snapshot) => {
     try { mergeSnapshot(remoteName, snapshot, sourceKey); }
     finally { settleInitialSnapshot(); }
   }, (error) => {
     settleInitialSnapshot();
     console.error(`Sincronizzazione ${remoteName}:`, error);
-    setSyncState('Errore sync', '#ad2a2a', errorText(error));
+    setCollectionSyncState(sourceKey, 'error', errorText(error));
+    reportClientError({ message: `Sincronizzazione ${remoteName}: ${errorText(error)}`, source: 'firebase-cloud/listener', stack: error?.stack }).catch(() => {});
   }));
 }
 
@@ -926,17 +1111,20 @@ function startDataListeners() {
       settleInitialHydrationSource(teamSourceKey);
     };
     registerInitialHydrationSource(teamSourceKey);
+    setCollectionSyncState(teamSourceKey, 'pending');
     unsubscribers.push(onSnapshot(teamRef, (snapshot) => {
       try {
         const database = local.getDB();
         database.teams = snapshot.exists() ? [parseEnvelope(snapshot)] : [];
         local.setWorkerRole(profile, user.uid);
         scheduleCloudUi({ remoteName: 'teams', localName: 'teams', count: database.teams.length });
+        setCollectionSyncState(teamSourceKey, 'ok');
       } finally { settleInitialTeamSnapshot(); }
     }, (error) => {
       settleInitialTeamSnapshot();
       console.error('Sincronizzazione squadra:', error);
-      setSyncState('Errore sync', '#ad2a2a', errorText(error));
+      setCollectionSyncState(teamSourceKey, 'error', errorText(error));
+      reportClientError({ message: `Sincronizzazione squadra: ${errorText(error)}`, source: 'firebase-cloud/listener', stack: error?.stack }).catch(() => {});
     }));
     finishInitialHydrationRegistration();
     return;
@@ -974,13 +1162,10 @@ async function pushCollection(localName, remoteName) {
         ...(database.interventions || []).map((item) => ({ ...item, recordType: 'Intervention' }))
       ]
     : database[localName] || [];
-  const items = workerItems(remoteName, localItems).filter((item) => item?.id);
+  const tombstones = (database.trash || []).filter((item) => item.deletedCollection === remoteName);
+  const items = workerItems(remoteName, [...localItems, ...tombstones]).filter((item) => item?.id);
   const known = remoteIds.get(remoteName) || new Set();
   await Promise.all(items.map((item) => setDoc(doc(firestore, remoteName, String(item.id)), envelope(item, remoteName, !known.has(String(item.id))), { merge: true })));
-  if ((profile.role === 'owner' || profile.role === 'office') && loadedCollections.has(remoteName)) {
-    const localIds = new Set(items.map((item) => String(item.id)));
-    await Promise.all(Array.from(known).filter((id) => !localIds.has(id)).map((id) => deleteDoc(doc(firestore, remoteName, id))));
-  }
 }
 
 async function uploadPendingReportPhotos() {
@@ -1005,7 +1190,7 @@ async function uploadPendingReportPhotos() {
 function scheduleSync() {
   if (!ready || !profile || profile.role === 'administrator') return;
   clearTimeout(syncTimer);
-  setSyncState(navigator.onLine ? 'Da sincronizzare' : 'Offline', '#d69b18');
+  setCollectionSyncState('manual:pending', navigator.onLine ? 'pending' : 'error', navigator.onLine ? '' : 'Connessione assente');
   syncTimer = setTimeout(() => { syncNow().catch(() => {}); }, 900);
 }
 
@@ -1013,17 +1198,17 @@ async function syncNow() {
   if (!ready || syncing || !navigator.onLine || !profile || profile.role === 'administrator') return syncPromise;
   syncing = true;
   syncPromise = (async () => {
-    setSyncState('Sincronizzazione…', '#d69b18');
+    recomputeSyncState();
     await uploadPendingReportPhotos();
     for (const [localName, remoteName] of mappings) await pushCollection(localName, remoteName);
     lastSyncAt = new Date().toISOString();
-    lastSyncError = '';
-    setSyncState('Sincronizzato', '#167448');
+    collectionSyncState.delete('manual:sync');
+    collectionSyncState.delete('manual:pending');
+    recomputeSyncState();
   })().catch((error) => {
-    lastSyncError = errorText(error);
-    setSyncState('Errore sync', '#ad2a2a', errorText(error));
+    setCollectionSyncState('manual:sync', 'error', errorText(error));
     throw error;
-  }).finally(() => { syncing = false; });
+  }).finally(() => { syncing = false; recomputeSyncState(); });
   return syncPromise;
 }
 

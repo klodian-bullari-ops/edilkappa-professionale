@@ -150,10 +150,7 @@
     if (linked.length) {
       return alert(`Questo intervento non può essere eliminato perché contiene ${linked.map(([label, count]) => `${count} ${label}`).join(', ')}. Elimina o sposta prima gli elementi collegati, così nessun dato di lavoro viene perso.`);
     }
-    if (!confirm(`Eliminare definitivamente l’intervento “${item.title || 'Nuovo intervento'}”?`)) return;
-    db.interventions = db.interventions.filter((entry) => entry.id !== id);
-    save();
-    render();
+    return deleteItem('interventions', id, `l’intervento “${item.title || 'Nuovo intervento'}”`);
   };
 
   function openWithContext(clientId, interventionId, opener) {
@@ -359,7 +356,7 @@
       ${item.notes ? `<p class="company">${esc(item.notes)}</p>` : ''}
       <div class="interventionFlow">${flow.steps}</div>
       <div class="interventionNext"><div><b>${esc(flow.label)}</b><small>${esc(flow.detail)}</small></div>${flow.action ? `<button class="btn lime" onclick="${flow.action}">Continua →</button>` : '<span class="pill">Archiviato</span>'}</div>
-      <details class="archiveActionsMenu"><summary>Altre azioni</summary><div class="actions"><button class="btn sm light" onclick="openInspectionForIntervention('${client.id}','${item.id}')">＋ Sopralluogo</button><button class="btn sm light" onclick="openSiteForIntervention('${client.id}','${item.id}')">＋ Cantiere</button><button class="btn sm light" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm light" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica</button><button class="btn sm red" onclick="deleteIntervention('${item.id}','${client.id}')">Elimina</button></div></details>
+      <details class="archiveActionsMenu"><summary>Altre azioni</summary><div class="actions"><button class="btn sm light" onclick="openInspectionForIntervention('${client.id}','${item.id}')">＋ Sopralluogo</button><button class="btn sm light" onclick="openSiteForIntervention('${client.id}','${item.id}')">＋ Cantiere</button><button class="btn sm light" onclick="openQuoteForIntervention('${client.id}','${item.id}')">＋ Preventivo PDF</button><button class="btn sm light" onclick="openDocumentForIntervention('${client.id}','${item.id}')">＋ Documento / Foto / Video</button><button class="btn sm light" onclick="openIntervention('${item.id}','${client.id}')">Modifica</button><button class="btn sm red" onclick="deleteIntervention('${item.id}','${client.id}')">Sposta nel cestino</button></div></details>
       ${operationalGroups(item, rows)}
       ${groupedFiles(rows)}
     </section>`;

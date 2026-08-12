@@ -7,6 +7,7 @@ const learning = readFileSync(new URL('../../controlled-learning.js', import.met
 const ai = readFileSync(new URL('../../edilkappa-ai.js', import.meta.url), 'utf8');
 const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
+const loader = readFileSync(new URL('../../edilkappa-loader.js', import.meta.url), 'utf8');
 
 function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
   let renderNavCount = 0;
@@ -30,10 +31,10 @@ function loadLearning(database: Record<string, unknown>, activeRole = 'owner') {
 }
 
 test('il modulo di apprendimento controllato è caricato e disponibile offline', () => {
-  assert.ok(indexHtml.includes('./controlled-learning.js?v=2'));
-  assert.ok(indexHtml.includes("['learningCenter','🧠','Memoria AI']"));
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
-  assert.ok(serviceWorker.includes('"./controlled-learning.js"'));
+  assert.ok(loader.includes('./controlled-learning.js?v=2'));
+  assert.ok(learning.includes("['learningCenter', '🧠', 'Memoria AI']"));
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
+  assert.match(serviceWorker, /cache\.put\(event\.request/);
 });
 
 test('Memoria AI compare nel menu già alla prima apertura', () => {

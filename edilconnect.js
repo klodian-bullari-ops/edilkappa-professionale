@@ -532,16 +532,6 @@
     save();
   };
 
-  const baseDeleteItem = deleteItem;
-  deleteItem = async function (collectionName, id, label) {
-    const existed = collectionName === 'sites' && (database().sites || []).some((site) => String(site.id) === String(id));
-    await baseDeleteItem(collectionName, id, label);
-    if (!existed || (database().sites || []).some((site) => String(site.id) === String(id))) return;
-    database().edilconnect = (database().edilconnect || []).filter((item) => !(item.recordType === 'site' && String(item.siteId) === String(id)));
-    save();
-    render();
-  };
-
   window.setEdilConnectMonth = function (value) {
     reportMonth = String(value || new Date().toISOString().slice(0, 7));
     reportSite = '';

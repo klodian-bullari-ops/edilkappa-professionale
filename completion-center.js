@@ -9,7 +9,9 @@
   const MAX_NOTIFICATIONS = 120;
   let completedFilter = 'all';
   let completedQuery = '';
+  let completedPage = 1;
   let activityFilter = 'unread';
+  const COMPLETED_PAGE_SIZE = 20;
 
   function database() {
     return window.EdilKappaLocal?.getDB?.() || db || {};
@@ -318,44 +320,83 @@
   function completedCard(row) {
     const missing = !row.closeout.photoReady || !row.closeout.reportReady;
     return `<section class="card completedCard ${missing ? 'needsCheck' : ''}">
-      <div class="cardHead"><div><span class="pill blue">${esc(row.label)}</span><h3>${esc(row.title)}</h3><small>${esc(row.client)}${row.address ? ` · ${esc(row.address)}` : ''}</small></div>${badge(row.closeout.reviewed ? 'Controllato' : 'Da controllare')}</div>
+      <div class="cardHead"><div><span class="pill blue">${esc(row.label)}</span><h3>${esc(row.title)}</h3><small>${esc(row.client)}${row.address ? ` · ${esc(row.address)}` : ''}</small></div>${badge(row.item.archivedAt ? 'Archiviato' : row.closeout.reviewed ? 'Controllato' : 'Da controllare')}</div>
       <div class="completedMeta"><span>✓ Completato ${esc(dateText(row.completedAt))}</span><span>${esc(row.meta)}</span><span>📷 ${row.closeout.photoCount} foto</span><span>📝 ${row.closeout.fullReports.length} rapportini</span></div>
       ${checklistHtml(row.closeout)}
       ${missing ? '<div class="completionWarning">Prima di archiviare verifica le voci evidenziate.</div>' : ''}
-      <div class="actions completedActions"><button class="btn sm green" onclick="openCompletedItem('${row.kind}','${row.id}')">Apri scheda esatta</button><button class="btn sm light" onclick="openCompletedMedia('${row.kind}','${row.id}')">📷 Foto (${row.closeout.photoCount})</button>${!row.closeout.reviewed ? `<button class="btn sm lime" onclick="markCompletionReviewed('${row.kind}','${row.id}')">Segna controllato</button>` : ''}<button class="btn sm light" onclick="reopenCompletedItem('${row.kind}','${row.id}')">Riapri lavoro</button></div>
+      <div class="actions completedActions"><button class="btn sm green" onclick="openCompletedItem('${row.kind}','${row.id}')">Apri scheda esatta</button><button class="btn sm light" onclick="openCompletedMedia('${row.kind}','${row.id}')">📷 Foto (${row.closeout.photoCount})</button>${!row.item.archivedAt && !row.closeout.reviewed ? `<button class="btn sm lime" onclick="markCompletionReviewed('${row.kind}','${row.id}')">Segna controllato</button>` : ''}${row.item.archivedAt ? `<button class="btn sm light" onclick="restoreArchivedCompleted('${row.kind}','${row.id}')">Ripristina archivio</button>` : `<button class="btn sm light" onclick="reopenCompletedItem('${row.kind}','${row.id}')">Riapri lavoro</button>`}</div>
     </section>`;
   }
 
   window.setCompletedFilter = function (value) {
     completedFilter = value;
+    completedPage = 1;
     render();
   };
 
   window.setCompletedQuery = function (value) {
     completedQuery = String(value || '').trim().toLocaleLowerCase('it');
+    completedPage = 1;
     render();
     const input = document.getElementById('completedSearch');
     if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
   };
 
+  window.setCompletedPage = function (value) {
+    completedPage = Math.max(1, Number(value || 1));
+    render();
+  };
+
+  window.archiveLegacyCompleted = function () {
+    const threshold = dateValue(FEATURE_RELEASE_AT);
+    const rows = completedRows().filter((row) => !row.item.archivedAt && dateValue(row.completedAt) < threshold);
+    if (!rows.length) return alert('Non risultano lavori storici precedenti al nuovo sistema di controllo.');
+    if (!confirm(`Archiviare ${rows.length} lavori storici precedenti ad agosto 2026? Potrai recuperarli dal filtro Archiviati.`)) return;
+    const now = new Date().toISOString();
+    rows.forEach((row) => {
+      row.item.archivedAt = now;
+      row.item.archivedBy = typeof roleName === 'function' ? roleName() : 'Titolare';
+      row.item.completionReviewedAt = row.item.completionReviewedAt || now;
+      row.item.updatedAt = now;
+    });
+    save(); render();
+  };
+
+  window.restoreArchivedCompleted = function (kind, id) {
+    const item = itemForKind(kind, id);
+    if (!item) return;
+    delete item.archivedAt;
+    delete item.archivedBy;
+    item.updatedAt = new Date().toISOString();
+    save(); render();
+  };
+
   window.completedView = function () {
     const all = completedRows();
-    const needsReview = all.filter((row) => !row.closeout.reviewed || !row.closeout.photoReady || !row.closeout.reportReady);
+    const visible = all.filter((row) => !row.item.archivedAt);
+    const archived = all.filter((row) => row.item.archivedAt);
+    const needsReview = visible.filter((row) => !row.closeout.reviewed || !row.closeout.photoReady || !row.closeout.reportReady);
     const counts = {
-      sites: all.filter((row) => row.kind === 'site').length,
-      interventions: all.filter((row) => row.kind === 'intervention').length,
-      maintenance: all.filter((row) => completedKindGroup(row.kind) === 'maintenance').length
+      sites: visible.filter((row) => row.kind === 'site').length,
+      interventions: visible.filter((row) => row.kind === 'intervention').length,
+      maintenance: visible.filter((row) => completedKindGroup(row.kind) === 'maintenance').length
     };
     const rows = all.filter((row) => {
+      if (completedFilter === 'archived' && !row.item.archivedAt) return false;
+      if (completedFilter !== 'archived' && row.item.archivedAt) return false;
       if (completedFilter === 'review' && !needsReview.includes(row)) return false;
-      if (!['all', 'review'].includes(completedFilter) && completedKindGroup(row.kind) !== completedFilter) return false;
+      if (!['all', 'review', 'archived'].includes(completedFilter) && completedKindGroup(row.kind) !== completedFilter) return false;
       if (!completedQuery) return true;
       return JSON.stringify([row.title, row.client, row.address, row.meta]).toLocaleLowerCase('it').includes(completedQuery);
     });
-    return pageHead('Lavori completati', 'Archivio separato di cantieri e interventi conclusi', '<button class="btn light" onclick="go(\'activityView\')">🔔 Avvisi</button>') +
-      `<div class="grid stats">${stat('Completati', all.length, '✓')}${stat('Cantieri', counts.sites, '🏗️')}${stat('Interventi', counts.interventions + counts.maintenance, '🛠️')}${stat('Da controllare', needsReview.length, '!')}</div>
-      <div class="completedToolbar"><div class="completionFilters">${completedFilterButton('all', 'Tutti', all.length)}${completedFilterButton('sites', 'Cantieri', counts.sites)}${completedFilterButton('interventions', 'Interventi', counts.interventions)}${completedFilterButton('maintenance', 'Manutenzioni', counts.maintenance)}${completedFilterButton('review', 'Da controllare', needsReview.length)}</div><input id="completedSearch" class="search" type="search" placeholder="Cerca cliente, indirizzo o lavoro…" value="${esc(completedQuery)}" oninput="setCompletedQuery(this.value)"></div>
-      <div class="list">${rows.map(completedCard).join('') || '<div class="empty">Nessun lavoro completato per questo filtro.</div>'}</div>`;
+    const pages = Math.max(1, Math.ceil(rows.length / COMPLETED_PAGE_SIZE));
+    completedPage = Math.min(completedPage, pages);
+    const pageRows = rows.slice((completedPage - 1) * COMPLETED_PAGE_SIZE, completedPage * COMPLETED_PAGE_SIZE);
+    const pager = pages > 1 ? `<div class="stablePagination"><span>${rows.length} risultati · pagina ${completedPage} di ${pages}</span><div class="actions"><button class="btn sm light" ${completedPage <= 1 ? 'disabled' : ''} onclick="setCompletedPage(${completedPage - 1})">‹ Precedente</button><button class="btn sm light" ${completedPage >= pages ? 'disabled' : ''} onclick="setCompletedPage(${completedPage + 1})">Successiva ›</button></div></div>` : '';
+    return pageHead('Lavori completati', 'Controlla i recenti e archivia in massa soltanto lo storico', '<button class="btn light" onclick="archiveLegacyCompleted()">Archivia storici</button><button class="btn light" onclick="go(\'activityView\')">🔔 Avvisi</button>') +
+      `<div class="grid stats">${stat('Completati', visible.length, '✓')}${stat('Cantieri', counts.sites, '🏗️')}${stat('Archiviati', archived.length, '📦')}${stat('Da controllare', needsReview.length, '!')}</div>
+      <div class="completedToolbar"><div class="completionFilters">${completedFilterButton('all', 'Tutti', visible.length)}${completedFilterButton('sites', 'Cantieri', counts.sites)}${completedFilterButton('interventions', 'Interventi', counts.interventions)}${completedFilterButton('maintenance', 'Manutenzioni', counts.maintenance)}${completedFilterButton('review', 'Da controllare', needsReview.length)}${completedFilterButton('archived', 'Archiviati', archived.length)}</div><input id="completedSearch" class="search" type="search" placeholder="Cerca cliente, indirizzo o lavoro…" value="${esc(completedQuery)}" oninput="setCompletedQuery(this.value)"></div>
+      <div class="list">${pageRows.map(completedCard).join('') || '<div class="empty">Nessun lavoro completato per questo filtro.</div>'}</div>${pager}`;
   };
 
   function collectionForKind(kind) {

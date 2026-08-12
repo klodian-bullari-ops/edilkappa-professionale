@@ -143,10 +143,16 @@
     persist();
   };
 
-  window.deleteAbsenceGroup = (groupId) => {
+  window.deleteAbsenceGroup = async (groupId) => {
     if (!officeUser() || !confirm('Eliminare questa assenza?')) return;
-    database().absences = database().absences.filter((row) => row.groupId !== groupId && row.id !== groupId);
-    persist();
+    const rows = database().absences.filter((row) => row.groupId === groupId || row.id === groupId);
+    try {
+      const tombstones = await Promise.all(rows.map((row) => window.EdilKappaCloud?.softDeleteRecord?.('absences', row)));
+      if (tombstones.some((row) => !row)) throw new Error('Il collegamento cloud non è ancora pronto.');
+      database().absences = database().absences.filter((row) => row.groupId !== groupId && row.id !== groupId);
+      database().trash = [...(database().trash || []), ...tombstones];
+      persist();
+    } catch (error) { alert(error.message || 'Non è stato possibile spostare l’assenza nel cestino.'); }
   };
 
   function statusBadge(status) {

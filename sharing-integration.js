@@ -1,6 +1,3 @@
-const EDILKAPPA_SHARING_URL = 'https://edilkappa-condivisioni.edilkappasas.chatgpt.site';
-const VALID_TRANSFER_AGE = 6 * 24 * 60 * 60 * 1000;
-const FIREBASE_AUTH_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 const FIREBASE_STORAGE_MODULE = 'https://www.gstatic.com/firebasejs/12.16.0/firebase-storage.js';
 const SHARE_FIELDS = new Set(['media', 'photos']);
 const MAX_DEVICE_ATTACHMENTS = 4;
@@ -122,32 +119,6 @@ function exactDaneaContext(collectionName, itemId, attachmentIndex = null, attac
   return { ...context, intervention, request, interventionId, daneaRequestId, daneaUrl };
 }
 
-function recentTransfer(attachment) {
-  const createdAt = Date.parse(attachment?.transferNowCreatedAt || '');
-  return String(attachment?.transferNowLink || '').startsWith('https://www.transfernow.net/') &&
-    Number.isFinite(createdAt) &&
-    Date.now() - createdAt < VALID_TRANSFER_AGE;
-}
-
-async function sharingRequest(path, options = {}) {
-  const { getAuth } = await import(FIREBASE_AUTH_MODULE);
-  const user = getAuth().currentUser;
-  if (!user || !window.EdilKappaCloud?.ready) throw new Error('Accedi al gestionale prima di condividere il file.');
-  const token = await user.getIdToken();
-  const response = await fetch(`${EDILKAPPA_SHARING_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
-  });
-  let body = {};
-  try { body = await response.json(); } catch (_) {}
-  if (!response.ok || !body.ok) throw new Error(body.error || 'Il servizio di condivisione non ha risposto correttamente.');
-  return body;
-}
-
 async function copyText(value) {
   try {
     await navigator.clipboard.writeText(value);
@@ -176,36 +147,6 @@ function setSharingStatus(message, error = false, html = '') {
   target.className = `sharingStatus${error ? ' error' : ''}`;
   if (html) target.innerHTML = html;
   else target.textContent = message;
-}
-
-async function createTransfer(context) {
-  if (!context.storagePath || !context.fileSize) {
-    throw new Error('TransferNow richiede un file già salvato nel cloud con dimensione disponibile.');
-  }
-  if (recentTransfer(context.attachment)) {
-    return { transferId: context.attachment.transferNowId || '', link: context.attachment.transferNowLink };
-  }
-  const sourceUrl = await downloadUrlFor(context);
-  const daneaCode = context.request.daneaId || context.daneaRequestId;
-  const result = await sharingRequest('/api/transfernow', {
-    method: 'POST',
-    body: JSON.stringify({
-      fileName: context.fileName,
-      fileSize: context.fileSize,
-      sourceUrl,
-      interventionId: context.interventionId,
-      daneaRequestId: context.daneaRequestId,
-      subject: `EdilKappa · ${context.fileName}`,
-      message: `Allegato EdilKappa per l’intervento Danea ${daneaCode}: ${context.intervention.title || context.item.title || context.item.subject || context.fileName}`
-    })
-  });
-  context.attachment.transferNowId = result.transferId;
-  context.attachment.transferNowLink = result.link;
-  context.attachment.transferNowCreatedAt = new Date().toISOString();
-  context.item.updatedAt = new Date().toISOString();
-  window.EdilKappaLocal?.persist?.();
-  window.EdilKappaCloud?.scheduleSync?.();
-  return result;
 }
 
 async function linkMessage(contexts) {
@@ -306,34 +247,6 @@ async function shareDirectToDanea(context, popup) {
   }
 }
 
-window.openTransferNowSettings = function () {
-  const role = window.EdilKappaCloud?.currentProfile?.role;
-  if (role !== 'owner') return alert('La configurazione TransferNow è riservata al titolare.');
-  modal('Configura TransferNow', `<div class="notice"><b>Chiave protetta</b><br>La chiave viene verificata e cifrata nel servizio EdilKappa. Non resta memorizzata nel browser.</div><div style="height:14px"></div>
-    <div class="field"><label>Chiave API TransferNow</label><input name="apiKey" type="password" autocomplete="new-password" minlength="16" required placeholder="Inserisci la chiave dal tuo account TransferNow"><small>Non condividere questa chiave in chat, e-mail o messaggi.</small></div>`,
-  async (formData) => {
-    const apiKey = String(formData.get('apiKey') || '').trim();
-    if (apiKey.length < 16 || /\s/.test(apiKey)) throw new Error('Inserisci una chiave API TransferNow valida.');
-    await sharingRequest('/api/settings/transfernow', { method: 'POST', body: JSON.stringify({ apiKey }) });
-    setTimeout(() => alert('TransferNow è configurato e pronto per gli invii.'), 80);
-  });
-};
-
-window.shareWithTransferNow = async function (collectionName, itemId, attachmentIndex = null, attachmentField = 'media', button = null) {
-  setButtonBusy(button, true);
-  try {
-    const context = exactDaneaContext(collectionName, itemId, attachmentIndex, attachmentField);
-    const result = await createTransfer(context);
-    const copied = await copyText(result.link);
-    if (!copied) return prompt('Copia il collegamento TransferNow:', result.link);
-    if (confirm('Collegamento TransferNow creato e copiato. Vuoi aprirlo ora?')) window.open(result.link, '_blank', 'noopener');
-  } catch (error) {
-    alert(error.message || 'Impossibile creare il collegamento TransferNow.');
-  } finally {
-    setButtonBusy(button, false);
-  }
-};
-
 window.shareArchiveToDanea = async function (collectionName, itemId, attachmentIndex = null, attachmentField = 'media', button = null) {
   const daneaWindow = openPreparedWindow();
   setButtonBusy(button, true);
@@ -409,12 +322,6 @@ async function runSharingAction(action, allContexts, button) {
     } else if (action === 'danea') {
       if (contexts.length !== 1) throw new Error('Per Danea seleziona un file alla volta.');
       await shareDirectToDanea(contexts[0], popup);
-    } else if (action === 'transfernow') {
-      if (contexts.length !== 1) throw new Error('Per TransferNow seleziona un file alla volta.');
-      const context = exactDaneaContext(contexts[0].collectionName, contexts[0].itemId, contexts[0].attachmentIndex, contexts[0].attachmentField);
-      const result = await createTransfer(context);
-      if (await copyText(result.link)) setSharingStatus('Collegamento TransferNow copiato.');
-      else prompt('Copia il collegamento TransferNow:', result.link);
     }
   } catch (error) {
     popup?.close();
@@ -433,7 +340,6 @@ function renderSharingDialog(title, contexts, selectable = false) {
   const content = document.getElementById('modalContent');
   if (!dialog || !content) throw new Error('La finestra di condivisione non è disponibile.');
   const singleDanea = contexts.length === 1 && canShareDanea(contexts[0]);
-  const singleTransfer = singleDanea && contexts[0].storagePath && contexts[0].fileSize > 0;
   const rows = contexts.map((context, index) => `<label class="sharingFileRow">
     ${selectable ? `<input type="checkbox" data-sharing-file-index="${index}" checked>` : '<span class="sharingFileCheck">✓</span>'}
     <span class="sharingFileIcon">${String(context.fileType).startsWith('video/') ? '🎬' : String(context.fileType).startsWith('image/') ? '🖼️' : '📄'}</span>
@@ -451,7 +357,6 @@ function renderSharingDialog(title, contexts, selectable = false) {
         ${shareChoice('download', '⬇️', 'Scarica', 'Salva uno o più file')}
         ${shareChoice('copy', '📋', 'Copia collegamento', 'Incollalo dove preferisci')}
         ${singleDanea ? shareChoice('danea', 'D', 'Danea', 'Apre la pratica collegata') : ''}
-        ${singleTransfer ? shareChoice('transfernow', 'T', 'TransferNow', 'Facoltativo per file grandi') : ''}
       </div>
     </div>
     <div class="modalFoot"><button class="btn light" type="button" onclick="closeModal()">Chiudi</button></div>`;

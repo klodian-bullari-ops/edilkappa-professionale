@@ -6,6 +6,7 @@ import vm from 'node:vm';
 const lifecycleUi = readFileSync(new URL('../../intervention-lifecycle.js', import.meta.url), 'utf8');
 const indexHtml = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../../sw.js', import.meta.url), 'utf8');
+const loader = readFileSync(new URL('../../edilkappa-loader.js', import.meta.url), 'utf8');
 
 type LifecycleContext = {
   db: Record<string, Array<Record<string, unknown>>>;
@@ -95,9 +96,9 @@ test('aprire una richiesta porta direttamente alla scheda del relativo intervent
 });
 
 test('il ciclo intervento è caricato e disponibile anche offline', () => {
-  assert.ok(indexHtml.includes('./intervention-lifecycle.js?v=3'));
-  assert.ok(indexHtml.includes('./client-archive.js?v=20'));
+  assert.ok(loader.includes('./intervention-lifecycle.js?v=4'));
+  assert.ok(loader.includes('./client-archive.js?v=24'));
   assert.match(indexHtml, /\.\/sw\.js\?v=\d+/);
-  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}v\d+-[a-z0-9-]+`/);
+  assert.match(serviceWorker, /const CACHE = `\$\{CACHE_PREFIX\}stabilita`/);
   assert.ok(serviceWorker.includes('"./intervention-lifecycle.js"'));
 });

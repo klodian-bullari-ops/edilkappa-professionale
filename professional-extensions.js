@@ -188,21 +188,6 @@
     popup.document.close(); setTimeout(() => popup.print(), 400);
   };
 
-  function todayPanel() {
-    const today = localToday(), soon = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), rows = [];
-    db.inspections.filter((x) => x.date === today).forEach((x) => rows.push({ icon: '📅', title: 'Sopralluogo', text: `${x.time} · ${x.client} · ${x.address}`, view: 'agenda' }));
-    db.sites.filter((x) => x.status === 'In corso').forEach((x) => rows.push({ icon: '🏗️', title: 'Cantiere da controllare', text: `${x.title} · ${x.client}`, view: 'sites' }));
-    db.quotes.filter((x) => ['Inviato', 'In attesa'].includes(x.status)).forEach((x) => rows.push({ icon: '📄', title: 'Preventivo da richiamare', text: `${x.code} · ${x.client}`, view: 'quotes' }));
-    db.payments.filter((x) => paymentStatus(x) === 'Scaduto').forEach((x) => rows.push({ icon: '€', title: 'Pagamento scaduto', text: `${x.client} · ${euro(Number(x.amount || 0) - Number(x.paid || 0))}`, view: 'payments' }));
-    db.documents.filter((x) => x.expiry && x.expiry <= soon && documentStatus(x) !== 'Valido').forEach((x) => rows.push({ icon: '⚠️', title: 'Documento in scadenza', text: `${x.title} · ${x.expiry}`, view: 'documentsView' }));
-    const missing = STAFF.filter((p) => !individualHourRows().some((x) => x.worker === p.id && x.date === today));
-    if (missing.length) rows.push({ icon: '⏱️', title: 'Ore non comunicate', text: missing.map((x) => x.name).join(', '), view: 'hours' });
-    return `<div class="sectionHead"><h2>Cosa devo fare oggi</h2></div><div class="card"><div class="list">${rows.map((x) => `<div class="row"><div class="rowIcon">${x.icon}</div><div class="rowBody"><b>${x.title}</b><small>${esc(x.text)}</small></div><button class="btn sm green" onclick="go('${x.view}')">Apri</button></div>`).join('') || '<div class="okbox">Nessuna attività urgente: giornata sotto controllo.</div>'}</div></div>`;
-  }
-
-  const baseDashboard = dashboard;
-  dashboard = function () { return baseDashboard() + todayPanel(); };
-
   more = function () {
     const links = [['ai','✦','EdilKappa AI'],['agenda','📅','Agenda'],['condomini','🏢','Condomìni'],['quotes','📄','Preventivi'],['workMap','🗺️','Mappa lavori'],['hours','⏱️','Ore operai'],['payments','€','Pagamenti'],['documentsView','📁','Documenti'],['auditView','↺','Registro modifiche'],['teamsView','👥','Squadre'],['drone','🚁','Drone'],['lifeline','⚓','Linea vita'],['roofs','🏠','Tetti e gronde'],['drains','🕳️','Pozzetti e tombini'],['finance','📈','Costi e margini']];
     return pageHead('Tutti gli strumenti', 'Scegli il modulo da aprire') + `<div class="grid quick">${links.map((x) => `<button onclick="go('${x[0]}')"><span>${x[1]}</span>${x[2]}</button>`).join('')}</div>`;

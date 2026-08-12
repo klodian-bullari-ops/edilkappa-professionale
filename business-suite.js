@@ -231,9 +231,7 @@
   };
 
   window.deleteReport = function (id) {
-    if (!confirm('Eliminare questo rapportino?')) return;
-    db.reports = db.reports.filter((item) => item.id !== id);
-    save(); render();
+    return deleteItem('reports', id, 'questo rapportino');
   };
 
   window.reportsView = function () {
