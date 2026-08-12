@@ -40,5 +40,4 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EDILKAPPA }}
       - name: Pubblica Hosting, regole e funzioni di sicurezza
-        run: npx --yes firebase-tools deploy --project edilkappa-professionale --only hosting,firestore:rules,storage,functions:edilkappaBackup,functions:backupEdilkappaNightly --non-interactive
-
+        run: npx --yes firebase-tools deploy --project edilkappa-professionale --only hosting,firestore:rules,storage,functions:edilkappaBackup,functions:backupEdilkappaNightly,functions:edilkappaDaneaBridge --non-interactive

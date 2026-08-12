@@ -17,7 +17,7 @@
   };
   let daneaFilter = 'Aperti';
   let daneaSiteSyncTimer = null;
-  const outlookState = { loading: false, status: null, error: '', device: null };
+  const outlookState = { loading: false, status: null, error: '', retries: 0, retryTimer: null };
   const cloudCollectionsReady = new Set();
 
   const style = document.createElement('style');
@@ -329,17 +329,40 @@
   }
 
   async function loadOutlookStatus() {
-    if (outlookState.loading || !window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.daneaBridgeRequest) return;
+    if (outlookState.loading) return;
+    if (!window.EdilKappaCloud?.ready || !window.EdilKappaCloud?.daneaBridgeRequest) {
+      if (view === 'daneaRequestsView' && outlookState.retries < 12 && !outlookState.retryTimer) {
+        outlookState.retries += 1;
+        outlookState.retryTimer = setTimeout(() => {
+          outlookState.retryTimer = null;
+          loadOutlookStatus();
+        }, 500);
+      }
+      return;
+    }
+    outlookState.retries = 0;
     outlookState.loading = true;
     try { outlookState.status = await outlookRequest({ action: 'status' }); outlookState.error = ''; }
-    catch (error) { outlookState.error = error?.message || 'Stato del ponte Danea non disponibile.'; }
+    catch (error) { outlookState.status = null; outlookState.error = error?.message || 'Stato del ponte Danea non disponibile.'; }
     finally { outlookState.loading = false; if (view === 'daneaRequestsView') render(); }
   }
+
+  window.retryDaneaBridgeStatus = function () {
+    if (outlookState.retryTimer) clearTimeout(outlookState.retryTimer);
+    outlookState.retryTimer = null;
+    outlookState.retries = 0;
+    outlookState.error = '';
+    outlookState.status = null;
+    loadOutlookStatus();
+    render();
+  };
 
   function outlookPanel() {
     const status = outlookState.status;
     if (status?.connected) return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>✓ Importazione Danea automatica</b><small style="display:block">Outlook → ${esc(status.mailbox || 'info@edilkappa.com')} → EdilKappa · controllo Gmail ogni 5 minuti${status.lastReceivedAtMs ? ` · ultima richiesta ${esc(dateTimeText(new Date(status.lastReceivedAtMs).toISOString()))}` : ''}</small></div></div>${status.lastError ? `<div class="notice">Ultimo errore: ${esc(status.lastError)}</div>` : ''}</section>`;
-    return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>Configurazione importazione Danea in corso</b><small style="display:block">Le richieste saranno reindirizzate da edilkappasas@outlook.it a info@edilkappa.com e importate senza duplicati. Il collegamento diventerà verde alla prima richiesta ricevuta.</small></div></div>${outlookState.error ? `<div class="notice">${esc(outlookState.error)}</div>` : ''}</section>`;
+    if (outlookState.error) return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>⚠ Collegamento Danea non verificato</b><small style="display:block">Il gestionale non ha potuto controllare il ponte automatico. Le richieste già salvate restano disponibili.</small></div><button class="btn sm light" onclick="retryDaneaBridgeStatus()">Riprova</button></div><div class="notice">${esc(outlookState.error)}</div></section>`;
+    if (outlookState.loading || outlookState.retries) return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>Controllo collegamento Danea…</b><small style="display:block">Verifica sicura del ponte Outlook → EdilKappa in corso.</small></div></div></section>`;
+    return `<section class="daneaOutlook"><div class="daneaOutlookHead"><div><b>Configurazione importazione Danea in corso</b><small style="display:block">Le richieste saranno reindirizzate da edilkappasas@outlook.it a info@edilkappa.com e importate senza duplicati. Il collegamento diventerà verde alla prima richiesta ricevuta.</small></div></div></section>`;
   }
 
   function mergeImportedRequest(data) {
