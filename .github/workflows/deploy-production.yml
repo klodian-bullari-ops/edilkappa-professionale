@@ -19,7 +19,7 @@ jobs:
   deploy:
     if: inputs.conferma == 'PUBBLICA'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -32,12 +32,39 @@ jobs:
             mcp-server/package-lock.json
       - name: Installa e testa funzioni
         working-directory: functions
-        run: npm ci && npm test && npm run check
+        run: npm ci && npm test && npm run check && npm audit --omit=dev --audit-level=moderate
       - name: Installa e testa connettore
         working-directory: mcp-server
-        run: npm ci && npm test && npm run check
+        run: npm ci && npm test && npm run check && npm run build && npm audit --omit=dev --audit-level=moderate
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EDILKAPPA }}
-      - name: Pubblica Hosting, regole e funzioni di sicurezza
-        run: npx --yes firebase-tools deploy --project edilkappa-professionale --only hosting,firestore:rules,storage,functions:edilkappaBackup,functions:backupEdilkappaNightly,functions:edilkappaDaneaBridge --non-interactive
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Pubblica Hosting, regole e funzioni interne
+        run: npx --yes firebase-tools deploy --project edilkappa-professionale --only hosting,firestore:rules,storage,functions:backupEdilkappaNightly,functions:processDaneaInbox --non-interactive
+      - name: Pubblica le funzioni callable
+        run: |
+          set -euo pipefail
+          for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaNotifications; do
+            deploy_log="$(mktemp)"
+            set +e
+            npx --yes firebase-tools deploy \
+              --project edilkappa-professionale \
+              --only "functions:${function_name}" \
+              --non-interactive 2>&1 | tee "$deploy_log"
+            deploy_status="${PIPESTATUS[0]}"
+            set -e
+            if [ "$deploy_status" -ne 0 ] && ! grep -Eq "Unable to set the invoker|Failed to set the IAM Policy" "$deploy_log"; then
+              exit "$deploy_status"
+            fi
+          done
+      - name: Mantieni raggiungibili le funzioni callable
+        run: |
+          set -euo pipefail
+          for service in edilkappabackup edilkappadaneabridge edilkappanotifications; do
+            gcloud run services update "$service" \
+              --project=edilkappa-professionale \
+              --region=europe-west8 \
+              --no-invoker-iam-check \
+              --quiet
+          done

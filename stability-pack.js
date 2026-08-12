@@ -14,6 +14,8 @@
   let backupRows = [];
   let backupLoading = false;
   let backupLoaded = false;
+  let backupVerification = null;
+  let backupVerificationLoading = false;
   let productionErrors = [];
   let productionErrorsLoading = false;
   let productionErrorsLoaded = false;
@@ -233,12 +235,26 @@
     if (!confirm('Creare adesso un nuovo backup completo?')) return;
     backupLoading = true; render();
     try {
-      await window.EdilKappaCloud?.backupRequest?.({ action: 'create' });
+      const result = await window.EdilKappaCloud?.backupRequest?.({ action: 'create' });
+      backupVerification = result?.verification || null;
       backupLoaded = false;
       backupLoading = false;
       await window.loadEdilKappaBackups(true);
-      alert('Backup completo creato.');
+      alert(backupVerification?.valid ? 'Backup completo creato e verificato.' : 'Backup creato. Esegui il controllo di integrità.');
     } catch (error) { backupLoading = false; render(); alert(error.message || 'Backup non riuscito.'); }
+  };
+  window.verifyLatestEdilKappaBackup = async function () {
+    if (!backupRows.length) return alert('Non è ancora disponibile alcun backup da verificare.');
+    if (backupVerificationLoading) return;
+    backupVerificationLoading = true; render();
+    try {
+      const result = await window.EdilKappaCloud?.backupRequest?.({ action: 'verify', path: backupRows[0].path });
+      backupVerification = result?.verification || null;
+      backupLoaded = false;
+      await window.loadEdilKappaBackups(true);
+      alert(backupVerification?.valid ? `Backup verificato: ${Number(backupVerification.recordCount || 0)} record integri.` : backupVerification?.message || 'Il backup non supera il controllo.');
+    } catch (error) { alert(error.message || 'Verifica backup non riuscita.'); }
+    finally { backupVerificationLoading = false; render(); }
   };
   window.backupView = function () {
     const health = window.EdilKappaCloud?.syncHealth || [];
@@ -247,10 +263,11 @@
     const offline = !navigator.onLine;
     if (!backupLoaded && !backupLoading) setTimeout(() => window.loadEdilKappaBackups(), 0);
     if (!productionErrorsLoaded && !productionErrorsLoading) setTimeout(() => window.loadProductionErrors(), 0);
-    return pageHead('Sicurezza e backup', 'Controllo cloud, copie notturne e segnalazioni tecniche', '<button class="btn lime" onclick="createEdilKappaBackup()">＋ Backup adesso</button>') +
+    const latestBackupVerified = Boolean(backupRows[0]?.verifiedAt) || Boolean(backupVerification?.valid);
+    return pageHead('Sicurezza e backup', 'Controllo cloud, copie notturne e segnalazioni tecniche', '<button class="btn light" onclick="verifyLatestEdilKappaBackup()">✓ Verifica ultima copia</button><button class="btn lime" onclick="createEdilKappaBackup()">＋ Backup adesso</button>') +
       `<div class="grid stats">${stat('Stato cloud', offline ? 'Offline' : errors.length ? `${errors.length} errori` : pending.length ? 'Verifica in corso' : 'Regolare', offline || errors.length ? '!' : pending.length ? '◷' : '✓')}${stat('Errori rilevati', productionErrors.length, '!')}${stat('Backup disponibili', backupRows.length, '☁')}${stat('Cestino', (db.trash || []).length, '♻')}</div>
       ${offline ? '<div class="notice"><b>Dispositivo offline</b><br>Le modifiche restano sul dispositivo e verranno inviate al ritorno della connessione.</div>' : errors.length ? `<div class="notice error"><b>Sincronizzazione incompleta</b><br>${errors.map((item) => `${safe(item.collectionName)}: ${safe(item.error)}`).join('<br>')}</div>` : pending.length ? `<div class="notice"><b>Controllo cloud in corso</b><br>${pending.length} raccolte devono ancora rispondere.</div>` : '<div class="okbox">✓ Tutte le raccolte cloud controllate risultano sincronizzate.</div>'}
-      <div style="height:14px"></div><section class="card"><div class="cardHead"><div><h3>Backup automatici</h3><small>Ogni notte alle 02:15 · conservazione 60 giorni</small></div><button class="btn sm light" onclick="loadEdilKappaBackups(true)">Aggiorna</button></div>${backupLoading ? '<div class="empty">Controllo backup in corso…</div>' : `<div class="list">${backupRows.map((item) => `<div class="row"><div class="rowIcon">☁</div><div class="rowBody"><b>${safe(new Date(item.generatedAt).toLocaleString('it-IT'))}</b><small>${Number(item.recordCount || 0)} record · ${formatBytes(item.bytes)} · ${item.trigger === 'manual' ? 'manuale' : 'automatico'}</small></div><span class="pill">Protetto</span></div>`).join('') || '<div class="empty">Il primo backup verrà creato dopo la pubblicazione delle funzioni.</div>'}</div>`}</section>
+      <div style="height:14px"></div><section class="card"><div class="cardHead"><div><h3>Backup automatici</h3><small>Ogni notte alle 02:15 · conservazione 60 giorni · ${latestBackupVerified ? 'ultima copia verificata' : 'verifica della prima copia richiesta'}</small></div><button class="btn sm light" onclick="loadEdilKappaBackups(true)">Aggiorna</button></div>${backupLoading || backupVerificationLoading ? '<div class="empty">Controllo backup in corso…</div>' : `<div class="list">${backupRows.map((item) => `<div class="row"><div class="rowIcon">☁</div><div class="rowBody"><b>${safe(new Date(item.generatedAt).toLocaleString('it-IT'))}</b><small>${Number(item.recordCount || 0)} record · ${formatBytes(item.bytes)} · ${item.trigger === 'manual' ? 'manuale' : 'automatico'}${item.verifiedAt ? ` · verificato ${safe(new Date(item.verifiedAt).toLocaleString('it-IT'))}` : ''}</small></div><span class="pill ${item.verifiedAt ? 'green' : 'orange'}">${item.verifiedAt ? 'Integro' : 'Da verificare'}</span></div>`).join('') || '<div class="empty">Il primo backup verrà creato automaticamente alle 02:15 oppure con “Backup adesso”.</div>'}</div>`}</section>
       <div style="height:14px"></div><section class="card"><div class="cardHead"><div><h3>Errori di produzione</h3><small>Ultime segnalazioni tecniche, raccolte automaticamente</small></div><button class="btn sm light" onclick="loadProductionErrors()">Aggiorna</button></div>${productionErrorsLoading ? '<div class="empty">Controllo errori in corso…</div>' : `<div class="list">${productionErrors.slice(0, 10).map((item) => `<div class="row"><div class="rowIcon">!</div><div class="rowBody"><b>${safe(item.message)}</b><small>${safe(item.source || 'Gestionale')} · ${safe(item.createdAtText || item.createdAt || '')}</small></div></div>`).join('') || '<div class="okbox">Nessun errore recente rilevato.</div>'}</div>`}</section>`;
   };
 

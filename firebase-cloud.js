@@ -63,6 +63,7 @@ const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 61000
 const callEdilKappaOperations = httpsCallable(functions, 'edilkappaOperations', { timeout: 550000 });
 const callEdilKappaDaneaBridge = httpsCallable(functions, 'edilkappaDaneaBridge', { timeout: 40000 });
 const callEdilKappaBackup = httpsCallable(functions, 'edilkappaBackup', { timeout: 120000 });
+const callEdilKappaNotifications = httpsCallable(functions, 'edilkappaNotifications', { timeout: 40000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -192,6 +193,20 @@ const api = {
   },
   async backupRequest(payload = { action: 'list' }) {
     const response = await callEdilKappaBackup(payload);
+    return response.data;
+  },
+  async notificationRequest(payload = { action: 'status' }) {
+    const requestPayload = { ...payload };
+    if ('Notification' in window && Notification.permission === 'granted' && await isMessagingSupported()) {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (registration) {
+          const token = await getToken(getMessaging(app), { serviceWorkerRegistration: registration });
+          if (token) requestPayload.deviceId = await tokenDocumentId(token);
+        }
+      } catch (_) {}
+    }
+    const response = await callEdilKappaNotifications(requestPayload);
     return response.data;
   },
   restrictView(next) {
