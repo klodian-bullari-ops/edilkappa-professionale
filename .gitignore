@@ -9,3 +9,4 @@ hosting-dist/
 functions/.secret.local
 mcp-server/env.cloudrun*.yaml
 !mcp-server/env.cloudrun.example.yaml
+gha-creds-*.json

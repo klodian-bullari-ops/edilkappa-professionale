@@ -88,7 +88,12 @@ test("build and deployment are versioned and guarded", () => {
   assert.match(build, /version\.json/);
   assert.match(build, /rootFiles\.filter/);
   assert.match(deploy, /inputs\.conferma == 'PUBBLICA'/);
-  assert.match(deploy, /google-github-actions\/setup-gcloud@v2/);
+  assert.match(deploy, /id-token: write/);
+  assert.match(deploy, /google-github-actions\/auth@v3/);
+  assert.match(deploy, /workload_identity_provider: projects\/583702130706\/locations\/global\/workloadIdentityPools\/github-actions\/providers\/edilkappa-main/);
+  assert.match(deploy, /service_account: github-deploy@edilkappa-professionale\.iam\.gserviceaccount\.com/);
+  assert.doesNotMatch(deploy, /credentials_json|FIREBASE_SERVICE_ACCOUNT/);
+  assert.match(deploy, /google-github-actions\/setup-gcloud@v3/);
   assert.match(deploy, /firestore:rules,storage,functions:backupEdilkappaNightly/);
   assert.match(deploy, /for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaNotifications/);
   assert.match(deploy, /--only "functions:\$\{function_name\}"/);
@@ -99,6 +104,20 @@ test("build and deployment are versioned and guarded", () => {
   assert.match(quality, /pull_request/);
   assert.match(quality, /npm audit --omit=dev --audit-level=moderate/);
   assert.match(quality, /npm run build/);
+});
+
+test("GitHub Firebase authentication is keyless and restricted to production", () => {
+  const setup = source("scripts/setup-github-firebase-wif.sh");
+  const gitignore = source(".gitignore");
+  assert.match(setup, /GITHUB_REPOSITORY_ID="1302762653"/);
+  assert.match(setup, /GITHUB_ACTOR_ID="305622593"/);
+  assert.match(setup, /assertion\.ref == 'refs\/heads\/main'/);
+  assert.match(setup, /assertion\.event_name == 'workflow_dispatch'/);
+  assert.match(setup, /assertion\.environment == 'production'/);
+  assert.match(setup, /assertion\.workflow_ref/);
+  assert.match(setup, /roles\/iam\.workloadIdentityUser/);
+  assert.doesNotMatch(setup, /service-accounts keys create/);
+  assert.match(gitignore, /gha-creds-\*\.json/);
 });
 
 test("hosting disables stale root caching and adds safe browser headers", () => {
