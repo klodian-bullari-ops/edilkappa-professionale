@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: edilkappa-production
@@ -36,10 +37,26 @@ jobs:
       - name: Installa e testa connettore
         working-directory: mcp-server
         run: npm ci && npm test && npm run check && npm run build && npm audit --omit=dev --audit-level=moderate
-      - uses: google-github-actions/auth@v2
+      - name: Autentica GitHub su Google Cloud senza chiavi permanenti
+        id: google-auth
+        uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EDILKAPPA }}
-      - uses: google-github-actions/setup-gcloud@v2
+          project_id: edilkappa-professionale
+          workload_identity_provider: projects/583702130706/locations/global/workloadIdentityPools/github-actions/providers/edilkappa-main
+          service_account: github-deploy@edilkappa-professionale.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Configura Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          version: ">= 416.0.0"
+      - name: Verifica identità e progetto di produzione
+        run: |
+          set -euo pipefail
+          active_account="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -n 1)"
+          test "$active_account" = "github-deploy@edilkappa-professionale.iam.gserviceaccount.com"
+          gcloud config set project edilkappa-professionale --quiet
+          test "$(gcloud config get-value project)" = "edilkappa-professionale"
       - name: Pubblica Hosting, regole e funzioni interne
         run: npx --yes firebase-tools deploy --project edilkappa-professionale --only hosting,firestore:rules,storage,functions:backupEdilkappaNightly,functions:processDaneaInbox --non-interactive
       - name: Pubblica le funzioni callable
