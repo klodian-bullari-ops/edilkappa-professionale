@@ -1,24 +1,42 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..");
+const repositoryRoot = path.resolve(packageRoot, "..");
 const fakeHome = path.join(os.tmpdir(), "edilkappa-firebase-quality-home");
 const configDir = path.join(fakeHome, ".config", "configstore");
 const motdPath = path.join(configDir, "firebase-tools.json");
+const emulatorProject = path.join(fakeHome, "project");
+const emulatorConfig = path.join(emulatorProject, "firebase.json");
 const cacheDir = process.env.FIREBASE_EMULATORS_PATH
   || (process.env.CI ? path.join(os.homedir(), ".cache", "firebase", "emulators") : path.join(fakeHome, ".cache", "firebase", "emulators"));
 
 await mkdir(configDir, { recursive: true });
 await mkdir(cacheDir, { recursive: true });
+await rm(emulatorProject, { recursive: true, force: true });
+await mkdir(emulatorProject, { recursive: true });
 await writeFile(motdPath, JSON.stringify({
   motd: { minVersion: "0.0.0", message: "" },
   "motd.fetched": Date.now()
 }));
+await Promise.all([
+  copyFile(path.join(repositoryRoot, "firestore.rules"), path.join(emulatorProject, "firestore.rules")),
+  copyFile(path.join(repositoryRoot, "storage.rules"), path.join(emulatorProject, "storage.rules"))
+]);
+await writeFile(emulatorConfig, JSON.stringify({
+  firestore: { rules: "firestore.rules" },
+  storage: { rules: "storage.rules" },
+  emulators: {
+    firestore: { host: "127.0.0.1", port: 8080 },
+    storage: { host: "127.0.0.1", port: 9199 },
+    ui: { enabled: false }
+  }
+}, null, 2));
 
 const firebase = path.join(packageRoot, "node_modules", ".bin", process.platform === "win32" ? "firebase.cmd" : "firebase");
 const testCommand = [
@@ -34,7 +52,7 @@ if (jars.some((jar) => !existsSync(path.join(cacheDir, jar)))) {
 
 const child = spawn(firebase, [
   "emulators:exec",
-  "--config", path.join(packageRoot, "firebase.json"),
+  "--config", emulatorConfig,
   "--project", "demo-edilkappa-quality",
   "--only", "firestore,storage",
   testCommand
