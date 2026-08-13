@@ -15,7 +15,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,6 +25,25 @@ jobs:
           cache-dependency-path: |
             functions/package-lock.json
             mcp-server/package-lock.json
+            quality-tests/package-lock.json
+      - name: Installa Java per gli emulatori Firebase
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Ripristina cache browser ed emulatori qualità
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/.cache/firebase/emulators
+          key: quality-${{ runner.os }}-${{ hashFiles('quality-tests/package-lock.json') }}
+      - name: Testa regole Firebase e interfaccia mobile/desktop
+        working-directory: quality-tests
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm test
       - name: Installa funzioni
         working-directory: functions
         run: npm ci

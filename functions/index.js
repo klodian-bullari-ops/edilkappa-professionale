@@ -61,6 +61,17 @@ const {
   extractPdfAudit,
   responseOutputText
 } = require("./pdf-audit");
+const {
+  PublicLeadError,
+  evaluateRateRecord,
+  newPublicLeadId,
+  nextRateRecord,
+  publicLeadFingerprint,
+  publicLeadPayload,
+  publicLeadRateKey,
+  validatePublicLeadInput
+} = require("./public-lead");
+const { evaluateSystemHealth } = require("./health-core");
 
 const adminApp = initializeApp();
 const firestore = getFirestore(adminApp, "edilkappa");
@@ -90,6 +101,12 @@ const AGENT_RUN_TIMEOUT_MS = 8 * 60 * 1000;
 const MAX_AGENT_INPUT_BYTES = 32 * 1024 * 1024;
 const MAX_PREPARED_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const VISUAL_REFERENCE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function publicLeadFailure(error) {
+  if (error instanceof PublicLeadError) throw new HttpsError(error.code, error.message);
+  console.error("Public lead failed", { name: cleanText(error?.name, 120), message: cleanText(error?.message, 500) });
+  throw new HttpsError("unavailable", "Non riesco a registrare la richiesta. Riprova tra poco.");
+}
 
 async function sendPush({ uid = "", deviceId = "", staff = false, title, body, type = "activity", targetType = "", targetId = "", url = "./" }) {
   let query = firestore.collection("pushDevices").where("orgId", "==", ORG_ID);
@@ -158,7 +175,7 @@ function mergePreparedAttachments(inlineAttachments, archivedAttachments) {
 }
 
 async function authorizedUser(request, mode) {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Accedi a EdilKappa prima di usare l’AI.");
+  if (!request.auth) throw new HttpsError("unauthenticated", "Accedi a EdilKappa prima di usare questo servizio.");
   if (request.auth.token.email_verified !== true) throw new HttpsError("permission-denied", "Verifica prima il tuo indirizzo email.");
   const email = String(request.auth.token.email || "").toLowerCase();
   const bootstrapOwner = email === OWNER_EMAIL;
@@ -170,7 +187,7 @@ async function authorizedUser(request, mode) {
   const role = bootstrapOwner ? "owner" : profile?.role;
   const active = bootstrapOwner || (profile?.orgId === ORG_ID && profile?.active === true);
   if (!active || !["owner", "office"].includes(role)) {
-    throw new HttpsError("permission-denied", "EdilKappa AI è disponibile soltanto al titolare e all’ufficio.");
+    throw new HttpsError("permission-denied", "Questo servizio è disponibile soltanto al titolare e all’ufficio.");
   }
   if (mode === "personal" && role !== "owner") {
     throw new HttpsError("permission-denied", "La modalità Personale è riservata al titolare.");
@@ -1028,6 +1045,36 @@ exports.edilkappaNotifications = onCall({ region: "europe-west8", invoker: "publ
     url: "./?view=systemControl"
   });
   return { registered: devices.length > 0, currentDeviceRegistered, deviceCount: devices.length, lastRegisteredAtMs, delivery };
+});
+
+exports.edilkappaPublicLead = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 3, cors: true }, async (request) => {
+  const nowMs = Date.now();
+  try {
+    const lead = validatePublicLeadInput(request.data, nowMs);
+    const fingerprint = publicLeadFingerprint(lead);
+    const rateKey = publicLeadRateKey(request.rawRequest, nowMs);
+    const rateRef = firestore.collection("publicSubmissionLimits").doc(rateKey);
+    const result = await firestore.runTransaction(async (transaction) => {
+      const rateSnapshot = await transaction.get(rateRef);
+      const current = rateSnapshot.data() || {};
+      const decision = evaluateRateRecord(current, fingerprint, nowMs);
+      if (decision.duplicateLeadId) return { id: decision.duplicateLeadId, duplicate: true };
+
+      const id = newPublicLeadId(nowMs);
+      const payload = publicLeadPayload(lead, id, nowMs);
+      transaction.create(firestore.collection("leads").doc(id), serverEnvelope({
+        id,
+        ownerUid: "public",
+        status: "Nuova",
+        payload
+      }));
+      transaction.set(rateRef, nextRateRecord({ current, fingerprint, leadId: id, nowMs }));
+      return { id, duplicate: false };
+    });
+    return { received: true, ...result };
+  } catch (error) {
+    return publicLeadFailure(error);
+  }
 });
 
 exports.notifyNewLead = onDocumentCreated({ document: "leads/{leadId}", database: "edilkappa", region: "europe-west8" }, async (event) => {
@@ -1990,6 +2037,100 @@ async function verifyEdilKappaBackup(requestedPath = "") {
   };
 }
 
+async function verifyAndRecordEdilKappaBackup(requestedPath = "") {
+  const verification = await verifyEdilKappaBackup(requestedPath);
+  const verifiedAtMs = Date.parse(verification.verifiedAt || "");
+  const generatedAtMs = Date.parse(verification.generatedAt || "");
+  await firestore.collection("systemHealth").doc("backup").set({
+    orgId: ORG_ID,
+    available: verification.available === true,
+    valid: verification.valid === true,
+    path: cleanText(verification.path, 500),
+    message: cleanText(verification.message, 500),
+    recordCount: Number(verification.recordCount || 0),
+    verifiedAtMs: Number.isFinite(verifiedAtMs) ? verifiedAtMs : 0,
+    generatedAtMs: Number.isFinite(generatedAtMs) ? generatedAtMs : 0,
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  return verification;
+}
+
+async function collectEdilkappaHealth(nowMs = Date.now()) {
+  const currentRef = firestore.collection("systemHealth").doc("current");
+  const clientErrorsCount = firestore.collection("clientErrors")
+    .where("orgId", "==", ORG_ID)
+    .where("createdAt", ">=", new Date(nowMs - 24 * 60 * 60 * 1000))
+    .count();
+  const [backupSnapshot, daneaSnapshot, errorsCountSnapshot, devicesSnapshot, previousSnapshot] = await Promise.all([
+    firestore.collection("systemHealth").doc("backup").get(),
+    DANEA_BRIDGE_REF().get(),
+    clientErrorsCount.get(),
+    firestore.collection("pushDevices").where("orgId", "==", ORG_ID).limit(500).get(),
+    currentRef.get()
+  ]);
+  let backup = backupSnapshot.exists ? backupSnapshot.data() : null;
+  if (!backup) {
+    const latest = (await listEdilKappaBackups())[0];
+    backup = latest ? {
+      available: true,
+      valid: Boolean(latest.verifiedAt),
+      path: latest.path,
+      generatedAtMs: Date.parse(latest.generatedAt || "") || 0,
+      verifiedAtMs: Date.parse(latest.verifiedAt || "") || 0
+    } : { available: false, valid: false };
+  }
+  const daneaData = daneaSnapshot.data() || {};
+  const clientErrors24h = Number(errorsCountSnapshot.data()?.count || 0);
+  const notificationDevices = devicesSnapshot.docs.filter((document) => Boolean(document.data()?.token)).length;
+  const health = evaluateSystemHealth({
+    nowMs,
+    backup,
+    danea: {
+      connected: Boolean(daneaData.connected),
+      lastPollAtMs: Number(daneaData.lastPollAtMs || 0),
+      lastPollError: cleanText(daneaData.lastPollError, 300)
+    },
+    clientErrors24h,
+    notificationDevices
+  });
+  await currentRef.set({
+    ...health,
+    orgId: ORG_ID,
+    backup: {
+      available: backup.available === true,
+      valid: backup.valid === true,
+      path: cleanText(backup.path, 500),
+      generatedAtMs: Number(backup.generatedAtMs || 0),
+      verifiedAtMs: Number(backup.verifiedAtMs || 0)
+    },
+    danea: {
+      connected: Boolean(daneaData.connected),
+      lastPollAtMs: Number(daneaData.lastPollAtMs || 0),
+      lastPollError: cleanText(daneaData.lastPollError, 300)
+    },
+    checkedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  const previous = previousSnapshot.data() || {};
+  return {
+    ...health,
+    backup: {
+      available: backup.available === true,
+      valid: backup.valid === true,
+      path: cleanText(backup.path, 500),
+      generatedAtMs: Number(backup.generatedAtMs || 0),
+      verifiedAtMs: Number(backup.verifiedAtMs || 0)
+    },
+    danea: {
+      connected: Boolean(daneaData.connected),
+      lastPollAtMs: Number(daneaData.lastPollAtMs || 0),
+      lastPollError: cleanText(daneaData.lastPollError, 300)
+    },
+    lastAlertFingerprint: cleanText(previous.lastAlertFingerprint, 80),
+    lastAlertAtMs: Number(previous.lastAlertAtMs || 0)
+  };
+}
+
 async function purgeExpiredBackups(now = Date.now()) {
   const [files] = await storageBucket.getFiles({ prefix: BACKUP_PREFIX });
   await Promise.all(files.map(async (file) => {
@@ -2030,6 +2171,11 @@ async function purgeOldClientErrors(now = Date.now()) {
   }));
 }
 
+async function purgePublicSubmissionLimits(now = Date.now()) {
+  const snapshot = await firestore.collection("publicSubmissionLimits").get();
+  await Promise.all(snapshot.docs.map((document) => Number(document.data()?.expiresAtMs || 0) <= now ? document.ref.delete() : null));
+}
+
 exports.edilkappaBackup = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 120, memory: "1GiB", cors: true }, async (request) => {
   const account = await authorizedUser(request, "work");
   if (account.role !== "owner") throw new HttpsError("permission-denied", "I backup sono riservati al titolare.");
@@ -2037,18 +2183,48 @@ exports.edilkappaBackup = onCall({ region: "europe-west8", invoker: "public", ti
   if (action === "list") return { backups: await listEdilKappaBackups() };
   if (action === "create") {
     const backup = await createEdilKappaBackup("manual");
-    return { backup, verification: await verifyEdilKappaBackup(backup.path) };
+    return { backup, verification: await verifyAndRecordEdilKappaBackup(backup.path) };
   }
-  if (action === "verify") return { verification: await verifyEdilKappaBackup(cleanText(request.data?.path, 500)) };
+  if (action === "verify") return { verification: await verifyAndRecordEdilKappaBackup(cleanText(request.data?.path, 500)) };
   throw new HttpsError("invalid-argument", "Operazione backup non riconosciuta.");
 });
 
 exports.backupEdilkappaNightly = onSchedule({ schedule: "15 2 * * *", timeZone: "Europe/Rome", region: "europe-west8", timeoutSeconds: 540, memory: "1GiB" }, async () => {
   const backup = await createEdilKappaBackup("automatic");
-  const verification = await verifyEdilKappaBackup(backup.path);
+  const verification = await verifyAndRecordEdilKappaBackup(backup.path);
   if (!verification.valid) throw new Error("Il backup notturno non supera il controllo di integrità.");
   await purgeExpiredBackups();
   await purgeExpiredShares();
   await purgeExpiredTrash();
   await purgeOldClientErrors();
+  await purgePublicSubmissionLimits();
+});
+
+exports.edilkappaHealth = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 45, memory: "256MiB", maxInstances: 2, cors: true }, async (request) => {
+  await authorizedUser(request, "work");
+  const action = cleanText(request.data?.action || "status", 40);
+  if (action !== "status") throw new HttpsError("invalid-argument", "Operazione controllo sistema non valida.");
+  try { return await collectEdilkappaHealth(); }
+  catch (error) {
+    console.error("EdilKappa health failed", { name: cleanText(error?.name, 120), message: cleanText(error?.message, 500) });
+    throw new HttpsError("unavailable", "Il controllo automatico non è disponibile. Riprova tra poco.");
+  }
+});
+
+exports.monitorEdilkappaHealth = onSchedule({ schedule: "15 * * * *", timeZone: "Europe/Rome", region: "europe-west8", timeoutSeconds: 120, memory: "256MiB" }, async () => {
+  const health = await collectEdilkappaHealth();
+  if (health.status !== "error") return;
+  const fingerprint = createHash("sha256")
+    .update(health.issues.filter((item) => item.severity === "error").map((item) => item.code).sort().join("|"))
+    .digest("hex").slice(0, 24);
+  const nowMs = Date.now();
+  const recentlyAlerted = health.lastAlertFingerprint === fingerprint && nowMs - health.lastAlertAtMs < 6 * 60 * 60 * 1000;
+  if (recentlyAlerted) return;
+  const summary = health.issues.filter((item) => item.severity === "error").map((item) => item.title).slice(0, 3).join(" · ");
+  await pushSafely({ staff: true, title: "Controllo EdilKappa: attenzione", body: summary, type: "system-health", targetType: "system", targetId: fingerprint, url: "./?view=systemControl" });
+  await firestore.collection("systemHealth").doc("current").set({
+    lastAlertFingerprint: fingerprint,
+    lastAlertAtMs: nowMs,
+    lastAlertAt: FieldValue.serverTimestamp()
+  }, { merge: true });
 });

@@ -1,0 +1,25 @@
+name: Controlla EdilKappa in produzione
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edilkappa-quality-monitor
+  cancel-in-progress: true
+
+jobs:
+  production-smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verifica disponibilità, versione e intestazioni di sicurezza
+        run: node scripts/check-production.mjs https://edilkappa-professionale.web.app/

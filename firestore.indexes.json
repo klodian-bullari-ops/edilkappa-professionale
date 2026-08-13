@@ -44,7 +44,8 @@
     { "collectionGroup": "certificates", "queryScope": "COLLECTION", "density": "DENSE", "fields": [{ "fieldPath": "orgId", "order": "ASCENDING" }] },
     { "collectionGroup": "certificates", "queryScope": "COLLECTION", "density": "DENSE", "fields": [{ "fieldPath": "clientId", "order": "ASCENDING" }] },
     { "collectionGroup": "inventory", "queryScope": "COLLECTION", "density": "DENSE", "fields": [{ "fieldPath": "orgId", "order": "ASCENDING" }] },
-    { "collectionGroup": "equipment", "queryScope": "COLLECTION", "density": "DENSE", "fields": [{ "fieldPath": "orgId", "order": "ASCENDING" }] }
+    { "collectionGroup": "equipment", "queryScope": "COLLECTION", "density": "DENSE", "fields": [{ "fieldPath": "orgId", "order": "ASCENDING" }] },
+    { "collectionGroup": "clientErrors", "queryScope": "COLLECTION", "density": "DENSE", "fields": [{ "fieldPath": "orgId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" }] }
   ],
   "fieldOverrides": []
 }

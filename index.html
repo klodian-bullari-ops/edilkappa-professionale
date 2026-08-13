@@ -59,6 +59,7 @@ function companySummary(separator=' · '){return [COMPANY.name,COMPANY.address,C
 function applyCompanySettings(){Object.assign(COMPANY,COMPANY_DEFAULTS,(db.companySettings||[])[0]||{});const foot=document.getElementById('companySidebar');if(foot)foot.innerHTML=`${esc(COMPANY.name)}<br>${COMPANY.address?esc(COMPANY.address):'Gestionale riservato'}`}
 function save(){applyCompanySettings();localStorage.setItem(KEY,JSON.stringify(db));window.EdilKappaCloud?.scheduleSync?.()}
 function pdfDatabase(){return new Promise((resolve,reject)=>{const req=indexedDB.open(PDF_DB,1);req.onupgradeneeded=()=>req.result.createObjectStore('pdf');req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(new Error('Archivio documenti non disponibile'))})}
+function deletePdfDatabase(){return new Promise((resolve,reject)=>{if(!('indexedDB'in window))return resolve();const req=indexedDB.deleteDatabase(PDF_DB);let timer;req.onsuccess=()=>{clearTimeout(timer);resolve()};req.onerror=()=>{clearTimeout(timer);reject(new Error('Non è stato possibile cancellare i documenti locali'))};req.onblocked=()=>{timer=setTimeout(()=>reject(new Error('Chiudi le altre schede EdilKappa e riprova')),1800)}})}
 async function storePdf(id,file){const d=await pdfDatabase();return new Promise((resolve,reject)=>{const tx=d.transaction('pdf','readwrite');tx.objectStore('pdf').put(file,id);tx.oncomplete=()=>{d.close();resolve()};tx.onerror=()=>{d.close();reject(new Error('Non è stato possibile salvare il PDF'))}})}
 async function readPdf(id){const d=await pdfDatabase();return new Promise((resolve,reject)=>{const req=d.transaction('pdf').objectStore('pdf').get(id);req.onsuccess=()=>{d.close();resolve(req.result)};req.onerror=()=>{d.close();reject(new Error('Documento non trovato'))}})}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -302,7 +303,11 @@ window.EdilKappaLocal={
     ['condomini','interventions','inspections','sites','quotes','reports','timesheets','absences','edilconnect','drone','lifelines','roofs','drains','expenses','deadlines','payments','documents','teams','staff','portalUsers','leads','priceList','certificates','inventory','equipment','companySettings'].forEach((key)=>{db[key]=[]});
     db.staffInitialized=true;WORKERS=db.teams;STAFF=db.staff;localStorage.setItem(KEY,JSON.stringify(db));
   },
-  clearDeviceData:()=>localStorage.removeItem(KEY)
+  clearDeviceData:async()=>{
+    Array.from({length:localStorage.length},(_,index)=>localStorage.key(index)).filter((key)=>key&&(key.startsWith('edilkappa_')||key.startsWith('ek_'))).forEach((key)=>localStorage.removeItem(key));
+    Object.keys(db).forEach((key)=>delete db[key]);Object.assign(db,structuredClone(seed));WORKERS=db.teams;STAFF=db.staff;role='owner';
+    await deletePdfDatabase();
+  }
 };
 </script>
 <script src="./media-contract.js?v=1"></script>

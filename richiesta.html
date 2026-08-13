@@ -16,16 +16,16 @@
     <section class="card">
       <header><h1>Richiedi un sopralluogo</h1><p>Descrivi il lavoro, indica l’indirizzo e allega fino a due fotografie. Ti contatteremo per fissare l’appuntamento.</p></header>
       <form id="requestForm" class="form">
-        <div class="field"><label>Nome e cognome / condominio</label><input name="name" autocomplete="name" maxlength="100" required></div>
-        <div class="field"><label>Telefono</label><input name="phone" type="tel" autocomplete="tel" maxlength="30" required></div>
-        <div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" maxlength="150"></div>
-        <div class="field"><label>Come preferisci essere contattato?</label><select name="contactPreference"><option>Telefono</option><option>WhatsApp</option><option>Email</option></select></div>
-        <div class="field full"><label>Indirizzo del lavoro</label><input name="address" autocomplete="street-address" maxlength="220" placeholder="Via, numero civico, città" required></div>
-        <div class="field full"><label>Descrivi il lavoro o il problema</label><textarea name="request" maxlength="2500" placeholder="Esempio: infiltrazione dal tetto, frontalini da ripristinare, verifica linea vita…" required></textarea></div>
-        <div class="field full"><label>Fotografie (facoltative, massimo 2)</label><input name="photos" type="file" accept="image/*" capture="environment" multiple><div class="hint">Le immagini vengono ridotte prima dell’invio.</div></div>
+        <div class="field"><label for="requestName">Nome e cognome / condominio</label><input id="requestName" name="name" autocomplete="name" maxlength="100" required></div>
+        <div class="field"><label for="requestPhone">Telefono</label><input id="requestPhone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required></div>
+        <div class="field"><label for="requestEmail">Email</label><input id="requestEmail" name="email" type="email" inputmode="email" autocomplete="email" maxlength="150"></div>
+        <div class="field"><label for="requestContactPreference">Come preferisci essere contattato?</label><select id="requestContactPreference" name="contactPreference"><option>Telefono</option><option>WhatsApp</option><option>Email</option></select></div>
+        <div class="field full"><label for="requestAddress">Indirizzo del lavoro</label><input id="requestAddress" name="address" autocomplete="street-address" maxlength="220" placeholder="Via, numero civico, città" required></div>
+        <div class="field full"><label for="requestDescription">Descrivi il lavoro o il problema</label><textarea id="requestDescription" name="request" maxlength="2500" placeholder="Esempio: infiltrazione dal tetto, frontalini da ripristinare, verifica linea vita…" required></textarea></div>
+        <div class="field full"><label for="requestPhotos">Fotografie (facoltative, massimo 2)</label><input id="requestPhotos" name="photos" type="file" accept="image/*" capture="environment" multiple aria-describedby="requestPhotosHint"><div class="hint" id="requestPhotosHint">Le immagini vengono ridotte prima dell’invio.</div></div>
         <div class="hp" aria-hidden="true"><label>Non compilare<input name="website" tabindex="-1" autocomplete="off"></label></div>
         <label class="consent field full"><input name="privacy" type="checkbox" required> Autorizzo EDILKAPPA a usare questi dati e le fotografie esclusivamente per rispondere alla richiesta e organizzare il sopralluogo.</label>
-        <div id="requestMessage" class="message" role="status"></div>
+        <div id="requestMessage" class="message" role="status" aria-live="polite"></div>
         <button class="btn" type="submit">Invia richiesta a EDILKAPPA</button>
       </form>
       <div class="privacy">I dati non sono mostrati pubblicamente e sono accessibili soltanto al personale autorizzato. Consulta l’<a href="./privacy.html">informativa sulla privacy</a>.</div>

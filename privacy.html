@@ -14,15 +14,17 @@
   <main class="main">
     <a class="back" href="index.html">← Torna all’app</a>
     <article class="card">
-      <p class="date">Ultimo aggiornamento: 24 luglio 2026</p>
+      <p class="date">Ultimo aggiornamento: 13 agosto 2026</p>
       <p><strong>EdilKappa Professionale</strong> è un’applicazione operativa destinata alla gestione di sopralluoghi, clienti, cantieri, preventivi e documenti.</p>
       <h2>Titolare</h2>
-      <p>EDILKAPPA. I dati identificativi completi e i recapiti del titolare sono comunicati agli interessati nel rapporto contrattuale e sono disponibili agli utenti autorizzati nell’area riservata.</p>
+      <p><strong>EDILKAPPA S.A.S. DI BULLARI KLODIAN &amp; C.</strong>, Via Sant’Ambrogio 38, 20055 Vimodrone (MI), P. IVA 14041000960. Per richieste sulla protezione dei dati: <a href="mailto:info@edilkappa.com">info@edilkappa.com</a>, tel. <a href="tel:+393519332154">+39 351 9332154</a>.</p>
       <h2>Dati trattati e finalità</h2>
       <p>L’app tratta dati dell’account (nome, email, ruolo e informazioni tecniche di accesso) e dati operativi inseriti dagli utenti, come clienti, contatti, indirizzi, cantieri, sopralluoghi, rapportini, ore, preventivi, scadenze, firme, fotografie e documenti. Questi dati vengono utilizzati esclusivamente per organizzare e documentare le attività di EDILKAPPA, coordinare titolare, ufficio e operai e offrire ai soggetti autorizzati le funzioni del portale.</p>
       <h2>Sincronizzazione cloud e fornitori</h2>
       <p>Dopo l’accesso, i dati operativi vengono sincronizzati tra i dispositivi autorizzati tramite <strong>Firebase Authentication</strong> e <strong>Cloud Firestore</strong>, servizi forniti da Google. Il database Firestore dell’app è configurato nella regione di Milano (<code>europe-west8</code>). Firebase Authentication può trattare email, indirizzo IP, user agent e informazioni necessarie all’accesso e alla prevenzione degli abusi anche negli Stati Uniti, secondo la documentazione del fornitore.</p>
       <p>I dati Firebase sono protetti durante il trasferimento tramite HTTPS e, per i servizi utilizzati dall’app, sono cifrati anche a riposo. Le fotografie destinate alla sincronizzazione vengono compresse prima dell’invio; gli originali restano sul dispositivo salvo diversa scelta dell’utente. Maggiori informazioni: <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Privacy e sicurezza in Firebase</a>.</p>
+      <h2>Funzioni EdilKappa AI</h2>
+      <p>Quando un utente autorizzato avvia espressamente una funzione EdilKappa AI, il testo della richiesta e gli eventuali documenti o fotografie selezionati vengono trasmessi tramite API a OpenAI per produrre la bozza richiesta. L’app non invia automaticamente all’AI l’intero archivio aziendale. Gli output devono essere controllati e approvati da una persona prima dell’uso operativo. Secondo le condizioni pubblicate per la piattaforma API, i dati business non vengono usati per addestrare i modelli per impostazione predefinita. Maggiori informazioni: <a href="https://openai.com/business-data/" target="_blank" rel="noopener">privacy dei dati business OpenAI</a>.</p>
       <h2>Accesso e condivisione</h2>
       <p>L’accesso richiede un account verificato e approvato. I permessi sono differenziati per titolare, ufficio, operai e amministratori di condominio. Gli operai vedono solo i lavori assegnati; gli amministratori vedono solo i clienti o condomìni associati; il titolare gestisce utenti e autorizzazioni. I dati non vengono venduti e l’app non contiene pubblicità, profilazione commerciale o sistemi di analisi statistica.</p>
       <h2>Base del trattamento</h2>
@@ -30,11 +32,11 @@
       <h2>Servizi cartografici esterni</h2>
       <p>Quando l’utente apre le funzioni di mappa, l’app può contattare servizi OpenStreetMap e Nominatim per mostrare le mappe e trasformare un indirizzo in coordinate. Tali servizi possono ricevere l’indirizzo ricercato, l’indirizzo IP e informazioni tecniche necessarie alla connessione, secondo le rispettive informative.</p>
       <h2>Conservazione e cancellazione</h2>
-      <p>Le copie locali rimangono sul dispositivo finché vengono eliminate nell’app, vengono cancellati i dati dell’app o l’applicazione viene disinstallata. I dati sincronizzati restano nel database cloud finché sono necessari alle finalità operative e agli obblighi di conservazione applicabili oppure finché vengono eliminati da un utente autorizzato. La cancellazione dell’app dal telefono non elimina automaticamente i dati cloud.</p>
+      <p>Le copie locali rimangono sul dispositivo durante la sessione autorizzata; l’uscita dall’account elimina la copia operativa e l’archivio documenti locale del gestionale. I dati sincronizzati restano nel database cloud finché sono necessari alle finalità operative e agli obblighi di conservazione applicabili oppure finché vengono eliminati da un utente autorizzato. La cancellazione dell’app dal telefono non elimina automaticamente i dati cloud. Gli elementi spostati nel cestino vengono eliminati automaticamente dopo il periodo tecnico indicato nell’app; i backup di sicurezza hanno una conservazione separata e limitata.</p>
       <h2>Permessi</h2>
       <p>L’app può richiedere l’accesso a fotocamera, fotografie o file solo quando l’utente sceglie di allegare immagini e documenti. L’utente può revocare i permessi dalle impostazioni del dispositivo.</p>
       <h2>Diritti e contatti</h2>
-      <p>Nei casi previsti dalla normativa applicabile, l’interessato può chiedere accesso, rettifica, cancellazione, limitazione, portabilità o opposizione al trattamento usando il recapito privacy ricevuto con il rapporto contrattuale o disponibile nell’area riservata.</p>
+      <p>Nei casi previsti dalla normativa applicabile, l’interessato può chiedere accesso, rettifica, cancellazione, limitazione, portabilità o opposizione scrivendo a <a href="mailto:info@edilkappa.com">info@edilkappa.com</a>. L’interessato può inoltre proporre reclamo all’autorità di controllo competente.</p>
     </article>
   </main>
 </body>

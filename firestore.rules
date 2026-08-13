@@ -181,25 +181,6 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'workHours', 'materialAmount', 'progress', 'payload', 'updatedAt']);
     }
 
-    function validPublicLeadCreate(docId) {
-      return !signedIn()
-        && validCreateEnvelope(docId)
-        && docId.matches('^lead-[a-z0-9-]{10,100}$')
-        && request.resource.data.ownerUid == 'public'
-        && request.resource.data.clientId == ''
-        && request.resource.data.assignedTeamId == ''
-        && request.resource.data.assignedTeamIds.size() == 0
-        && request.resource.data.workerUid == ''
-        && request.resource.data.status == 'Nuova'
-        && request.resource.data.workHours == 0
-        && request.resource.data.materialAmount == 0
-        && request.resource.data.progress == 0
-        && request.resource.data.contractValue == 0
-        && request.resource.data.recordedCost == 0
-        && nonEmptyText(request.resource.data.payload, 400000)
-        && request.resource.data.payload.matches('^\\{.*"status":"Nuova".*\\}$');
-    }
-
     match /users/{userId} {
       allow read: if signedIn() && (userId == request.auth.uid || isOwner());
 
@@ -331,7 +312,9 @@ service cloud.firestore {
 
     match /leads/{docId} {
       allow read: if isStaff();
-      allow create: if validPublicLeadCreate(docId) || (isStaff() && validCreateEnvelope(docId));
+      // Le richieste pubbliche passano dalla funzione edilkappaPublicLead, che applica
+      // validazione, deduplicazione e limite antispam prima di usare Admin SDK.
+      allow create: if isStaff() && validCreateEnvelope(docId);
       allow update: if isStaff() && validUpdateEnvelope(docId);
       allow delete: if isStaff();
     }

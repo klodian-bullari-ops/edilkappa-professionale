@@ -53,6 +53,7 @@ const FIREBASE_CONFIG = {
 
 const ORG_ID = 'edilkappa';
 const OWNER_EMAIL = 'info@edilkappa.com';
+const ACCOUNT_STORAGE_KEY = 'edilkappa_cloud_uid_v1';
 const local = window.EdilKappaLocal;
 const app = initializeApp(FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -63,6 +64,7 @@ const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 61000
 const callEdilKappaOperations = httpsCallable(functions, 'edilkappaOperations', { timeout: 550000 });
 const callEdilKappaDaneaBridge = httpsCallable(functions, 'edilkappaDaneaBridge', { timeout: 40000 });
 const callEdilKappaBackup = httpsCallable(functions, 'edilkappaBackup', { timeout: 120000 });
+const callEdilKappaHealth = httpsCallable(functions, 'edilkappaHealth', { timeout: 45000 });
 const callEdilKappaNotifications = httpsCallable(functions, 'edilkappaNotifications', { timeout: 40000 });
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
@@ -193,6 +195,10 @@ const api = {
   },
   async backupRequest(payload = { action: 'list' }) {
     const response = await callEdilKappaBackup(payload);
+    return response.data;
+  },
+  async healthRequest(payload = { action: 'status' }) {
+    const response = await callEdilKappaHealth(payload);
     return response.data;
   },
   async notificationRequest(payload = { action: 'status' }) {
@@ -646,12 +652,12 @@ function loginGate(message = '') {
   overlay.innerHTML = `<section class="cloudGateCard">
     <div class="cloudGateBrand"><img src="./assets/icona-edilkappa.svg" alt="EDILKAPPA"><div><h2>EDILKAPPA Professionale</h2><small>Accesso sicuro e dati sincronizzati</small></div></div>
     <form id="cloudLoginForm" class="cloudGateForm">
-      <input name="email" type="email" autocomplete="email" placeholder="Email di lavoro" required>
-      <input name="password" type="password" autocomplete="current-password" minlength="6" placeholder="Password" required>
+      <input name="email" type="email" inputmode="email" autocomplete="email" placeholder="Email di lavoro" aria-label="Email di lavoro" required>
+      <input name="password" type="password" autocomplete="current-password" minlength="6" placeholder="Password" aria-label="Password" required>
       <div class="cloudGateButtons"><button class="btn green" name="login" type="submit">Accedi</button><button class="btn light" id="cloudRegister" type="button">Crea accesso</button></div>
       <div class="cloudDivider">oppure</div>
       <button class="btn lime" id="cloudGoogle" type="button">Continua con Google</button>
-      <div class="cloudGateMessage" id="cloudGateMessage">${escapeHtml(message)}</div>
+      <div class="cloudGateMessage" id="cloudGateMessage" role="status" aria-live="polite">${escapeHtml(message)}</div>
       <small>Gli account nuovi devono essere approvati dal titolare. Continuando accetti l’uso dei dati per il servizio. <a href="./privacy.html">Privacy</a>.</small>
     </form>
   </section>`;
@@ -688,7 +694,7 @@ function waitingGate(kind, message) {
   overlay.querySelector('#cloudRefresh').onclick = async () => {
     try { await reload(auth.currentUser); location.reload(); } catch (error) { alert(errorText(error)); }
   };
-  overlay.querySelector('#cloudLogoutGate').onclick = () => signOut(auth);
+  overlay.querySelector('#cloudLogoutGate').onclick = () => secureSignOut();
 }
 
 function hideGate() {
@@ -751,13 +757,20 @@ function installAccountButton() {
   wrapper.className = 'cloudAccount';
   wrapper.innerHTML = `<span>${escapeHtml(user?.email || '')}</span><button class="btn sm light" type="button">Esci</button>`;
   wrapper.querySelector('button').onclick = async () => {
-    if (!navigator.onLine && !confirm('Sei offline. Uscendo, eventuali modifiche non ancora sincronizzate resteranno su questo dispositivo. Continuare?')) return;
+    if (!navigator.onLine && !confirm('Sei offline. Uscendo, i dati e le modifiche non sincronizzate saranno cancellati da questo dispositivo. Continuare?')) return;
     try { if (navigator.onLine) await syncNow(); } catch (_) {}
-    local.clearDeviceData();
-    await signOut(auth);
-    location.reload();
+    await secureSignOut();
   };
   document.querySelector('.topActions')?.appendChild(wrapper);
+}
+
+async function secureSignOut() {
+  stopDataListeners();
+  try { await local.clearDeviceData(); }
+  catch (error) { alert(error?.message || 'Chiudi le altre schede EdilKappa e riprova.'); return; }
+  localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+  await signOut(auth);
+  location.reload();
 }
 
 function applyRole() {
@@ -818,12 +831,19 @@ onAuthStateChanged(auth, async (currentUser) => {
   profile = null;
   activationKey = '';
   if (!currentUser) {
+    if (localStorage.getItem(ACCOUNT_STORAGE_KEY)) {
+      try { await local.clearDeviceData(); } catch (_) {}
+      localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+    }
     document.getElementById('cloudAccount')?.remove();
     setSyncState('Non connesso', '#ad2a2a');
     loginGate();
     return;
   }
   try {
+    const previousUid = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+    if (previousUid && previousUid !== currentUser.uid) await local.clearDeviceData();
+    localStorage.setItem(ACCOUNT_STORAGE_KEY, currentUser.uid);
     await ensureProfile(currentUser);
     unsubscribeProfile = onSnapshot(doc(firestore, 'users', currentUser.uid), (snapshot) => {
       if (snapshot.exists()) handleProfile(snapshot.data()).catch((error) => loginGate(errorText(error)));

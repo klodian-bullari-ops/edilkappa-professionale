@@ -10,8 +10,11 @@
     notificationTesting: false,
     danea: null,
     daneaError: '',
+    health: null,
+    healthError: '',
     notifications: null,
     notificationError: '',
+    version: null,
     message: ''
   };
   const style = document.createElement('style');
@@ -93,6 +96,19 @@
     return `<section class="systemCard"><div class="systemCardHead"><h3>Notifiche</h3>${light(ok, error)}</div><p>${safe(message)}${state.serviceWorker ? '<br>Servizio notifiche installato.' : ''}</p>${supported ? `<button class="btn sm light" onclick="sendEdilKappaTestNotification()" ${state.notificationTesting ? 'disabled' : ''}>${state.notificationTesting ? 'Invio…' : 'Invia notifica di prova'}</button>` : ''}</section>`;
   }
 
+  function healthCard() {
+    const health = state.health;
+    const ok = health?.status === 'healthy';
+    const error = health?.status === 'error' || Boolean(state.healthError);
+    let message = state.servicesLoading && !health ? 'Controllo automatico in corso…' : 'Controllo automatico non ancora disponibile.';
+    if (state.healthError) message = `Controllo non riuscito: ${state.healthError}`;
+    else if (health) {
+      const issueNames = (health.issues || []).slice(0, 2).map((item) => item.title).join(' · ');
+      message = `Qualità operativa ${Number(health.score || 0)}/100 · ${health.errorCount || 0} errori · ${health.warningCount || 0} avvisi${issueNames ? `. ${issueNames}` : '. Tutti i controlli sono regolari.'}`;
+    }
+    return `<section class="systemCard"><div class="systemCardHead"><h3>Controllo automatico</h3>${light(ok, error)}</div><p>${safe(message)}${health?.checkedAtMs ? `<br>Ultima verifica ${safe(dateTime(health.checkedAtMs))}.` : ''}</p></section>`;
+  }
+
   function statusCards() {
     const api = cloud();
     const daneaRows = (db.leads || []).filter((item) => /danea/i.test(`${item.source || ''} ${item.sourceType || ''}`));
@@ -102,8 +118,9 @@
       <section class="systemCard"><div class="systemCardHead"><h3>Sincronizzazione</h3>${light(Boolean(api.lastSyncAt) && !api.lastSyncError, Boolean(api.lastSyncError))}</div><p>${api.syncing ? 'Sincronizzazione in corso…' : api.lastSyncError ? `Ultimo errore: ${safe(api.lastSyncError)}` : `Ultimo completamento: ${safe(dateTime(api.lastSyncAt))}`}</p></section>
       ${daneaCard(daneaRows, latestDanea)}
       ${notificationCard()}
+      ${healthCard()}
       <section class="systemCard"><div class="systemCardHead"><h3>EdilKappa AI</h3>${light(Boolean(api.ready && api.aiRequest))}</div><p>${api.ready && api.aiRequest ? 'Servizio disponibile per preventivi, relazioni e analisi.' : 'In attesa del collegamento cloud.'}</p></section>
-      <section class="systemCard"><div class="systemCardHead"><h3>Versione applicazione</h3>${light(true)}</div><p>Cache automatica · controllo sistema e percorso interventi attivi.</p></section>
+      <section class="systemCard"><div class="systemCardHead"><h3>Versione applicazione</h3>${light(Boolean(state.version?.version), !state.version)}</div><p>${state.version?.version ? `Versione ${safe(state.version.version)} · generata ${safe(dateTime(state.version.builtAt))}.` : 'Versione di produzione non verificata.'}<br>Cache automatica e aggiornamento controllato attivi.</p></section>
     </div>`;
   }
 
@@ -126,14 +143,22 @@
     try {
       const registration = await navigator.serviceWorker?.getRegistration?.();
       state.serviceWorker = Boolean(registration);
-      const [daneaResult, notificationResult] = await Promise.allSettled([
+      const [daneaResult, notificationResult, healthResult, versionResult] = await Promise.allSettled([
         cloud().daneaBridgeRequest?.({ action: 'status' }),
-        cloud().notificationRequest?.({ action: 'status' })
+        cloud().notificationRequest?.({ action: 'status' }),
+        cloud().healthRequest?.({ action: 'status' }),
+        fetch('./version.json', { cache: 'no-store' }).then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
       ]);
       if (daneaResult.status === 'fulfilled' && daneaResult.value) { state.danea = daneaResult.value; state.daneaError = ''; }
       else state.daneaError = daneaResult.reason?.message || 'Servizio non disponibile.';
       if (notificationResult.status === 'fulfilled' && notificationResult.value) { state.notifications = notificationResult.value; state.notificationError = ''; }
       else state.notificationError = notificationResult.reason?.message || 'Servizio non disponibile.';
+      if (healthResult.status === 'fulfilled' && healthResult.value) { state.health = healthResult.value; state.healthError = ''; }
+      else state.healthError = healthResult.reason?.message || 'Servizio non disponibile.';
+      state.version = versionResult.status === 'fulfilled' ? versionResult.value : null;
       state.servicesLoaded = true;
     } finally {
       state.servicesLoading = false;
