@@ -38,14 +38,17 @@ test("bootstrap owner authentication does not depend on a Firestore profile read
 
 test("stability interface provides filters pagination trash and backups", () => {
   const stability = source("stability-pack.js");
+  const qualityRuntime = source("quality-runtime.js");
   const loader = source("edilkappa-loader.js");
   assert.match(loader, /stability-pack\.js\?v=1/);
+  assert.match(loader, /quality-runtime\.js\?v=1/);
   assert.match(stability, /const PAGE_SIZE = 20/);
   assert.match(stability, /setStableList/);
   assert.match(stability, /archiveSelectedQuotes/);
   assert.match(stability, /window\.trashView/);
   assert.match(stability, /window\.backupView/);
-  assert.match(stability, /unhandledrejection/);
+  assert.match(qualityRuntime, /unhandledrejection/);
+  assert.match(qualityRuntime, /reportPerformanceMetric/);
   assert.match(stability, /Errori di produzione/);
 });
 
@@ -60,9 +63,14 @@ test("nightly backup and temporary EdilKappa shares replace the legacy transfer 
   assert.match(backend, /exports\.backupEdilkappaNightly/);
   assert.match(backend, /schedule: "15 2 \* \* \*"/);
   assert.match(backend, /verifyEdilKappaBackup/);
+  assert.match(backend, /prepareEdilKappaRestore/);
+  assert.match(backend, /RIPRISTINA EDILKAPPA/);
+  assert.match(backend, /recordRestoreDrill/);
   assert.match(backend, /gunzipSync/);
   assert.match(backend, /checksum/);
   assert.match(stability, /verifyLatestEdilKappaBackup/);
+  assert.match(stability, /previewEdilKappaRestore/);
+  assert.match(stability, /testLatestEdilKappaRestore/);
   assert.match(stability, /Da verificare/);
   assert.match(backend, /purgeOldClientErrors/);
   assert.match(cloud, /uploadSharePackage/);
@@ -96,6 +104,7 @@ test("build and deployment are versioned and guarded", () => {
   assert.match(deploy, /google-github-actions\/setup-gcloud@v3/);
   assert.match(deploy, /firestore:rules,firestore:indexes,storage,functions:backupEdilkappaNightly/);
   assert.match(deploy, /for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaHealth edilkappaNotifications/);
+  assert.match(deploy, /edilkappaPublicLead edilkappaOperations edilkappaAi/);
   assert.match(deploy, /--only "functions:\$\{function_name\}"/);
   assert.match(deploy, /functions:processDaneaInbox/);
   assert.match(deploy, /Unable to set the invoker\|Failed to set the IAM Policy/);
@@ -130,7 +139,8 @@ test("hosting disables stale root caching and adds safe browser headers", () => 
   assert.ok(global.headers.some((header) => header.key === "X-Content-Type-Options" && header.value === "nosniff"));
   assert.ok(global.headers.some((header) => header.key === "X-Frame-Options" && header.value === "DENY"));
   assert.ok(global.headers.some((header) => header.key === "Strict-Transport-Security" && /max-age=/.test(header.value)));
-  assert.ok(global.headers.some((header) => header.key === "Content-Security-Policy-Report-Only"));
+  assert.ok(global.headers.some((header) => header.key === "Content-Security-Policy"));
+  assert.ok(global.headers.some((header) => header.key === "Content-Security-Policy" && /cloudfunctions\.net/.test(header.value)));
 });
 
 test("quality monitor checks production and the cloud health controller", () => {
@@ -167,6 +177,21 @@ test("notifications have a protected status and delivery test", () => {
   assert.match(cloud, /notificationRequest/);
   assert.match(cloud, /requestPayload\.deviceId = await tokenDocumentId/);
   assert.match(control, /Invia notifica di prova/);
+});
+
+test("every callable function is ready for gradual App Check enforcement", () => {
+  const backend = source("functions/index.js");
+  const callables = [...backend.matchAll(/exports\.(\w+)\s*=\s*onCall\((\{[\s\S]*?\})\s*,/g)];
+  assert.deepEqual(callables.map((match) => match[1]).sort(), [
+    "edilkappaAi",
+    "edilkappaBackup",
+    "edilkappaDaneaBridge",
+    "edilkappaHealth",
+    "edilkappaNotifications",
+    "edilkappaOperations",
+    "edilkappaPublicLead"
+  ]);
+  callables.forEach(([_, name, options]) => assert.match(options, /enforceAppCheck:\s*ENFORCE_APP_CHECK/, `${name} deve usare App Check`));
 });
 
 test("dashboard has one priority area and one scheduled-work area", () => {

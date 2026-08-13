@@ -129,3 +129,26 @@ test("l'amministratore legge solo i condomini assegnati", async () => {
   const own = await getDoc(doc(adminDb, "clients/client-1"));
   assert.equal(own.exists(), true);
 });
+
+test("registra prestazioni anonime soltanto per l'utente autenticato e con limiti sicuri", async () => {
+  await seedProfiles();
+  const workerDb = authenticated("worker-1", "worker@example.com");
+  const valid = {
+    id: "metric-worker-1",
+    orgId: "edilkappa",
+    uid: "worker-1",
+    role: "worker",
+    path: "/index.html",
+    device: "mobile",
+    navigationType: "reload",
+    loadMs: 1800,
+    lcpMs: 1400,
+    cls: 0.03,
+    criticalReadyMs: 700,
+    online: true,
+    createdAt: serverTimestamp()
+  };
+  await assertSucceeds(setDoc(doc(workerDb, "clientMetrics/metric-worker-1"), valid));
+  await assertFails(setDoc(doc(workerDb, "clientMetrics/metric-spoof"), { ...valid, id: "metric-spoof", uid: "owner-1", createdAt: serverTimestamp() }));
+  await assertFails(setDoc(doc(workerDb, "clientMetrics/metric-slow-invalid"), { ...valid, id: "metric-slow-invalid", loadMs: 999999, createdAt: serverTimestamp() }));
+});

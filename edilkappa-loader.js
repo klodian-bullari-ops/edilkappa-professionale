@@ -3,6 +3,7 @@
 
   const SCRIPT_GROUPS = Object.freeze({
     critical: [
+      "./quality-runtime.js?v=1",
       "./professional-extensions.js?v=19",
       "./business-suite.js?v=19",
       "./client-archive.js?v=24",

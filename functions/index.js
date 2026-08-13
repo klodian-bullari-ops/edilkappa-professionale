@@ -3,10 +3,10 @@
 const { createHash, randomUUID } = require("node:crypto");
 const { gunzipSync, gzipSync } = require("node:zlib");
 const { initializeApp } = require("firebase-admin/app");
-const { FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { FieldValue, GeoPoint, Timestamp, getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
-const { defineSecret } = require("firebase-functions/params");
+const { defineSecret, defineString } = require("firebase-functions/params");
 const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { HttpsError, onCall, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
@@ -72,19 +72,34 @@ const {
   validatePublicLeadInput
 } = require("./public-lead");
 const { evaluateSystemHealth } = require("./health-core");
+const { summarizePerformance } = require("./performance-core");
+const {
+  BACKUP_FORMAT_V2,
+  buildRestorePlan,
+  buildRestorePreview,
+  encodeBackupValue,
+  inspectBackupPayload
+} = require("./backup-core");
 
 const adminApp = initializeApp();
 const firestore = getFirestore(adminApp, "edilkappa");
 const messaging = getMessaging(adminApp);
 const storageBucket = getStorage(adminApp).bucket("edilkappa-professionale.firebasestorage.app");
 const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+const APP_CHECK_MODE = defineString("EDILKAPPA_APP_CHECK_MODE", { default: "observe", description: "observe oppure enforce dopo la verifica dei dispositivi" });
+const ENFORCE_APP_CHECK = APP_CHECK_MODE.equals("enforce");
 const OWNER_EMAIL = "info@edilkappa.com";
 const ORG_ID = "edilkappa";
 const BACKUP_PREFIX = "system-backups/edilkappa/";
 const SHARE_PREFIX = "organisations/edilkappa/shares/";
 const BACKUP_RETENTION_MS = 60 * 24 * 60 * 60 * 1000;
+const RESTORE_AUTHORIZATION_MS = 10 * 60 * 1000;
+const RESTORE_CONFIRMATION = "RIPRISTINA EDILKAPPA";
+const MAX_BACKUP_COMPRESSED_BYTES = 128 * 1024 * 1024;
+const MAX_BACKUP_JSON_BYTES = 384 * 1024 * 1024;
 const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const CLIENT_ERROR_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const CLIENT_METRIC_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const BACKUP_COLLECTIONS = [
   "users", "clients", "inspections", "documents", "sites", "quotes", "reports",
   "timesheets", "absences", "edilconnect", "drone", "lifelines", "roofs", "drains",
@@ -195,6 +210,7 @@ async function authorizedUser(request, mode) {
   return {
     uid: request.auth.uid,
     role,
+    email,
     displayName: profile?.displayName || request.auth.token.name || email.split("@")[0] || "Klodian"
   };
 }
@@ -840,6 +856,7 @@ exports.edilkappaOperations = onCall({
   timeoutSeconds: 540,
   memory: "1GiB",
   maxInstances: 1,
+  enforceAppCheck: ENFORCE_APP_CHECK,
   cors: true
 }, async (request) => {
   const account = await authorizedUser(request, "work");
@@ -982,7 +999,7 @@ exports.processDaneaInbox = onDocumentCreated({ document: "daneaInbox/{messageId
   await event.data?.ref.delete();
 });
 
-exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 1, cors: true }, async (request) => {
+exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 1, enforceAppCheck: ENFORCE_APP_CHECK, cors: true }, async (request) => {
   const account = await authorizedUser(request, "work");
   if (account.role !== "owner") throw new HttpsError("permission-denied", "Solo il titolare può controllare il collegamento Danea.");
   const action = cleanText(request.data?.action || "status", 40);
@@ -1014,7 +1031,7 @@ exports.edilkappaDaneaBridge = onCall({ region: "europe-west8", invoker: "public
   }
 });
 
-exports.edilkappaNotifications = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 2, cors: true }, async (request) => {
+exports.edilkappaNotifications = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 2, enforceAppCheck: ENFORCE_APP_CHECK, cors: true }, async (request) => {
   const account = await authorizedUser(request, "work");
   const action = cleanText(request.data?.action || "status", 40);
   const requestedDeviceId = /^[a-f0-9]{48}$/.test(String(request.data?.deviceId || "")) ? String(request.data.deviceId) : "";
@@ -1047,7 +1064,7 @@ exports.edilkappaNotifications = onCall({ region: "europe-west8", invoker: "publ
   return { registered: devices.length > 0, currentDeviceRegistered, deviceCount: devices.length, lastRegisteredAtMs, delivery };
 });
 
-exports.edilkappaPublicLead = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 3, cors: true }, async (request) => {
+exports.edilkappaPublicLead = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 30, memory: "256MiB", maxInstances: 3, enforceAppCheck: ENFORCE_APP_CHECK, cors: true }, async (request) => {
   const nowMs = Date.now();
   try {
     const lead = validatePublicLeadInput(request.data, nowMs);
@@ -1394,6 +1411,7 @@ exports.edilkappaAi = onCall({
   timeoutSeconds: 600,
   memory: "1GiB",
   maxInstances: 2,
+  enforceAppCheck: ENFORCE_APP_CHECK,
   cors: true
 }, async (request) => {
   const mode = request.data?.mode === "personal" ? "personal" : "work";
@@ -1942,11 +1960,11 @@ async function createEdilKappaBackup(trigger = "manual") {
   let recordCount = 0;
   for (const name of BACKUP_COLLECTIONS) {
     const snapshot = await firestore.collection(name).get();
-    collections[name] = snapshot.docs.map((document) => ({ id: document.id, data: document.data() }));
+    collections[name] = snapshot.docs.map((document) => ({ id: document.id, data: encodeBackupValue(document.data()) }));
     recordCount += snapshot.size;
   }
   const payload = {
-    format: "edilkappa-backup-v1",
+    format: BACKUP_FORMAT_V2,
     orgId: ORG_ID,
     generatedAt: generatedAt.toISOString(),
     trigger,
@@ -1966,7 +1984,7 @@ async function createEdilKappaBackup(trigger = "manual") {
         trigger,
         generatedAt: generatedAt.toISOString(),
         recordCount: String(recordCount),
-        format: "edilkappa-backup-v1",
+        format: BACKUP_FORMAT_V2,
         checksum
       }
     }
@@ -1984,6 +2002,7 @@ async function listEdilKappaBackups() {
       recordCount: Number(metadata.metadata?.recordCount || 0),
       bytes: Number(metadata.size || 0),
       trigger: metadata.metadata?.trigger || "automatic",
+      format: metadata.metadata?.format || "edilkappa-backup-v1",
       checksum: metadata.metadata?.checksum || "",
       verifiedAt: metadata.metadata?.verifiedAt || ""
     };
@@ -1991,27 +2010,29 @@ async function listEdilKappaBackups() {
   return rows.sort((left, right) => String(right.generatedAt).localeCompare(String(left.generatedAt))).slice(0, 20);
 }
 
-async function verifyEdilKappaBackup(requestedPath = "") {
+async function readEdilKappaBackup(requestedPath = "") {
   const backups = await listEdilKappaBackups();
   const selected = requestedPath
     ? backups.find((item) => item.path === requestedPath)
     : backups[0];
-  if (!selected) return { available: false, valid: false, message: "Nessun backup disponibile." };
+  if (!selected) return { available: false, valid: false, message: "Nessun backup disponibile.", payload: null };
   if (!selected.path.startsWith(BACKUP_PREFIX) || !selected.path.endsWith(".json.gz")) {
     throw new HttpsError("invalid-argument", "Percorso backup non valido.");
   }
+  if (selected.bytes > MAX_BACKUP_COMPRESSED_BYTES) {
+    return { available: true, valid: false, path: selected.path, message: "Il file supera il limite di sicurezza previsto.", payload: null };
+  }
   const file = storageBucket.file(selected.path);
   const [compressed] = await file.download();
+  if (compressed.length > MAX_BACKUP_COMPRESSED_BYTES) {
+    return { available: true, valid: false, path: selected.path, message: "Il file supera il limite di sicurezza previsto.", payload: null };
+  }
   const checksum = createHash("sha256").update(compressed).digest("hex");
   let payload;
-  try { payload = JSON.parse(gunzipSync(compressed).toString("utf8")); }
-  catch (_) { return { available: true, valid: false, path: selected.path, message: "Il file non è leggibile." }; }
-  const collections = payload?.collections && typeof payload.collections === "object" ? payload.collections : {};
-  const countedRecords = Object.values(collections).reduce((total, rows) => total + (Array.isArray(rows) ? rows.length : 0), 0);
-  const valid = payload?.format === "edilkappa-backup-v1"
-    && payload?.orgId === ORG_ID
-    && Number(payload?.recordCount || 0) === countedRecords
-    && (!selected.checksum || selected.checksum === checksum);
+  try { payload = JSON.parse(gunzipSync(compressed, { maxOutputLength: MAX_BACKUP_JSON_BYTES }).toString("utf8")); }
+  catch (_) { return { available: true, valid: false, path: selected.path, message: "Il file non è leggibile.", payload: null }; }
+  const inspection = inspectBackupPayload(payload, { orgId: ORG_ID, allowedCollections: BACKUP_COLLECTIONS });
+  const valid = inspection.valid && (!selected.checksum || selected.checksum === checksum);
   const verifiedAt = new Date().toISOString();
   if (valid) {
     const [metadata] = await file.getMetadata();
@@ -2020,7 +2041,7 @@ async function verifyEdilKappaBackup(requestedPath = "") {
         ...(metadata.metadata || {}),
         checksum,
         verifiedAt,
-        verifiedRecordCount: String(countedRecords)
+        verifiedRecordCount: String(inspection.recordCount)
       }
     });
   }
@@ -2029,12 +2050,20 @@ async function verifyEdilKappaBackup(requestedPath = "") {
     valid,
     path: selected.path,
     generatedAt: payload?.generatedAt || selected.generatedAt,
-    recordCount: countedRecords,
+    format: payload?.format || selected.format,
+    recordCount: inspection.recordCount,
     bytes: compressed.length,
     checksum,
     verifiedAt: valid ? verifiedAt : "",
-    message: valid ? "Backup integro e ripristinabile." : "Il contenuto del backup non supera i controlli di integrità."
+    message: valid ? "Backup integro e ripristinabile." : inspection.issues[0] || "Il contenuto del backup non supera i controlli di integrità.",
+    payload: valid ? payload : null
   };
+}
+
+async function verifyEdilKappaBackup(requestedPath = "") {
+  const result = await readEdilKappaBackup(requestedPath);
+  const { payload, ...verification } = result;
+  return verification;
 }
 
 async function verifyAndRecordEdilKappaBackup(requestedPath = "") {
@@ -2055,17 +2084,193 @@ async function verifyAndRecordEdilKappaBackup(requestedPath = "") {
   return verification;
 }
 
+function restoreAdapters() {
+  return {
+    timestamp(iso, nanoseconds = 0) {
+      const milliseconds = Date.parse(iso);
+      if (!Number.isFinite(milliseconds)) throw new Error("Timestamp del backup non valido.");
+      const seconds = Math.floor(milliseconds / 1000);
+      const nanos = Number.isInteger(Number(nanoseconds)) && Number(nanoseconds) >= 0 && Number(nanoseconds) < 1e9
+        ? Number(nanoseconds)
+        : (milliseconds % 1000) * 1e6;
+      return new Timestamp(seconds, nanos);
+    },
+    timestampFromParts(seconds, nanoseconds) {
+      return new Timestamp(seconds, nanoseconds);
+    },
+    geoPoint(latitude, longitude) {
+      return new GeoPoint(Number(latitude), Number(longitude));
+    },
+    reference(path) {
+      return firestore.doc(String(path || ""));
+    }
+  };
+}
+
+async function backupCollectionCounts() {
+  const rows = await Promise.all(BACKUP_COLLECTIONS.map(async (name) => {
+    const aggregate = await firestore.collection(name).count().get();
+    return [name, Number(aggregate.data()?.count || 0)];
+  }));
+  return Object.fromEntries(rows);
+}
+
+function restoreTokenHash(uid, path, token) {
+  return createHash("sha256").update(`${uid}|${path}|${token}`).digest("hex");
+}
+
+async function prepareEdilKappaRestore(account, requestedPath) {
+  const loaded = await readEdilKappaBackup(requestedPath);
+  if (!loaded.valid || !loaded.payload) throw new HttpsError("failed-precondition", loaded.message || "Il backup non è ripristinabile.");
+  const preview = buildRestorePreview(loaded.payload, await backupCollectionCounts(), {
+    orgId: ORG_ID,
+    allowedCollections: BACKUP_COLLECTIONS
+  });
+  const token = `${randomUUID()}-${randomUUID()}`;
+  const expiresAtMs = Date.now() + RESTORE_AUTHORIZATION_MS;
+  await firestore.collection("systemRestoreAuthorizations").doc(account.uid).set({
+    orgId: ORG_ID,
+    path: loaded.path,
+    tokenHash: restoreTokenHash(account.uid, loaded.path, token),
+    recordCount: preview.recordCount,
+    expiresAtMs,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return {
+    ...preview,
+    path: loaded.path,
+    token,
+    expiresAtMs,
+    mode: "non-destructive",
+    confirmation: RESTORE_CONFIRMATION
+  };
+}
+
+async function claimRestoreAuthorization(account, path, token) {
+  const ref = firestore.collection("systemRestoreAuthorizations").doc(account.uid);
+  await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.exists ? snapshot.data() : null;
+    const valid = data?.orgId === ORG_ID
+      && data?.path === path
+      && Number(data?.expiresAtMs || 0) >= Date.now()
+      && data?.tokenHash === restoreTokenHash(account.uid, path, token);
+    if (!valid) throw new HttpsError("failed-precondition", "L’anteprima di ripristino è scaduta. Preparala di nuovo.");
+    transaction.delete(ref);
+  });
+}
+
+async function restoreEdilKappaBackup(account, requestData = {}) {
+  const path = cleanText(requestData.path, 500);
+  const token = cleanText(requestData.token, 200);
+  if (String(requestData.confirmation || "").trim().toUpperCase() !== RESTORE_CONFIRMATION) {
+    throw new HttpsError("failed-precondition", `Scrivi ${RESTORE_CONFIRMATION} per confermare.`);
+  }
+  const loaded = await readEdilKappaBackup(path);
+  if (!loaded.valid || !loaded.payload) throw new HttpsError("failed-precondition", loaded.message || "Il backup non è ripristinabile.");
+  await claimRestoreAuthorization(account, path, token);
+
+  const safetyBackup = await createEdilKappaBackup("pre-restore");
+  const safetyVerification = await verifyAndRecordEdilKappaBackup(safetyBackup.path);
+  if (!safetyVerification.valid) throw new HttpsError("aborted", "Il backup di sicurezza non è valido: ripristino annullato.");
+
+  const plan = buildRestorePlan(loaded.payload, {
+    orgId: ORG_ID,
+    allowedCollections: BACKUP_COLLECTIONS,
+    adapters: restoreAdapters()
+  });
+  const writer = firestore.bulkWriter();
+  writer.onWriteError((error) => error.failedAttempts < 3);
+  for (const operation of plan.operations) {
+    writer.set(firestore.collection(operation.collection).doc(operation.id), operation.data, { merge: true });
+  }
+  await writer.close();
+
+  const ownerRef = firestore.collection("users").doc(account.uid);
+  const ownerSnapshot = await ownerRef.get();
+  await ownerRef.set({
+    orgId: ORG_ID,
+    displayName: account.displayName || "Klodian",
+    email: account.email || OWNER_EMAIL,
+    role: "owner",
+    active: true,
+    teamId: "",
+    clientIds: [],
+    ...(ownerSnapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    updatedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  const restoredAt = new Date().toISOString();
+  await Promise.all([
+    firestore.collection("audit").doc(`restore-${Date.now()}`).set({
+      orgId: ORG_ID,
+      actorUid: account.uid,
+      action: "Ripristino backup non distruttivo",
+      targetId: path.slice(-128),
+      createdAt: FieldValue.serverTimestamp()
+    }),
+    firestore.collection("systemHealth").doc("restore").set({
+      orgId: ORG_ID,
+      valid: true,
+      path,
+      restoredAt,
+      restoredAtMs: Date.now(),
+      recordCount: plan.recordCount,
+      safetyBackupPath: safetyBackup.path,
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true })
+  ]);
+  return {
+    restoredAt,
+    path,
+    recordCount: plan.recordCount,
+    collections: plan.collections,
+    safetyBackup: safetyVerification,
+    mode: "non-destructive"
+  };
+}
+
+async function recordRestoreDrill(requestedPath = "") {
+  const loaded = await readEdilKappaBackup(requestedPath);
+  if (!loaded.valid || !loaded.payload) throw new Error(loaded.message || "Il backup non supera la prova di ripristino.");
+  const plan = buildRestorePlan(loaded.payload, {
+    orgId: ORG_ID,
+    allowedCollections: BACKUP_COLLECTIONS,
+    adapters: restoreAdapters()
+  });
+  const fingerprint = createHash("sha256")
+    .update(plan.operations.map((item) => `${item.collection}/${item.id}`).join("\n"))
+    .digest("hex");
+  const checkedAtMs = Date.now();
+  await firestore.collection("systemHealth").doc("restoreDrill").set({
+    orgId: ORG_ID,
+    valid: true,
+    path: loaded.path,
+    format: loaded.format,
+    recordCount: plan.recordCount,
+    fingerprint,
+    checkedAtMs,
+    checkedAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+  return { valid: true, path: loaded.path, recordCount: plan.recordCount, fingerprint, checkedAtMs };
+}
+
 async function collectEdilkappaHealth(nowMs = Date.now()) {
   const currentRef = firestore.collection("systemHealth").doc("current");
   const clientErrorsCount = firestore.collection("clientErrors")
     .where("orgId", "==", ORG_ID)
     .where("createdAt", ">=", new Date(nowMs - 24 * 60 * 60 * 1000))
     .count();
-  const [backupSnapshot, daneaSnapshot, errorsCountSnapshot, devicesSnapshot, previousSnapshot] = await Promise.all([
+  const [backupSnapshot, restoreDrillSnapshot, daneaSnapshot, errorsCountSnapshot, devicesSnapshot, metricsSnapshot, previousSnapshot] = await Promise.all([
     firestore.collection("systemHealth").doc("backup").get(),
+    firestore.collection("systemHealth").doc("restoreDrill").get(),
     DANEA_BRIDGE_REF().get(),
     clientErrorsCount.get(),
     firestore.collection("pushDevices").where("orgId", "==", ORG_ID).limit(500).get(),
+    firestore.collection("clientMetrics")
+      .where("orgId", "==", ORG_ID)
+      .where("createdAt", ">=", new Date(nowMs - 24 * 60 * 60 * 1000))
+      .limit(1000)
+      .get(),
     currentRef.get()
   ]);
   let backup = backupSnapshot.exists ? backupSnapshot.data() : null;
@@ -2080,16 +2285,21 @@ async function collectEdilkappaHealth(nowMs = Date.now()) {
     } : { available: false, valid: false };
   }
   const daneaData = daneaSnapshot.data() || {};
+  const restoreDrill = restoreDrillSnapshot.data() || {};
+  const performance = summarizePerformance(metricsSnapshot.docs.map((document) => document.data()), { nowMs });
   const clientErrors24h = Number(errorsCountSnapshot.data()?.count || 0);
   const notificationDevices = devicesSnapshot.docs.filter((document) => Boolean(document.data()?.token)).length;
   const health = evaluateSystemHealth({
     nowMs,
     backup,
+    restoreDrill,
     danea: {
       connected: Boolean(daneaData.connected),
       lastPollAtMs: Number(daneaData.lastPollAtMs || 0),
       lastPollError: cleanText(daneaData.lastPollError, 300)
     },
+    performance,
+    appCheck: { mode: APP_CHECK_MODE.value() },
     clientErrors24h,
     notificationDevices
   });
@@ -2103,6 +2313,14 @@ async function collectEdilkappaHealth(nowMs = Date.now()) {
       generatedAtMs: Number(backup.generatedAtMs || 0),
       verifiedAtMs: Number(backup.verifiedAtMs || 0)
     },
+    restoreDrill: {
+      valid: restoreDrill.valid === true,
+      path: cleanText(restoreDrill.path, 500),
+      checkedAtMs: Number(restoreDrill.checkedAtMs || 0),
+      recordCount: Number(restoreDrill.recordCount || 0)
+    },
+    performance,
+    appCheck: health.appCheck,
     danea: {
       connected: Boolean(daneaData.connected),
       lastPollAtMs: Number(daneaData.lastPollAtMs || 0),
@@ -2121,6 +2339,14 @@ async function collectEdilkappaHealth(nowMs = Date.now()) {
       generatedAtMs: Number(backup.generatedAtMs || 0),
       verifiedAtMs: Number(backup.verifiedAtMs || 0)
     },
+    restoreDrill: {
+      valid: restoreDrill.valid === true,
+      path: cleanText(restoreDrill.path, 500),
+      checkedAtMs: Number(restoreDrill.checkedAtMs || 0),
+      recordCount: Number(restoreDrill.recordCount || 0)
+    },
+    performance,
+    appCheck: health.appCheck,
     danea: {
       connected: Boolean(daneaData.connected),
       lastPollAtMs: Number(daneaData.lastPollAtMs || 0),
@@ -2171,12 +2397,20 @@ async function purgeOldClientErrors(now = Date.now()) {
   }));
 }
 
+async function purgeOldClientMetrics(now = Date.now()) {
+  const snapshot = await firestore.collection("clientMetrics").where("orgId", "==", ORG_ID).get();
+  await Promise.all(snapshot.docs.map(async (document) => {
+    const createdAt = document.data()?.createdAt?.toMillis?.();
+    if (Number.isFinite(createdAt) && now - createdAt > CLIENT_METRIC_RETENTION_MS) await document.ref.delete();
+  }));
+}
+
 async function purgePublicSubmissionLimits(now = Date.now()) {
   const snapshot = await firestore.collection("publicSubmissionLimits").get();
   await Promise.all(snapshot.docs.map((document) => Number(document.data()?.expiresAtMs || 0) <= now ? document.ref.delete() : null));
 }
 
-exports.edilkappaBackup = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 120, memory: "1GiB", cors: true }, async (request) => {
+exports.edilkappaBackup = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 540, memory: "1GiB", maxInstances: 1, enforceAppCheck: ENFORCE_APP_CHECK, cors: true }, async (request) => {
   const account = await authorizedUser(request, "work");
   if (account.role !== "owner") throw new HttpsError("permission-denied", "I backup sono riservati al titolare.");
   const action = String(request.data?.action || "list");
@@ -2186,6 +2420,9 @@ exports.edilkappaBackup = onCall({ region: "europe-west8", invoker: "public", ti
     return { backup, verification: await verifyAndRecordEdilKappaBackup(backup.path) };
   }
   if (action === "verify") return { verification: await verifyAndRecordEdilKappaBackup(cleanText(request.data?.path, 500)) };
+  if (action === "restore-preview") return { preview: await prepareEdilKappaRestore(account, cleanText(request.data?.path, 500)) };
+  if (action === "restore") return { restore: await restoreEdilKappaBackup(account, request.data || {}) };
+  if (action === "restore-drill") return { drill: await recordRestoreDrill(cleanText(request.data?.path, 500)) };
   throw new HttpsError("invalid-argument", "Operazione backup non riconosciuta.");
 });
 
@@ -2193,14 +2430,16 @@ exports.backupEdilkappaNightly = onSchedule({ schedule: "15 2 * * *", timeZone: 
   const backup = await createEdilKappaBackup("automatic");
   const verification = await verifyAndRecordEdilKappaBackup(backup.path);
   if (!verification.valid) throw new Error("Il backup notturno non supera il controllo di integrità.");
+  await recordRestoreDrill(backup.path);
   await purgeExpiredBackups();
   await purgeExpiredShares();
   await purgeExpiredTrash();
   await purgeOldClientErrors();
+  await purgeOldClientMetrics();
   await purgePublicSubmissionLimits();
 });
 
-exports.edilkappaHealth = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 45, memory: "256MiB", maxInstances: 2, cors: true }, async (request) => {
+exports.edilkappaHealth = onCall({ region: "europe-west8", invoker: "public", timeoutSeconds: 45, memory: "256MiB", maxInstances: 2, enforceAppCheck: ENFORCE_APP_CHECK, cors: true }, async (request) => {
   await authorizedUser(request, "work");
   const action = cleanText(request.data?.action || "status", 40);
   if (action !== "status") throw new HttpsError("invalid-argument", "Operazione controllo sistema non valida.");

@@ -109,6 +109,39 @@
     return `<section class="systemCard"><div class="systemCardHead"><h3>Controllo automatico</h3>${light(ok, error)}</div><p>${safe(message)}${health?.checkedAtMs ? `<br>Ultima verifica ${safe(dateTime(health.checkedAtMs))}.` : ''}</p></section>`;
   }
 
+  function restoreDrillCard() {
+    const drill = state.health?.restoreDrill;
+    const ok = drill?.valid === true && Number(drill?.checkedAtMs || 0) > 0;
+    return `<section class="systemCard"><div class="systemCardHead"><h3>Recupero backup</h3>${light(ok, drill && !ok)}</div><p>${ok ? `Prova reale di ricostruzione superata · ${Number(drill.recordCount || 0)} record.` : 'La prova automatica verrà eseguita con il prossimo backup notturno.'}${drill?.checkedAtMs ? `<br>Ultimo controllo ${safe(dateTime(drill.checkedAtMs))}.` : ''}</p><button class="btn sm light" onclick="go('backupView')">Apri backup</button></section>`;
+  }
+
+  function performanceCard() {
+    const performance = state.health?.performance;
+    const samples = Number(performance?.samples24h || 0);
+    const ok = samples > 0 && Number(performance?.p75LcpMs || 0) <= 2500 && Number(performance?.p75Cls || 0) <= 0.1;
+    const error = samples > 0 && (Number(performance?.p75LcpMs || 0) > 4000 || Number(performance?.p75Cls || 0) > 0.25);
+    const message = samples
+      ? `${samples} aperture misurate · contenuto P75 ${Math.round(Number(performance.p75LcpMs || 0))} ms · stabilità ${Number(performance.p75Cls || 0).toFixed(3)}.`
+      : 'In attesa delle prime misurazioni da computer e telefono.';
+    return `<section class="systemCard"><div class="systemCardHead"><h3>Velocità reale</h3>${light(ok, error)}</div><p>${safe(message)}</p></section>`;
+  }
+
+  function appCheckCard(api) {
+    const configured = api.appCheckConfigured === true;
+    const ready = api.appCheckReady === true;
+    const backendMode = state.health?.appCheck?.mode || api.appCheckMode;
+    const enforced = ready && backendMode === 'enforce';
+    const error = configured && !ready;
+    const message = enforced
+      ? 'Protezione anti-abuso verificata e imposta sulle funzioni del gestionale.'
+      : ready
+        ? 'Token di verifica attivo in osservazione; nessun dispositivo viene ancora bloccato.'
+        : configured
+          ? `Configurata ma non inizializzata${api.appCheckError ? `: ${api.appCheckError}` : '.'}`
+          : 'Non configurata: serve la site key prima di avviare la modalità osservazione.';
+    return `<section class="systemCard"><div class="systemCardHead"><h3>Firebase App Check</h3>${light(enforced, error)}</div><p>${safe(message)}</p></section>`;
+  }
+
   function statusCards() {
     const api = cloud();
     const daneaRows = (db.leads || []).filter((item) => /danea/i.test(`${item.source || ''} ${item.sourceType || ''}`));
@@ -119,6 +152,9 @@
       ${daneaCard(daneaRows, latestDanea)}
       ${notificationCard()}
       ${healthCard()}
+      ${restoreDrillCard()}
+      ${performanceCard()}
+      ${appCheckCard(api)}
       <section class="systemCard"><div class="systemCardHead"><h3>EdilKappa AI</h3>${light(Boolean(api.ready && api.aiRequest))}</div><p>${api.ready && api.aiRequest ? 'Servizio disponibile per preventivi, relazioni e analisi.' : 'In attesa del collegamento cloud.'}</p></section>
       <section class="systemCard"><div class="systemCardHead"><h3>Versione applicazione</h3>${light(Boolean(state.version?.version), !state.version)}</div><p>${state.version?.version ? `Versione ${safe(state.version.version)} · generata ${safe(dateTime(state.version.builtAt))}.` : 'Versione di produzione non verificata.'}<br>Cache automatica e aggiornamento controllato attivi.</p></section>
     </div>`;
