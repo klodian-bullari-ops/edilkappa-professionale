@@ -1,5 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
-import { doc, getFirestore, serverTimestamp, setDoc } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
 const FIREBASE_CONFIG = {
   projectId: 'edilkappa-professionale',
@@ -11,10 +11,16 @@ const FIREBASE_CONFIG = {
 };
 
 const app = initializeApp(FIREBASE_CONFIG);
-const firestore = getFirestore(app, 'edilkappa');
+const submitPublicLead = httpsCallable(getFunctions(app, 'europe-west8'), 'edilkappaPublicLead', { timeout: 40000 });
 const form = document.getElementById('requestForm');
 const message = document.getElementById('requestMessage');
 const openedAt = Date.now();
+
+function newRequestId() {
+  return typeof crypto.randomUUID === 'function'
+    ? `request-${crypto.randomUUID()}`
+    : `request-${Date.now().toString(36)}-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
+}
 
 function setMessage(text, type) {
   message.textContent = text;
@@ -46,7 +52,7 @@ async function compressImage(file) {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const button = event.submitter;
+  const button = event.submitter || form.querySelector('button[type="submit"]');
   const values = new FormData(form);
   if (values.get('website')) return;
   if (Date.now() - openedAt < 2500) return setMessage('Attendi un momento e riprova.', 'error');
@@ -55,44 +61,31 @@ form.addEventListener('submit', async (event) => {
   button.disabled = true; button.textContent = 'Invio in corso…'; setMessage('Sto preparando fotografie e richiesta.', '');
   try {
     const photos = await Promise.all(files.map(compressImage));
-    const id = `lead-${Date.now().toString(36)}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
-    const payload = {
-      id,
+    const response = await submitPublicLead({
+      requestId: newRequestId(),
+      openedAtMs: openedAt,
+      website: String(values.get('website') || ''),
+      privacy: values.get('privacy') === 'on',
       name: String(values.get('name')).trim(),
       phone: String(values.get('phone')).trim(),
       email: String(values.get('email')).trim(),
       contactPreference: String(values.get('contactPreference')).trim(),
       address: String(values.get('address')).trim(),
       request: String(values.get('request')).trim(),
-      photos,
-      status: 'Nuova',
-      source: 'Modulo pubblico',
-      createdAt: new Date().toISOString()
-    };
-    await setDoc(doc(firestore, 'leads', id), {
-      id,
-      orgId: 'edilkappa',
-      clientId: '',
-      assignedTeamId: '',
-      assignedTeamIds: [],
-      workerUid: '',
-      ownerUid: 'public',
-      status: 'Nuova',
-      workHours: 0,
-      materialAmount: 0,
-      progress: 0,
-      contractValue: 0,
-      recordedCost: 0,
-      payload: JSON.stringify(payload),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      photos
     });
     form.reset();
-    setMessage('Richiesta inviata. EDILKAPPA ti contatterà per fissare il sopralluogo.', 'success');
+    setMessage(response.data?.duplicate ? 'La richiesta era già stata ricevuta. EDILKAPPA ti contatterà appena possibile.' : 'Richiesta inviata. EDILKAPPA ti contatterà per fissare il sopralluogo.', 'success');
     button.textContent = 'Richiesta inviata ✓';
   } catch (error) {
     console.error(error);
-    setMessage(error?.code === 'permission-denied' ? 'Il servizio richieste è temporaneamente in aggiornamento. Riprova più tardi.' : (error.message || 'Invio non riuscito. Controlla la connessione e riprova.'), 'error');
+    const code = String(error?.code || '');
+    const friendly = code.includes('resource-exhausted')
+      ? 'Hai inviato troppe richieste ravvicinate. Attendi e riprova oppure contatta direttamente EDILKAPPA.'
+      : code.includes('permission-denied')
+        ? 'La richiesta non è stata accettata. Riapri la pagina e riprova.'
+        : (error.message || 'Invio non riuscito. Controlla la connessione e riprova.');
+    setMessage(friendly, 'error');
     button.disabled = false; button.textContent = 'Invia richiesta a EDILKAPPA';
   }
 });

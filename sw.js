@@ -21,6 +21,7 @@ const APP_SHELL = [
   "./hours-closeout.js",
   "./attendance-center.js",
   "./stability-pack.js",
+  "./system-control.js",
   "./edilkappa-loader.js?v=3",
   "./firebase-cloud.js?v=36",
   "./sharing-integration.js",

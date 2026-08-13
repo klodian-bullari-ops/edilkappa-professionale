@@ -94,8 +94,8 @@ test("build and deployment are versioned and guarded", () => {
   assert.match(deploy, /service_account: github-deploy@edilkappa-professionale\.iam\.gserviceaccount\.com/);
   assert.doesNotMatch(deploy, /credentials_json|FIREBASE_SERVICE_ACCOUNT/);
   assert.match(deploy, /google-github-actions\/setup-gcloud@v3/);
-  assert.match(deploy, /firestore:rules,storage,functions:backupEdilkappaNightly/);
-  assert.match(deploy, /for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaNotifications/);
+  assert.match(deploy, /firestore:rules,firestore:indexes,storage,functions:backupEdilkappaNightly/);
+  assert.match(deploy, /for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaHealth edilkappaNotifications/);
   assert.match(deploy, /--only "functions:\$\{function_name\}"/);
   assert.match(deploy, /functions:processDaneaInbox/);
   assert.match(deploy, /Unable to set the invoker\|Failed to set the IAM Policy/);
@@ -129,6 +129,31 @@ test("hosting disables stale root caching and adds safe browser headers", () => 
   const global = headers.find((entry) => entry.source === "**");
   assert.ok(global.headers.some((header) => header.key === "X-Content-Type-Options" && header.value === "nosniff"));
   assert.ok(global.headers.some((header) => header.key === "X-Frame-Options" && header.value === "DENY"));
+  assert.ok(global.headers.some((header) => header.key === "Strict-Transport-Security" && /max-age=/.test(header.value)));
+  assert.ok(global.headers.some((header) => header.key === "Content-Security-Policy-Report-Only"));
+});
+
+test("quality monitor checks production and the cloud health controller", () => {
+  const backend = source("functions/index.js");
+  const cloud = source("firebase-cloud.js");
+  const control = source("system-control.js");
+  const monitor = source(".github/workflows/quality-monitor.yml");
+  const productionCheck = source("scripts/check-production.mjs");
+  assert.match(backend, /exports\.edilkappaHealth = onCall/);
+  assert.match(backend, /exports\.monitorEdilkappaHealth = onSchedule/);
+  assert.match(cloud, /healthRequest/);
+  assert.match(control, /Controllo automatico/);
+  assert.match(monitor, /schedule:/);
+  assert.match(productionCheck, /strict-transport-security/);
+});
+
+test("logout and account changes remove every local operational archive", () => {
+  const html = source("index.html");
+  const cloud = source("firebase-cloud.js");
+  assert.match(html, /indexedDB\.deleteDatabase\(PDF_DB\)/);
+  assert.match(html, /key\.startsWith\('edilkappa_'\).*key\.startsWith\('ek_'\)/);
+  assert.match(cloud, /previousUid !== currentUser\.uid/);
+  assert.match(cloud, /await local\.clearDeviceData\(\)/);
 });
 
 test("notifications have a protected status and delivery test", () => {

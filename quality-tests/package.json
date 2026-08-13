@@ -1,0 +1,25 @@
+{
+  "name": "quality-tests",
+  "version": "1.0.0",
+  "description": "Test EdilKappa Qualità 10: regole Firebase e browser reale",
+  "private": true,
+  "scripts": {
+    "test": "npm run test:rules && npm run test:browser",
+    "test:rules": "node scripts/run-rules.mjs",
+    "test:browser": "playwright test",
+    "test:browser:install": "playwright install chromium"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "@playwright/test": "^1.62.1",
+    "firebase": "^12.17.1",
+    "firebase-tools": "^15.26.0"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
+}

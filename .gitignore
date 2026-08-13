@@ -1,4 +1,7 @@
 node_modules/
+quality-tests/node_modules/
+quality-tests/test-results/
+quality-tests/playwright-report/
 dist/
 hosting-dist/
 .env
