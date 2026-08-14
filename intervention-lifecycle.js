@@ -329,7 +329,7 @@
       <div class="field"><label for="siteIntervention">Intervento collegato</label><select id="siteIntervention" name="interventionId">${window.interventionOptions ? window.interventionOptions(item.client, item.interventionId) : '<option value="">Crea automaticamente</option>'}</select></div>
       ${field('Indirizzo', 'address', 'text', item.address, true)}
       ${typeof teamChecklist === 'function' ? teamChecklist(item) : `<div class="field"><label>Squadra assegnata</label><select name="worker">${teamOptions(item.worker)}</select></div>`}
-      ${field('Data inizio', 'start', 'date', item.start)}${field('Data fine', 'end', 'date', item.end || '')}
+      ${field('Data inizio', 'start', 'date', item.start)}${field('Data fine', 'end', 'date', item.end || '', false, false)}
       ${field('Valore lavoro €', 'value', 'number', item.value)}${field('Costi previsti €', 'cost', 'number', item.cost)}
       <div class="field"><label for="siteStatus">Stato</label><select id="siteStatus" name="status">${selectOptions(['Pianificato', 'In corso', 'Completato'], item.status)}</select></div>
     </div>`, (formData) => {

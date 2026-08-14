@@ -426,6 +426,7 @@ test("guides every intervention through one operational workflow", () => {
   assert.match(lifecycle, /label for="siteClient">Cliente<\/label><select id="siteClient" name="client"/);
   assert.match(lifecycle, /label for="siteIntervention">Intervento collegato<\/label><select id="siteIntervention" name="interventionId"/);
   assert.match(lifecycle, /label for="siteStatus">Stato<\/label><select id="siteStatus" name="status"/);
+  assert.match(lifecycle, /field\('Data fine', 'end', 'date', item\.end \|\| '', false, false\)/);
 });
 
 test("shows a reserved system control center with sync and integrity checks", () => {
