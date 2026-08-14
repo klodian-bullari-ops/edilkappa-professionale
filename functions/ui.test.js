@@ -412,6 +412,8 @@ test("supports a compact desktop navigation and a full-width AI focus mode", () 
 test("guides every intervention through one operational workflow", () => {
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const lifecycle = fs.readFileSync(path.join(__dirname, "..", "intervention-lifecycle.js"), "utf8");
   assert.match(loader, /client-archive\.js\?v=24/);
   assert.match(archive, /function workflowState/);
   assert.match(archive, /Richiesta.*Sopralluogo.*Preventivo.*Programmazione.*Esecuzione.*Chiusura/s);
@@ -420,6 +422,10 @@ test("guides every intervention through one operational workflow", () => {
   assert.match(archive, /Programma il lavoro/);
   assert.match(archive, /Completa foto, ore e chiusura/);
   assert.match(archive, /Altre azioni/);
+  assert.match(html, /<label for="\$\{id\}">\$\{label\}<\/label><input id="\$\{id\}" name="\$\{name\}"/);
+  assert.match(lifecycle, /label for="siteClient">Cliente<\/label><select id="siteClient" name="client"/);
+  assert.match(lifecycle, /label for="siteIntervention">Intervento collegato<\/label><select id="siteIntervention" name="interventionId"/);
+  assert.match(lifecycle, /label for="siteStatus">Stato<\/label><select id="siteStatus" name="status"/);
 });
 
 test("shows a reserved system control center with sync and integrity checks", () => {

@@ -325,13 +325,13 @@
     };
     modal(id ? 'Modifica cantiere' : 'Nuovo cantiere collegato', `<div class="formGrid">
       ${field('Titolo intervento', 'title', 'text', item.title, true)}
-      <div class="field"><label>Cliente</label><select name="client" onchange="refreshInterventionSelect(this.form)">${clientOptions(item.client)}</select></div>
-      <div class="field"><label>Intervento collegato</label><select name="interventionId">${window.interventionOptions ? window.interventionOptions(item.client, item.interventionId) : '<option value="">Crea automaticamente</option>'}</select></div>
+      <div class="field"><label for="siteClient">Cliente</label><select id="siteClient" name="client" onchange="refreshInterventionSelect(this.form)">${clientOptions(item.client)}</select></div>
+      <div class="field"><label for="siteIntervention">Intervento collegato</label><select id="siteIntervention" name="interventionId">${window.interventionOptions ? window.interventionOptions(item.client, item.interventionId) : '<option value="">Crea automaticamente</option>'}</select></div>
       ${field('Indirizzo', 'address', 'text', item.address, true)}
       ${typeof teamChecklist === 'function' ? teamChecklist(item) : `<div class="field"><label>Squadra assegnata</label><select name="worker">${teamOptions(item.worker)}</select></div>`}
       ${field('Data inizio', 'start', 'date', item.start)}${field('Data fine', 'end', 'date', item.end || '')}
       ${field('Valore lavoro €', 'value', 'number', item.value)}${field('Costi previsti €', 'cost', 'number', item.cost)}
-      <div class="field"><label>Stato</label><select name="status">${selectOptions(['Pianificato', 'In corso', 'Completato'], item.status)}</select></div>
+      <div class="field"><label for="siteStatus">Stato</label><select id="siteStatus" name="status">${selectOptions(['Pianificato', 'In corso', 'Completato'], item.status)}</select></div>
     </div>`, (formData) => {
       const client = db.condomini.find((entry) => entry.name === formData.get('client'));
       if (!client) throw new Error('Seleziona un cliente o condominio valido.');
