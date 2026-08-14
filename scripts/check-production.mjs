@@ -28,7 +28,12 @@ const [home, requestPage, privacy, manifest, version, appConfig] = await Promise
   read("/app-config.js")
 ]);
 
-if (!home.body.includes("EDILKAPPA Professionale")) failures.push("index.html: schermata di accesso non riconosciuta");
+const homeMarkers = [
+  "<title>EDILKAPPA · Gestionale cantieri</title>",
+  'id="app"',
+  "firebase-cloud.js"
+];
+if (!homeMarkers.every((marker) => home.body.includes(marker))) failures.push("index.html: applicazione EdilKappa non riconosciuta");
 if (!requestPage.body.includes("Richiedi un sopralluogo")) failures.push("richiesta.html: modulo pubblico non riconosciuto");
 if (!privacy.body.includes("Informativa sulla privacy")) failures.push("privacy.html: informativa non riconosciuta");
 if (!appConfig.body.includes("EdilKappaRuntimeConfig")) failures.push("app-config.js: configurazione runtime assente");

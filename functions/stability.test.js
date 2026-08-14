@@ -155,6 +155,10 @@ test("quality monitor checks production and the cloud health controller", () => 
   assert.match(control, /Controllo automatico/);
   assert.match(monitor, /schedule:/);
   assert.match(productionCheck, /strict-transport-security/);
+  assert.match(productionCheck, /<title>EDILKAPPA · Gestionale cantieri<\/title>/);
+  assert.match(productionCheck, /id="app"/);
+  assert.match(productionCheck, /firebase-cloud\.js/);
+  assert.doesNotMatch(productionCheck, /EDILKAPPA Professionale/);
 });
 
 test("logout and account changes remove every local operational archive", () => {
