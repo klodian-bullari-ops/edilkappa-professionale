@@ -441,6 +441,26 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /clientMetrics/{docId} {
+      function validClientMetric(d) {
+        return d.keys().hasAll(['id', 'orgId', 'uid', 'role', 'path', 'device', 'navigationType', 'loadMs', 'lcpMs', 'cls', 'criticalReadyMs', 'online', 'createdAt'])
+          && d.keys().hasOnly(['id', 'orgId', 'uid', 'role', 'path', 'device', 'navigationType', 'loadMs', 'lcpMs', 'cls', 'criticalReadyMs', 'online', 'createdAt'])
+          && d.id == docId && d.orgId == 'edilkappa' && d.uid == request.auth.uid
+          && d.role == me().role && shortText(d.path, 200)
+          && d.device in ['desktop', 'mobile'] && shortText(d.navigationType, 40)
+          && d.loadMs is number && d.loadMs >= 0 && d.loadMs <= 120000
+          && d.lcpMs is number && d.lcpMs >= 0 && d.lcpMs <= 120000
+          && d.cls is number && d.cls >= 0 && d.cls <= 10
+          && d.criticalReadyMs is number && d.criticalReadyMs >= 0 && d.criticalReadyMs <= 120000
+          && d.online is bool && d.createdAt is timestamp;
+      }
+
+      allow read: if isStaff();
+      allow create: if active() && validClientMetric(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

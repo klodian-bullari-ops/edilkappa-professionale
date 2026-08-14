@@ -412,6 +412,8 @@ test("supports a compact desktop navigation and a full-width AI focus mode", () 
 test("guides every intervention through one operational workflow", () => {
   const archive = fs.readFileSync(path.join(__dirname, "..", "client-archive.js"), "utf8");
   const loader = fs.readFileSync(path.join(__dirname, "..", "edilkappa-loader.js"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  const lifecycle = fs.readFileSync(path.join(__dirname, "..", "intervention-lifecycle.js"), "utf8");
   assert.match(loader, /client-archive\.js\?v=24/);
   assert.match(archive, /function workflowState/);
   assert.match(archive, /Richiesta.*Sopralluogo.*Preventivo.*Programmazione.*Esecuzione.*Chiusura/s);
@@ -420,6 +422,11 @@ test("guides every intervention through one operational workflow", () => {
   assert.match(archive, /Programma il lavoro/);
   assert.match(archive, /Completa foto, ore e chiusura/);
   assert.match(archive, /Altre azioni/);
+  assert.match(html, /<label for="\$\{id\}">\$\{label\}<\/label><input id="\$\{id\}" name="\$\{name\}"/);
+  assert.match(lifecycle, /label for="siteClient">Cliente<\/label><select id="siteClient" name="client"/);
+  assert.match(lifecycle, /label for="siteIntervention">Intervento collegato<\/label><select id="siteIntervention" name="interventionId"/);
+  assert.match(lifecycle, /label for="siteStatus">Stato<\/label><select id="siteStatus" name="status"/);
+  assert.match(lifecycle, /field\('Data fine', 'end', 'date', item\.end \|\| '', false, false\)/);
 });
 
 test("shows a reserved system control center with sync and integrity checks", () => {
@@ -518,6 +525,12 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(html, /status:'Pianificato'/);
   assert.match(workflow, /ensureInspectionIntervention/);
   assert.match(workflow, /Sopralluogo eseguito/);
+  assert.match(workflow, /label for="inspectionOutcome">Esito del sopralluogo<\/label><textarea id="inspectionOutcome" name="outcome"/);
+  assert.match(workflow, /label for="inspectionMeasurements">Misure rilevate<\/label><textarea id="inspectionMeasurements" name="measurements"/);
+  assert.match(workflow, /label for="inspectionRecommendations">Lavorazioni consigliate<\/label><textarea id="inspectionRecommendations" name="recommendations"/);
+  assert.match(workflow, /label for="inspectionTechnicalNotes">Note tecniche<\/label><textarea id="inspectionTechnicalNotes" name="technicalNotes"/);
+  assert.match(workflow, /label for="inspectionMediaFiles">Scegli foto e video<\/label><input id="inspectionMediaFiles" name="media"/);
+  assert.match(workflow, /aria-describedby="inspectionMediaStatus"/);
   assert.match(workflow, /Misure rilevate/);
   assert.match(workflow, /Lavorazioni consigliate/);
   assert.match(workflow, /uploadMedia/);

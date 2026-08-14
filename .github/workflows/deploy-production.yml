@@ -76,10 +76,26 @@ jobs:
           test "$active_account" = "github-deploy@edilkappa-professionale.iam.gserviceaccount.com"
           gcloud config set project edilkappa-professionale --quiet
           test "$(gcloud config get-value project)" = "edilkappa-professionale"
+      - name: Prepara protezione App Check graduale
+        env:
+          APP_CHECK_MODE: ${{ vars.FIREBASE_APP_CHECK_MODE }}
+          APP_CHECK_SITE_KEY: ${{ vars.FIREBASE_APP_CHECK_SITE_KEY }}
+        run: |
+          set -euo pipefail
+          mode="${APP_CHECK_MODE:-observe}"
+          if [ "$mode" != "observe" ] && [ "$mode" != "enforce" ]; then
+            echo "FIREBASE_APP_CHECK_MODE deve essere observe oppure enforce."
+            exit 1
+          fi
+          if [ "$mode" = "enforce" ] && [ -z "${APP_CHECK_SITE_KEY:-}" ]; then
+            echo "App Check non può essere imposto senza FIREBASE_APP_CHECK_SITE_KEY."
+            exit 1
+          fi
+          printf 'EDILKAPPA_APP_CHECK_MODE=%s\n' "$mode" > functions/.env.edilkappa-professionale
       - name: Pubblica le funzioni callable
         run: |
           set -euo pipefail
-          for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaHealth edilkappaNotifications edilkappaPublicLead; do
+          for function_name in edilkappaBackup edilkappaDaneaBridge edilkappaHealth edilkappaNotifications edilkappaPublicLead edilkappaOperations edilkappaAi; do
             deploy_log="$(mktemp)"
             set +e
             npx --yes firebase-tools deploy \
@@ -95,7 +111,7 @@ jobs:
       - name: Mantieni raggiungibili le funzioni callable
         run: |
           set -euo pipefail
-          for service in edilkappabackup edilkappadaneabridge edilkappahealth edilkappanotifications edilkappapubliclead; do
+          for service in edilkappabackup edilkappadaneabridge edilkappahealth edilkappanotifications edilkappapubliclead edilkappaoperations edilkappaai; do
             gcloud run services update "$service" \
               --project=edilkappa-professionale \
               --region=europe-west8 \
@@ -103,4 +119,7 @@ jobs:
               --quiet
           done
       - name: Pubblica Hosting, regole e funzioni interne
+        env:
+          EDILKAPPA_APP_CHECK_SITE_KEY: ${{ vars.FIREBASE_APP_CHECK_SITE_KEY }}
+          EDILKAPPA_APP_CHECK_MODE: ${{ vars.FIREBASE_APP_CHECK_MODE }}
         run: npx --yes firebase-tools deploy --project edilkappa-professionale --only hosting,firestore:rules,firestore:indexes,storage,functions:backupEdilkappaNightly,functions:monitorEdilkappaHealth,functions:processDaneaInbox --non-interactive

@@ -1,4 +1,5 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
+import { ReCaptchaEnterpriseProvider, initializeAppCheck } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js';
 import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js';
 
 const FIREBASE_CONFIG = {
@@ -11,6 +12,13 @@ const FIREBASE_CONFIG = {
 };
 
 const app = initializeApp(FIREBASE_CONFIG);
+const appCheckSiteKey = String(window.EdilKappaRuntimeConfig?.appCheckSiteKey || '').trim();
+if (/^[a-zA-Z0-9_-]{20,200}$/.test(appCheckSiteKey) && !appCheckSiteKey.includes('EDILKAPPA_APP_CHECK')) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true
+  });
+}
 const submitPublicLead = httpsCallable(getFunctions(app, 'europe-west8'), 'edilkappaPublicLead', { timeout: 40000 });
 const form = document.getElementById('requestForm');
 const message = document.getElementById('requestMessage');

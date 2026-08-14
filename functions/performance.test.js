@@ -16,6 +16,7 @@ test("keeps heavy features out of the initial browser path", () => {
   assert.doesNotMatch(html, /<script[^>]+(?:jspdf|edilkappa-ai|leaflet|smart-operations|operations-center)/i);
   assert.doesNotMatch(html, /<link[^>]+leaflet/i);
   assert.match(loader, /critical:\s*\[/);
+  assert.ok(loader.indexOf("quality-runtime.js") < loader.indexOf("professional-extensions.js"));
   assert.match(loader, /ai:\s*\[/);
   assert.match(loader, /pdf:\s*\[/);
   assert.match(loader, /ensureMap/);
@@ -50,6 +51,8 @@ test("keeps the offline shell small while caching daily workflows", () => {
   const worker = source("sw.js");
   assert.match(worker, /\$\{CACHE_PREFIX\}stabilita/);
   assert.match(worker, /"\.\/media-contract\.js\?v=1"/);
+  assert.match(worker, /"\.\/quality-runtime\.js\?v=1"/);
+  assert.match(worker, /"\.\/app-config\.js\?v=1"/);
   assert.match(worker, /"\.\/edilkappa-loader\.js\?v=3"/);
   assert.match(worker, /"\.\/danea-integration\.js"/);
   assert.match(worker, /"\.\/inspection-workflow\.js\?v=8"/);

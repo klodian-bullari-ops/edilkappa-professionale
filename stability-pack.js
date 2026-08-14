@@ -16,6 +16,7 @@
   let backupLoaded = false;
   let backupVerification = null;
   let backupVerificationLoading = false;
+  let restoreLoading = false;
   let productionErrors = [];
   let productionErrorsLoading = false;
   let productionErrorsLoaded = false;
@@ -256,6 +257,39 @@
     } catch (error) { alert(error.message || 'Verifica backup non riuscita.'); }
     finally { backupVerificationLoading = false; render(); }
   };
+  window.testLatestEdilKappaRestore = async function () {
+    if (!backupRows.length) return alert('Non è ancora disponibile alcun backup da provare.');
+    if (restoreLoading) return;
+    restoreLoading = true; render();
+    try {
+      const result = await window.EdilKappaCloud?.backupRequest?.({ action: 'restore-drill', path: backupRows[0].path });
+      const drill = result?.drill;
+      alert(drill?.valid ? `Prova superata: ${Number(drill.recordCount || 0)} record ricostruibili.` : 'La prova di ripristino non è stata completata.');
+    } catch (error) { alert(error.message || 'Prova di ripristino non riuscita.'); }
+    finally { restoreLoading = false; render(); }
+  };
+  window.previewEdilKappaRestore = async function (encodedPath) {
+    if (restoreLoading) return;
+    const path = decodeURIComponent(encodedPath || '');
+    if (!path) return alert('Copia di backup non valida.');
+    restoreLoading = true; render();
+    try {
+      const result = await window.EdilKappaCloud?.backupRequest?.({ action: 'restore-preview', path });
+      const preview = result?.preview;
+      if (!preview?.token) throw new Error('Anteprima di ripristino non disponibile.');
+      const collections = (preview.collections || []).map((item) => `${item.collection}: ${item.records} record`).join('\n');
+      const accepted = confirm(`ANTEPRIMA RIPRISTINO\n\nCopia: ${new Date(preview.generatedAt).toLocaleString('it-IT')}\nTotale: ${Number(preview.recordCount || 0)} record\n\n${collections}\n\nIl recupero unisce i dati del backup senza eliminare quelli più recenti. Prima verrà creata automaticamente una copia di sicurezza. Continuare?`);
+      if (!accepted) return;
+      const confirmation = prompt(`Per autorizzare il ripristino scrivi esattamente:\n${preview.confirmation}`);
+      if (String(confirmation || '').trim().toUpperCase() !== preview.confirmation) return alert('Ripristino annullato: conferma non corretta.');
+      if (!confirm('Ultima conferma: avviare ora il ripristino protetto?')) return;
+      const restored = await window.EdilKappaCloud.backupRequest({ action: 'restore', path, token: preview.token, confirmation });
+      const summary = restored?.restore;
+      alert(`Ripristino completato: ${Number(summary?.recordCount || 0)} record elaborati. Il gestionale verrà ricaricato.`);
+      location.reload();
+    } catch (error) { alert(error.message || 'Ripristino non riuscito. Nessun dato è stato eliminato.'); }
+    finally { restoreLoading = false; render(); }
+  };
   window.backupView = function () {
     const health = window.EdilKappaCloud?.syncHealth || [];
     const errors = health.filter((item) => item.status === 'error');
@@ -264,29 +298,16 @@
     if (!backupLoaded && !backupLoading) setTimeout(() => window.loadEdilKappaBackups(), 0);
     if (!productionErrorsLoaded && !productionErrorsLoading) setTimeout(() => window.loadProductionErrors(), 0);
     const latestBackupVerified = Boolean(backupRows[0]?.verifiedAt) || Boolean(backupVerification?.valid);
-    return pageHead('Sicurezza e backup', 'Controllo cloud, copie notturne e segnalazioni tecniche', '<button class="btn light" onclick="verifyLatestEdilKappaBackup()">✓ Verifica ultima copia</button><button class="btn lime" onclick="createEdilKappaBackup()">＋ Backup adesso</button>') +
+    return pageHead('Sicurezza e backup', 'Controllo cloud, copie notturne e segnalazioni tecniche', '<button class="btn light" onclick="testLatestEdilKappaRestore()">↺ Prova ripristino</button><button class="btn light" onclick="verifyLatestEdilKappaBackup()">✓ Verifica ultima copia</button><button class="btn lime" onclick="createEdilKappaBackup()">＋ Backup adesso</button>') +
       `<div class="grid stats">${stat('Stato cloud', offline ? 'Offline' : errors.length ? `${errors.length} errori` : pending.length ? 'Verifica in corso' : 'Regolare', offline || errors.length ? '!' : pending.length ? '◷' : '✓')}${stat('Errori rilevati', productionErrors.length, '!')}${stat('Backup disponibili', backupRows.length, '☁')}${stat('Cestino', (db.trash || []).length, '♻')}</div>
       ${offline ? '<div class="notice"><b>Dispositivo offline</b><br>Le modifiche restano sul dispositivo e verranno inviate al ritorno della connessione.</div>' : errors.length ? `<div class="notice error"><b>Sincronizzazione incompleta</b><br>${errors.map((item) => `${safe(item.collectionName)}: ${safe(item.error)}`).join('<br>')}</div>` : pending.length ? `<div class="notice"><b>Controllo cloud in corso</b><br>${pending.length} raccolte devono ancora rispondere.</div>` : '<div class="okbox">✓ Tutte le raccolte cloud controllate risultano sincronizzate.</div>'}
-      <div style="height:14px"></div><section class="card"><div class="cardHead"><div><h3>Backup automatici</h3><small>Ogni notte alle 02:15 · conservazione 60 giorni · ${latestBackupVerified ? 'ultima copia verificata' : 'verifica della prima copia richiesta'}</small></div><button class="btn sm light" onclick="loadEdilKappaBackups(true)">Aggiorna</button></div>${backupLoading || backupVerificationLoading ? '<div class="empty">Controllo backup in corso…</div>' : `<div class="list">${backupRows.map((item) => `<div class="row"><div class="rowIcon">☁</div><div class="rowBody"><b>${safe(new Date(item.generatedAt).toLocaleString('it-IT'))}</b><small>${Number(item.recordCount || 0)} record · ${formatBytes(item.bytes)} · ${item.trigger === 'manual' ? 'manuale' : 'automatico'}${item.verifiedAt ? ` · verificato ${safe(new Date(item.verifiedAt).toLocaleString('it-IT'))}` : ''}</small></div><span class="pill ${item.verifiedAt ? 'green' : 'orange'}">${item.verifiedAt ? 'Integro' : 'Da verificare'}</span></div>`).join('') || '<div class="empty">Il primo backup verrà creato automaticamente alle 02:15 oppure con “Backup adesso”.</div>'}</div>`}</section>
+      <div style="height:14px"></div><section class="card"><div class="cardHead"><div><h3>Backup automatici</h3><small>Ogni notte alle 02:15 · conservazione 60 giorni · prova di ripristino automatica · ${latestBackupVerified ? 'ultima copia verificata' : 'verifica della prima copia richiesta'}</small></div><button class="btn sm light" onclick="loadEdilKappaBackups(true)">Aggiorna</button></div>${backupLoading || backupVerificationLoading || restoreLoading ? '<div class="empty">Controllo backup in corso…</div>' : `<div class="list">${backupRows.map((item) => `<div class="row"><div class="rowIcon">☁</div><div class="rowBody"><b>${safe(new Date(item.generatedAt).toLocaleString('it-IT'))}</b><small>${Number(item.recordCount || 0)} record · ${formatBytes(item.bytes)} · ${item.trigger === 'manual' ? 'manuale' : item.trigger === 'pre-restore' ? 'sicurezza pre-ripristino' : 'automatico'}${item.verifiedAt ? ` · verificato ${safe(new Date(item.verifiedAt).toLocaleString('it-IT'))}` : ''}</small></div><span class="pill ${item.verifiedAt ? 'green' : 'orange'}">${item.verifiedAt ? 'Integro' : 'Da verificare'}</span>${window.EdilKappaCloud?.currentProfile?.role === 'owner' ? `<button class="btn sm light" onclick="previewEdilKappaRestore('${encodeURIComponent(item.path)}')">Ripristina</button>` : ''}</div>`).join('') || '<div class="empty">Il primo backup verrà creato automaticamente alle 02:15 oppure con “Backup adesso”.</div>'}</div>`}</section>
       <div style="height:14px"></div><section class="card"><div class="cardHead"><div><h3>Errori di produzione</h3><small>Ultime segnalazioni tecniche, raccolte automaticamente</small></div><button class="btn sm light" onclick="loadProductionErrors()">Aggiorna</button></div>${productionErrorsLoading ? '<div class="empty">Controllo errori in corso…</div>' : `<div class="list">${productionErrors.slice(0, 10).map((item) => `<div class="row"><div class="rowIcon">!</div><div class="rowBody"><b>${safe(item.message)}</b><small>${safe(item.source || 'Gestionale')} · ${safe(item.createdAtText || item.createdAt || '')}</small></div></div>`).join('') || '<div class="okbox">Nessun errore recente rilevato.</div>'}</div>`}</section>`;
   };
 
   function storedErrors() {
     try { const rows = JSON.parse(localStorage.getItem(ERROR_KEY) || '[]'); return Array.isArray(rows) ? rows : []; } catch (_) { return []; }
   }
-  function monitorError(event) {
-    const message = String(event?.message || event?.reason?.message || event?.reason || 'Errore JavaScript');
-    const source = String(event?.filename || event?.source || location.pathname);
-    if (/chrome-extension:|moz-extension:|ResizeObserver loop/i.test(`${source} ${message}`)) return;
-    const entry = { message: message.slice(0, 1000), source: source.slice(0, 500), stack: String(event?.error?.stack || event?.reason?.stack || '').slice(0, 4000), createdAt: new Date().toISOString() };
-    const rows = storedErrors();
-    if (rows[0]?.message === entry.message && Date.now() - Date.parse(rows[0].createdAt || 0) < 60000) return;
-    localStorage.setItem(ERROR_KEY, JSON.stringify([entry, ...rows].slice(0, 30)));
-    window.EdilKappaCloud?.reportClientError?.(entry).catch(() => {});
-  }
-  window.addEventListener('error', monitorError);
-  window.addEventListener('unhandledrejection', monitorError);
-
   const style = document.createElement('style');
   style.textContent = `
     .stableToolbar,.stableBulk,.stablePagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px}.stableFilters{display:flex;gap:7px;flex-wrap:wrap}.stableBulk{padding:11px 13px;border:1px solid var(--line);border-radius:14px;background:#fff}.stableBulk label{display:flex;align-items:center;gap:7px;font-weight:800}.stablePagination{margin:13px 0 0;padding:10px 2px;color:var(--muted);font-size:13px}.stableCount{padding:11px 2px;color:var(--muted);font-size:13px}.trashCard{display:flex;align-items:center;justify-content:space-between;gap:12px}.trashCard>.row{flex:1}.notice.error{background:#feeceb;color:#8b2420;border-color:#f2b7b3}

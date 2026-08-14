@@ -19,17 +19,19 @@ async function read(pathname) {
   }
 }
 
-const [home, requestPage, privacy, manifest, version] = await Promise.all([
+const [home, requestPage, privacy, manifest, version, appConfig] = await Promise.all([
   read("/index.html"),
   read("/richiesta.html"),
   read("/privacy.html"),
   read("/manifest.json"),
-  read("/version.json")
+  read("/version.json"),
+  read("/app-config.js")
 ]);
 
 if (!home.body.includes("EDILKAPPA Professionale")) failures.push("index.html: schermata di accesso non riconosciuta");
 if (!requestPage.body.includes("Richiedi un sopralluogo")) failures.push("richiesta.html: modulo pubblico non riconosciuto");
 if (!privacy.body.includes("Informativa sulla privacy")) failures.push("privacy.html: informativa non riconosciuta");
+if (!appConfig.body.includes("EdilKappaRuntimeConfig")) failures.push("app-config.js: configurazione runtime assente");
 
 const headers = home.response?.headers;
 if (headers) {
@@ -37,6 +39,7 @@ if (headers) {
   if ((headers.get("x-content-type-options") || "").toLowerCase() !== "nosniff") failures.push("Hosting: X-Content-Type-Options assente");
   if ((headers.get("x-frame-options") || "").toUpperCase() !== "DENY") failures.push("Hosting: X-Frame-Options assente");
   if (!/max-age=/i.test(headers.get("strict-transport-security") || "")) failures.push("Hosting: HSTS assente");
+  if (!/default-src 'self'/i.test(headers.get("content-security-policy") || "")) failures.push("Hosting: Content-Security-Policy non applicata");
 }
 
 try {
@@ -48,6 +51,8 @@ try {
   const parsedVersion = JSON.parse(version.body);
   if (!/^[a-f0-9]{12}$/.test(String(parsedVersion.version || ""))) failures.push("version.json: impronta versione non valida");
   if (!Number.isFinite(Date.parse(parsedVersion.builtAt || ""))) failures.push("version.json: data build non valida");
+  if (typeof parsedVersion.appCheckConfigured !== "boolean") failures.push("version.json: stato App Check non dichiarato");
+  if (!["observe", "enforce"].includes(parsedVersion.appCheckMode)) failures.push("version.json: modalità App Check non valida");
 } catch (_) { failures.push("version.json: JSON non valido"); }
 
 if (failures.length) {

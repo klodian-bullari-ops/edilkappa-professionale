@@ -1,5 +1,9 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js';
 import {
+  ReCaptchaEnterpriseProvider,
+  initializeAppCheck
+} from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-app-check.js';
+import {
   getAuth,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
@@ -56,6 +60,20 @@ const OWNER_EMAIL = 'info@edilkappa.com';
 const ACCOUNT_STORAGE_KEY = 'edilkappa_cloud_uid_v1';
 const local = window.EdilKappaLocal;
 const app = initializeApp(FIREBASE_CONFIG);
+const appCheckSiteKey = String(window.EdilKappaRuntimeConfig?.appCheckSiteKey || '').trim();
+const appCheckMode = window.EdilKappaRuntimeConfig?.appCheckMode === 'enforce' ? 'enforce' : 'observe';
+const appCheckConfigured = /^[a-zA-Z0-9_-]{20,200}$/.test(appCheckSiteKey) && !appCheckSiteKey.includes('EDILKAPPA_APP_CHECK');
+let appCheckReady = false;
+let appCheckError = '';
+if (appCheckConfigured) {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true
+    });
+    appCheckReady = true;
+  } catch (error) { appCheckError = String(error?.message || 'App Check non inizializzato').slice(0, 300); }
+}
 const auth = getAuth(app);
 const firestore = getFirestore(app, 'edilkappa');
 const storage = getStorage(app);
@@ -63,7 +81,7 @@ const functions = getFunctions(app, 'europe-west8');
 const callEdilKappaAi = httpsCallable(functions, 'edilkappaAi', { timeout: 610000 });
 const callEdilKappaOperations = httpsCallable(functions, 'edilkappaOperations', { timeout: 550000 });
 const callEdilKappaDaneaBridge = httpsCallable(functions, 'edilkappaDaneaBridge', { timeout: 40000 });
-const callEdilKappaBackup = httpsCallable(functions, 'edilkappaBackup', { timeout: 120000 });
+const callEdilKappaBackup = httpsCallable(functions, 'edilkappaBackup', { timeout: 550000 });
 const callEdilKappaHealth = httpsCallable(functions, 'edilkappaHealth', { timeout: 45000 });
 const callEdilKappaNotifications = httpsCallable(functions, 'edilkappaNotifications', { timeout: 40000 });
 const googleProvider = new GoogleAuthProvider();
@@ -231,6 +249,7 @@ const api = {
   restoreDeletedRecord,
   permanentlyDeleteRecord,
   reportClientError,
+  reportPerformanceMetric,
   listClientErrors,
   enablePushNotifications,
   get ready() { return ready; },
@@ -242,6 +261,10 @@ const api = {
   },
   get currentUid() { return user?.uid || ''; },
   get currentProfile() { return profile; },
+  get appCheckConfigured() { return appCheckConfigured; },
+  get appCheckReady() { return appCheckReady; },
+  get appCheckMode() { return appCheckMode; },
+  get appCheckError() { return appCheckError; },
   get workerProfiles() {
     if (!['owner', 'office'].includes(profile?.role)) return [];
     return cloudUsers
@@ -554,6 +577,29 @@ async function reportClientError(event = {}) {
     message: String(event.message || 'Errore sconosciuto').slice(0, 1000),
     source: String(event.source || location.pathname).slice(0, 500),
     stack: String(event.stack || '').slice(0, 4000),
+    createdAt: serverTimestamp()
+  });
+  return true;
+}
+
+async function reportPerformanceMetric(metric = {}) {
+  if (!ready || !user || !profile?.active || !navigator.onLine) return false;
+  const sessionId = String(metric.sessionId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || Math.random().toString(36).slice(2, 12);
+  const id = `metric-${user.uid.slice(0, 48)}-${Date.now()}-${sessionId}`.slice(0, 128);
+  const bounded = (value, maximum) => Math.min(maximum, Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0));
+  await setDoc(doc(firestore, 'clientMetrics', id), {
+    id,
+    orgId: ORG_ID,
+    uid: user.uid,
+    role: String(profile.role || ''),
+    path: String(metric.path || location.pathname).slice(0, 200),
+    device: metric.device === 'mobile' ? 'mobile' : 'desktop',
+    navigationType: String(metric.navigationType || 'navigate').slice(0, 40),
+    loadMs: bounded(metric.loadMs, 120000),
+    lcpMs: bounded(metric.lcpMs, 120000),
+    cls: bounded(metric.cls, 10),
+    criticalReadyMs: bounded(metric.criticalReadyMs, 120000),
+    online: metric.online !== false,
     createdAt: serverTimestamp()
   });
   return true;

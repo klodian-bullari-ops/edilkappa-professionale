@@ -8,6 +8,17 @@ const outputDir = path.join(repoRoot, "hosting-dist");
 const runtimeDirectories = ["assets", "icons", "linea-vita"];
 const runtimeRootFile = /\.(?:css|html|js)$/i;
 const runtimeRootNames = new Set(["manifest.json"]);
+const appCheckPlaceholder = "__EDILKAPPA_APP_CHECK_SITE_KEY__";
+const appCheckModePlaceholder = "__EDILKAPPA_APP_CHECK_MODE__";
+
+function appCheckConfiguration() {
+  const siteKey = String(process.env.EDILKAPPA_APP_CHECK_SITE_KEY || "").trim();
+  const mode = String(process.env.EDILKAPPA_APP_CHECK_MODE || "observe").trim().toLowerCase();
+  if (siteKey && !/^[a-zA-Z0-9_-]{20,200}$/.test(siteKey)) throw new Error("EDILKAPPA_APP_CHECK_SITE_KEY non valida.");
+  if (!["observe", "enforce"].includes(mode)) throw new Error("EDILKAPPA_APP_CHECK_MODE deve essere observe oppure enforce.");
+  if (mode === "enforce" && !siteKey) throw new Error("App Check non può essere imposto senza una site key.");
+  return { siteKey, mode };
+}
 
 function isSafeOutputPath(target) {
   return target === path.join(repoRoot, "hosting-dist") && target.startsWith(`${repoRoot}${path.sep}`);
@@ -37,12 +48,13 @@ async function collectRuntimeFiles(rootFiles) {
   return files.sort();
 }
 
-async function buildFingerprint(rootFiles) {
+async function buildFingerprint(rootFiles, appCheck) {
   const hash = createHash("sha256");
   for (const file of rootFiles) {
     hash.update(file);
     hash.update(await readFile(path.join(repoRoot, file)));
   }
+  hash.update(`app-check:${appCheck.mode}:${appCheck.siteKey ? createHash("sha256").update(appCheck.siteKey).digest("hex") : "disabled"}`);
   return hash.digest("hex").slice(0, 12);
 }
 
@@ -53,17 +65,22 @@ function versionLocalAssets(content, fingerprint) {
   });
 }
 
-async function applyBuildVersion(fingerprint, rootFiles) {
+async function applyBuildVersion(fingerprint, rootFiles, appCheck) {
   for (const file of rootFiles.filter((name) => /\.(?:css|html|js)$/i.test(name))) {
     const target = path.join(outputDir, file);
     let content = await readFile(target, "utf8");
+    if (file === "app-config.js") {
+      content = content
+        .replace(appCheckPlaceholder, appCheck.siteKey)
+        .replace(appCheckModePlaceholder, appCheck.mode);
+    }
     content = versionLocalAssets(content, fingerprint);
     if (file === "sw.js") {
       content = content.replace(/const CACHE = `\$\{CACHE_PREFIX\}[^`]+`;/, `const CACHE = \`\${CACHE_PREFIX}${fingerprint}\`;`);
     }
     await writeFile(target, content);
   }
-  await writeFile(path.join(outputDir, "version.json"), `${JSON.stringify({ version: fingerprint, builtAt: new Date().toISOString() }, null, 2)}\n`);
+  await writeFile(path.join(outputDir, "version.json"), `${JSON.stringify({ version: fingerprint, builtAt: new Date().toISOString(), appCheckConfigured: Boolean(appCheck.siteKey), appCheckMode: appCheck.mode }, null, 2)}\n`);
 }
 
 async function buildHostingPackage() {
@@ -79,10 +96,11 @@ async function buildHostingPackage() {
 
   await Promise.all(rootFiles.map((file) => cp(path.join(repoRoot, file), path.join(outputDir, file))));
   await Promise.all(runtimeDirectories.map(copyRuntimeDirectory));
-  const fingerprint = await buildFingerprint(await collectRuntimeFiles(rootFiles));
-  await applyBuildVersion(fingerprint, rootFiles);
+  const appCheck = appCheckConfiguration();
+  const fingerprint = await buildFingerprint(await collectRuntimeFiles(rootFiles), appCheck);
+  await applyBuildVersion(fingerprint, rootFiles, appCheck);
 
-  console.log(`Firebase Hosting pronto: ${rootFiles.length} file principali, ${runtimeDirectories.length} cartelle, versione ${fingerprint}.`);
+  console.log(`Firebase Hosting pronto: ${rootFiles.length} file principali, ${runtimeDirectories.length} cartelle, versione ${fingerprint}, App Check ${appCheck.siteKey ? appCheck.mode : "non configurato"}.`);
 }
 
 await buildHostingPackage();
