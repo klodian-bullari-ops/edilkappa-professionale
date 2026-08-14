@@ -518,6 +518,12 @@ test("turns a scheduled inspection into a linked AI quote workflow", () => {
   assert.match(html, /status:'Pianificato'/);
   assert.match(workflow, /ensureInspectionIntervention/);
   assert.match(workflow, /Sopralluogo eseguito/);
+  assert.match(workflow, /label for="inspectionOutcome">Esito del sopralluogo<\/label><textarea id="inspectionOutcome" name="outcome"/);
+  assert.match(workflow, /label for="inspectionMeasurements">Misure rilevate<\/label><textarea id="inspectionMeasurements" name="measurements"/);
+  assert.match(workflow, /label for="inspectionRecommendations">Lavorazioni consigliate<\/label><textarea id="inspectionRecommendations" name="recommendations"/);
+  assert.match(workflow, /label for="inspectionTechnicalNotes">Note tecniche<\/label><textarea id="inspectionTechnicalNotes" name="technicalNotes"/);
+  assert.match(workflow, /label for="inspectionMediaFiles">Scegli foto e video<\/label><input id="inspectionMediaFiles" name="media"/);
+  assert.match(workflow, /aria-describedby="inspectionMediaStatus"/);
   assert.match(workflow, /Misure rilevate/);
   assert.match(workflow, /Lavorazioni consigliate/);
   assert.match(workflow, /uploadMedia/);
