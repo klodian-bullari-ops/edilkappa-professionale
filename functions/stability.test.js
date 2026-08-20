@@ -158,6 +158,9 @@ test("quality monitor checks production and the cloud health controller", () => 
   assert.match(productionCheck, /<title>EDILKAPPA · Gestionale cantieri<\/title>/);
   assert.match(productionCheck, /id="app"/);
   assert.match(productionCheck, /firebase-cloud\.js/);
+  assert.match(productionCheck, /const MAX_RETRIES = 3/);
+  assert.match(productionCheck, /retryableStatus/);
+  assert.match(productionCheck, /nuovo tentativo/);
   assert.doesNotMatch(productionCheck, /EDILKAPPA Professionale/);
 });
 
