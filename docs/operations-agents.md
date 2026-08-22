@@ -1,15 +1,20 @@
-# EdilKappa — coordinamento operativo a sei agenti
+# EdilKappa — coordinamento operativo a sette componenti
 
 ## Architettura
 
-Il coordinatore centrale mantiene il controllo del risultato e consulta cinque
+Il coordinatore centrale mantiene il controllo del risultato e consulta sei
 specialisti come strumenti:
 
-1. Agente Cantieri
-2. Agente Preventivi
-3. Agente Amministrativo
-4. Agente Guadagno Reale
-5. Agente Notifiche
+1. Tecnico AI
+2. Agente Cantieri
+3. Agente Preventivi
+4. Agente Amministrativo
+5. Agente Guadagno Reale
+6. Agente Notifiche
+
+Il Tecnico AI riceve soltanto i dati già presenti nei sopralluoghi e, quando
+disponibili, misure e riferimenti dei pacchetti EdilKappa Scan. Prepara analisi
+e bozze da verificare: non certifica misure e non approva lavorazioni.
 
 Non sono usati handoff: gli specialisti restituiscono analisi al coordinatore,
 che produce un unico briefing strutturato per il Centro operativo.
