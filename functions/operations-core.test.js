@@ -33,3 +33,11 @@ test("approved absence prevents a false missing-hours warning", () => {
   assert.equal(snapshot.metrics.missingHours, 0);
   assert.equal(snapshot.priorities.some((item) => item.category === "hours"), false);
 });
+
+test("queues a completed inspection for the Technical AI without approving it", () => {
+  const snapshot = buildOperationsSnapshot({
+    inspections: [{ id: "inspection-1", client: "Condominio", outcome: "Distacco intonaco", measurements: "Parete 12 m²" }]
+  }, { today: "2026-08-22" });
+  assert.equal(snapshot.metrics.technicalReviews, 1);
+  assert.ok(snapshot.priorities.some((item) => item.category === "technical" && item.targetId === "inspection-1"));
+});

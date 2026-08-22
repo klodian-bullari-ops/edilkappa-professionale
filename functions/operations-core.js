@@ -36,6 +36,7 @@ function buildOperationsSnapshot(data = {}, options = {}) {
   const today = dateOnly(options.today || new Date().toISOString());
   const leads = Array.isArray(data.leads) ? data.leads : [];
   const sites = Array.isArray(data.sites) ? data.sites : [];
+  const inspections = Array.isArray(data.inspections) ? data.inspections : [];
   const quotes = Array.isArray(data.quotes) ? data.quotes : [];
   const reports = Array.isArray(data.reports) ? data.reports : [];
   const timesheets = Array.isArray(data.timesheets) ? data.timesheets : [];
@@ -67,6 +68,16 @@ function buildOperationsSnapshot(data = {}, options = {}) {
     const photos = reports.filter((item) => text(item.siteId || item.site, 120) === text(site.id, 120)).reduce((sum, item) => sum + photoCount(item), 0);
     if (idleDays >= 3) priorities.push(priority(idleDays >= 7 ? "high" : "medium", "sites", "Cantiere senza aggiornamenti", `${site.title || "Cantiere"} · ${site.client || ""} · ultimo aggiornamento ${lastDate || "non presente"}`, "sites", site.id));
     if (!photos) priorities.push(priority("medium", "photos", "Mancano fotografie del cantiere", `${site.title || "Cantiere"} · nessuna foto iniziale o di avanzamento registrata`, "sites", site.id));
+  }
+
+  const technicalReviews = inspections.filter((item) => {
+    const hasResult = text(item.outcome || item.problem, 500);
+    const hasMeasurements = text(item.measurements, 500) || item.scanManifest || item.scanPackageId;
+    return hasResult && hasMeasurements && !item.technicalAnalysisApprovedAt;
+  });
+  for (const item of technicalReviews.slice(0, 12)) {
+    const source = item.scanManifest || item.scanPackageId ? "rilievo EdilKappa Scan" : "misure inserite nel sopralluogo";
+    priorities.push(priority("medium", "technical", "Sopralluogo pronto per Tecnico AI", `${item.client || item.site || item.problem || "Sopralluogo"} · ${source} · analisi da preparare e approvare`, "inspections", item.id));
   }
 
   const quoteFollowups = quotes.filter((item) => /inviat|in attesa/i.test(text(item.status)) && dayDistance(item.sentAt || item.updatedAt || item.date, today) >= 7);
@@ -106,7 +117,8 @@ function buildOperationsSnapshot(data = {}, options = {}) {
       missingHours: missingHours.length,
       quoteFollowups: quoteFollowups.length,
       overduePayments: overduePayments.length,
-      upcomingDeadlines: upcomingDeadlines.length
+      upcomingDeadlines: upcomingDeadlines.length,
+      technicalReviews: technicalReviews.length
     },
     priorities: priorities.slice(0, 60),
     profitability

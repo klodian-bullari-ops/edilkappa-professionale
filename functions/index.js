@@ -812,7 +812,7 @@ function envelopePayload(snapshot) {
 }
 
 async function loadOperationsData() {
-  const names = ["leads", "sites", "quotes", "reports", "timesheets", "absences", "payments", "deadlines"];
+  const names = ["leads", "sites", "inspections", "quotes", "reports", "timesheets", "absences", "payments", "deadlines"];
   const snapshots = await Promise.all(names.map((name) => firestore.collection(name).where("orgId", "==", ORG_ID).limit(500).get()));
   const data = Object.fromEntries(names.map((name, index) => [name, snapshots[index].docs.map((item) => ({ id: item.id, ...envelopePayload(item) }))]));
   const usersSnapshot = await firestore.collection("users").where("orgId", "==", ORG_ID).limit(200).get();

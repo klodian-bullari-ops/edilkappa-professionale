@@ -4,14 +4,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { OPERATIONS_AGENT_NAME, OPERATIONS_OUTPUT_TYPE, createOperationsAgents, normalizeOperationsOutput } = require("./operations-agent");
 
-test("configures one central manager with five bounded specialist agents", () => {
+test("configures one central manager with six bounded specialist agents", () => {
   const { central, specialists } = createOperationsAgents({ model: "gpt-5.6-terra" });
   assert.equal(central.name, OPERATIONS_AGENT_NAME);
   assert.equal(central.model, "gpt-5.6-terra");
   assert.equal(central.outputType, OPERATIONS_OUTPUT_TYPE);
-  assert.equal(central.tools.length, 5);
+  assert.equal(central.tools.length, 6);
   assert.equal(central.handoffs.length, 0);
-  assert.deepEqual(Object.keys(specialists).sort(), ["administration", "notifications", "profit", "quotes", "sites"]);
+  assert.deepEqual(Object.keys(specialists).sort(), ["administration", "notifications", "profit", "quotes", "sites", "technician"]);
   Object.values(specialists).forEach((agent) => {
     assert.equal(agent.tools.length, 0);
     assert.equal(agent.handoffs.length, 0);

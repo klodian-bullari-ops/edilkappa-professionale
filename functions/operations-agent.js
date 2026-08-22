@@ -38,12 +38,14 @@ function specialist(name, instructions, model) {
 
 function createOperationsAgents({ model = "gpt-5.6-terra" } = {}) {
   const sites = specialist("Agente Cantieri", "Controlla avanzamento, rapportini, fotografie iniziali/finali, ore, assenze e lavori fermi.", model);
+  const technician = specialist("Tecnico AI", "Analizza sopralluoghi, misure, fotografie e pacchetti EdilKappa Scan. Evidenzia dati mancanti e prepara soltanto proposte di cause, lavorazioni, quantità e relazione tecnica da verificare sul posto.", model);
   const quotes = specialist("Agente Preventivi", "Controlla bozze, preventivi senza risposta, prezzi da verificare e collegamenti con costi reali. Non modificare il listino DEI.", model);
   const administration = specialist("Agente Amministrativo", "Controlla richieste, preventivi inviati o accettati, pagamenti, documenti e scadenze. Puoi proporre bozze di email o WhatsApp, mai inviarle.", model);
   const profit = specialist("Agente Guadagno Reale", "Confronta ricavi, costi registrati, consuntivi e margini. Evidenzia dati mancanti e lavori con margine basso o negativo.", model);
   const notifications = specialist("Agente Notifiche", "Ordina gli avvisi in urgente oggi, nuove richieste, cantieri fermi, foto, ore mancanti, pagamenti e scadenze. Elimina duplicati.", model);
   const tools = [
     sites.asTool({ toolName: "controlla_cantieri", toolDescription: "Analizza cantieri, rapportini, foto, ore e assenze." }),
+    technician.asTool({ toolName: "analizza_sopralluoghi", toolDescription: "Analizza sopralluoghi, misure, foto e rilievi EdilKappa Scan senza modificare i dati." }),
     quotes.asTool({ toolName: "controlla_preventivi", toolDescription: "Analizza preventivi, prezzi e dati da verificare." }),
     administration.asTool({ toolName: "controlla_amministrazione", toolDescription: "Analizza richieste, solleciti, pagamenti e scadenze." }),
     profit.asTool({ toolName: "controlla_guadagno", toolDescription: "Analizza utile previsto e reale dei lavori." }),
@@ -53,7 +55,7 @@ function createOperationsAgents({ model = "gpt-5.6-terra" } = {}) {
     name: OPERATIONS_AGENT_NAME,
     instructions: [
       "Sei il coordinatore operativo centrale di EdilKappa.",
-      "Per il riepilogo completo usa una volta ciascuno dei cinque specialisti disponibili e poi componi una sola risposta strutturata.",
+      "Per il riepilogo completo usa una volta ciascuno dei sei specialisti disponibili e poi componi una sola risposta strutturata.",
       "I fatti deterministici ricevuti sono l’unica fonte di verità: non cambiare conteggi o importi e cita gli id delle priorità in evidenceIds.",
       "Non creare clienti, interventi, cantieri o preventivi e non inviare comunicazioni. Proponi l’azione e imposta requiresConfirmation=true per ogni modifica o messaggio.",
       "Il listino DEI non può essere modificato dall’agente. Prezzi e quantità stimati devono restare da verificare.",
@@ -65,7 +67,7 @@ function createOperationsAgents({ model = "gpt-5.6-terra" } = {}) {
     tools,
     handoffs: []
   });
-  return { central, specialists: { sites, quotes, administration, profit, notifications } };
+  return { central, specialists: { sites, technician, quotes, administration, profit, notifications } };
 }
 
 function normalizeOperationsOutput(value) {
