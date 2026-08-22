@@ -1,7 +1,7 @@
 "use strict";
 
 const CACHE_PREFIX = "edilkappa-professionale-";
-const CACHE = `${CACHE_PREFIX}stabilita`;
+const CACHE = `${CACHE_PREFIX}tecnico-ai-20260822`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -67,6 +67,23 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
+
+  // JavaScript e CSS devono ricevere subito gli aggiornamenti pubblicati.
+  // In assenza di rete resta disponibile l'ultima copia valida.
+  if (event.request.destination === "script" || event.request.destination === "style") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
     );
     return;
   }
